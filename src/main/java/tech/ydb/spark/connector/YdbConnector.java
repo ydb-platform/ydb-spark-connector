@@ -9,6 +9,8 @@ import tech.ydb.core.grpc.GrpcTransport;
 import tech.ydb.core.grpc.GrpcTransportBuilder;
 import tech.ydb.table.SessionRetryContext;
 import tech.ydb.table.TableClient;
+import tech.ydb.table.SchemeClient;
+import tech.ydb.table.rpc.grpc.GrpcSchemeRpc;
 
 /**
  *
@@ -28,6 +30,7 @@ public class YdbConnector implements AutoCloseable {
 
     private final GrpcTransport transport;
     private final TableClient tableClient;
+    private final SchemeClient schemeClient;
     private final SessionRetryContext retryCtx;
     private final String database;
 
@@ -76,6 +79,7 @@ public class YdbConnector implements AutoCloseable {
             this.tableClient = TableClient.newClient(gt)
                     .sessionPoolSize(0, poolSize)
                     .build();
+            this.schemeClient = SchemeClient.newClient(GrpcSchemeRpc.useTransport(gt)).build();
             this.retryCtx = SessionRetryContext.create(tableClient).build();
             this.transport = gt;
             gt = null; // to avoid closing below
@@ -93,6 +97,10 @@ public class YdbConnector implements AutoCloseable {
         return tableClient;
     }
 
+    public SchemeClient getSchemeClient() {
+        return schemeClient;
+    }
+
     public SessionRetryContext getRetryCtx() {
         return retryCtx;
     }
@@ -108,6 +116,13 @@ public class YdbConnector implements AutoCloseable {
                 tableClient.close();
             } catch(Exception ex) {
                 LOG.warn("TableClient closing threw an exception", ex);
+            }
+        }
+        if (schemeClient != null) {
+            try {
+                schemeClient.close();
+            } catch(Exception ex) {
+                LOG.warn("SchemeClient closing threw an exception", ex);
             }
         }
         if (transport != null) {
