@@ -7,6 +7,7 @@ import java.util.Set;
 import org.apache.spark.sql.connector.catalog.Table;
 import org.apache.spark.sql.connector.catalog.TableCapability;
 import org.apache.spark.sql.types.StructType;
+import tech.ydb.table.description.TableDescription;
 
 /**
  *
@@ -27,9 +28,19 @@ public class YdbTable implements Table {
         CAPABILITIES = Collections.unmodifiableSet(c);
     }
 
+    private final YdbConnector connector;
+    private final String fullName;
+    private final TableDescription td;
+
+    protected YdbTable(YdbConnector connector, String fullName, TableDescription td) {
+        this.connector = connector;
+        this.fullName = fullName;
+        this.td = td;
+    }
+
     @Override
     public String name() {
-        throw new UnsupportedOperationException("Not supported yet."); // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/GeneratedMethodBody
+        return fullName;
     }
 
     @Override

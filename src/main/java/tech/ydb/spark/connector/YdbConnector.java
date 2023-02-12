@@ -20,7 +20,7 @@ public class YdbConnector implements AutoCloseable {
 
     private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(YdbConnector.class);
 
-    public static final String YDB_CONNECTION_URL = "spark.ydb.connection.url";
+    public static final String YDB_URL = "spark.ydb.url";
     public static final String YDB_POOL_SIZE = "spark.ydb.pool.size";
     public static final String YDB_AUTH_MODE = "spark.ydb.auth.mode";
     public static final String YDB_AUTH_LOGIN = "spark.ydb.auth.login";
@@ -42,7 +42,7 @@ public class YdbConnector implements AutoCloseable {
             throw new IllegalArgumentException("Incorrect value for property " + YDB_POOL_SIZE, nfe);
         }
         GrpcTransportBuilder builder = GrpcTransport
-                .forConnectionString(props.get(YDB_CONNECTION_URL));
+                .forConnectionString(props.get(YDB_URL));
         final YdbAuthMode authMode;
         try {
             authMode = YdbAuthMode.fromString(props.get(YDB_AUTH_MODE));
