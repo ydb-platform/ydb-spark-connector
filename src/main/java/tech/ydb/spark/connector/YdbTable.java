@@ -6,11 +6,15 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.apache.spark.sql.connector.catalog.SupportsRead;
 import org.apache.spark.sql.connector.catalog.Table;
 import org.apache.spark.sql.connector.catalog.TableCapability;
+import org.apache.spark.sql.connector.expressions.Transform;
+import org.apache.spark.sql.connector.read.ScanBuilder;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
+import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 import tech.ydb.table.description.TableColumn;
 import tech.ydb.table.description.TableDescription;
 
@@ -18,18 +22,12 @@ import tech.ydb.table.description.TableDescription;
  *
  * @author mzinal
  */
-public class YdbTable implements Table {
+public class YdbTable implements Table, SupportsRead {
 
     static final Set<TableCapability> CAPABILITIES;
     static {
         final Set<TableCapability> c = new HashSet<>();
         c.add(TableCapability.BATCH_READ);
-        c.add(TableCapability.MICRO_BATCH_READ);
-        c.add(TableCapability.CONTINUOUS_READ);
-        c.add(TableCapability.BATCH_WRITE);
-        c.add(TableCapability.STREAMING_WRITE);
-        c.add(TableCapability.OVERWRITE_BY_FILTER);
-        c.add(TableCapability.V1_BATCH_WRITE);
         CAPABILITIES = Collections.unmodifiableSet(c);
     }
 
@@ -37,10 +35,18 @@ public class YdbTable implements Table {
     private final String fullName;
     private final TableDescription td;
 
-    protected YdbTable(YdbConnector connector, String fullName, TableDescription td) {
+    YdbTable(YdbConnector connector, String fullName, TableDescription td) {
         this.connector = connector;
         this.fullName = fullName;
         this.td = td;
+    }
+
+    final YdbConnector getConnector() {
+        return connector;
+    }
+
+    final TableDescription getDescription() {
+        return td;
     }
 
     @Override
@@ -55,7 +61,7 @@ public class YdbTable implements Table {
 
     @Override
     public Map<String, String> properties() {
-        return Table.super.properties(); // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/OverriddenMethodBody
+        return Collections.emptyMap();
     }
 
     @Override
@@ -76,6 +82,17 @@ public class YdbTable implements Table {
     private StructField mapField(TableColumn tc, DataType dataType) {
         // TODO: mapping dictionary support (specifically for dates).
         return new StructField(tc.getName(), dataType, YdbTypes.mapNullable(tc.getType()), null);
+    }
+
+    @Override
+    public Transform[] partitioning() {
+        // physical partitioning does not make much sense to be reported here
+        return new Transform[0];
+    }
+
+    @Override
+    public ScanBuilder newScanBuilder(CaseInsensitiveStringMap options) {
+        return new YdbScanBuilder(this);
     }
 
 }
