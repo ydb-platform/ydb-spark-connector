@@ -167,11 +167,13 @@ public class YdbCatalog implements CatalogPlugin, TableCatalog, SupportsNamespac
             return session.describeTable(mergePath(ident), dts);
         }).join();
         TableDescription td = checkStatus(res, ident);
-        return new YdbTable(connector, mergeLocal(ident), td);
+        return new YdbTable(getConnector(), mergeLocal(ident), td);
     }
 
     @Override
-    public Table createTable(Identifier ident, StructType schema, Transform[] partitions, Map<String, String> properties) throws TableAlreadyExistsException, NoSuchNamespaceException {
+    public Table createTable(Identifier ident, StructType schema, Transform[] partitions, 
+            Map<String, String> properties)
+            throws TableAlreadyExistsException, NoSuchNamespaceException {
         throw new UnsupportedOperationException("Not supported yet."); // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/GeneratedMethodBody
     }
 
