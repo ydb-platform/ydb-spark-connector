@@ -20,7 +20,13 @@ public class YdbTypes {
     }
 
     public static DataType mapType(tech.ydb.table.values.Type yt) {
-        yt = yt.unwrapOptional();
+        if (yt==null)
+            return null;
+        switch (yt.getKind()) {
+            case OPTIONAL:
+                yt = yt.unwrapOptional();
+                break;
+        }
         switch (yt.getKind()) {
             case PRIMITIVE:
                 break;
