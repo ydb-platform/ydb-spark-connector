@@ -12,6 +12,7 @@ import org.apache.spark.sql.connector.catalog.TableCapability;
 import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.connector.read.ScanBuilder;
 import org.apache.spark.sql.types.DataType;
+import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
@@ -81,7 +82,7 @@ public class YdbTable implements Table, SupportsRead {
 
     private StructField mapField(TableColumn tc, DataType dataType) {
         // TODO: mapping dictionary support (specifically for dates).
-        return new StructField(tc.getName(), dataType, YdbTypes.mapNullable(tc.getType()), null);
+        return new StructField(tc.getName(), dataType, YdbTypes.mapNullable(tc.getType()), Metadata.empty());
     }
 
     @Override

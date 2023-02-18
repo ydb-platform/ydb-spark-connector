@@ -38,7 +38,7 @@ public class YdbCatalog implements CatalogPlugin, TableCatalog, SupportsNamespac
     @Override
     public void initialize(String name, CaseInsensitiveStringMap options) {
         this.catalogName = name;
-        this.connector = new YdbConnector(options);
+        this.connector = YdbRegistry.create(name, options);
     }
 
     @Override

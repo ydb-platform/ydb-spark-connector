@@ -1,6 +1,7 @@
 package tech.ydb.spark.connector;
 
 import java.nio.file.Paths;
+import java.util.HashMap;
 import java.util.Map;
 import tech.ydb.auth.iam.CloudAuthHelper;
 import tech.ydb.auth.iam.CloudAuthIdentity;
@@ -20,19 +21,20 @@ public class YdbConnector implements AutoCloseable {
 
     private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(YdbConnector.class);
 
-    public static final String YDB_URL = "spark.ydb.url";
-    public static final String YDB_POOL_SIZE = "spark.ydb.pool.size";
-    public static final String YDB_AUTH_MODE = "spark.ydb.auth.mode";
-    public static final String YDB_AUTH_LOGIN = "spark.ydb.auth.login";
-    public static final String YDB_AUTH_PASSWORD = "spark.ydb.auth.password";
-    public static final String YDB_AUTH_KEY_FILE = "spark.ydb.auth.key.file";
-    public static final String YDB_AUTH_TOKEN = "spark.ydb.auth.token";
+    public static final String YDB_URL = "url";
+    public static final String YDB_POOL_SIZE = "pool.size";
+    public static final String YDB_AUTH_MODE = "auth.mode";
+    public static final String YDB_AUTH_LOGIN = "auth.login";
+    public static final String YDB_AUTH_PASSWORD = "auth.password";
+    public static final String YDB_AUTH_KEY_FILE = "auth.keyfile";
+    public static final String YDB_AUTH_TOKEN = "auth.token";
 
     private final GrpcTransport transport;
     private final TableClient tableClient;
     private final SchemeClient schemeClient;
     private final SessionRetryContext retryCtx;
     private final String database;
+    private final Map<String,String> connectOptions;
 
     public YdbConnector(Map<String, String> props) {
         final int poolSize;
@@ -87,6 +89,14 @@ public class YdbConnector implements AutoCloseable {
             if (gt != null)
                 gt.close();
         }
+        this.connectOptions = new HashMap<>();
+        for (Map.Entry<String,String> me : props.entrySet()) {
+            this.connectOptions.put(me.getKey().toLowerCase(), me.getValue());
+        }
+    }
+
+    public Map<String, String> getConnectOptions() {
+        return connectOptions;
     }
 
     public GrpcTransport getTransport() {
