@@ -28,7 +28,7 @@ public class YdbScan implements Scan {
 
     @Override
     public StructType readSchema() {
-        throw new UnsupportedOperationException("Not supported yet."); // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/GeneratedMethodBody
+        return options.readSchema();
     }
 
     @Override

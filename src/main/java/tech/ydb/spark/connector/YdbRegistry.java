@@ -7,7 +7,9 @@ import java.util.HashMap;
  *
  * @author zinal
  */
-public abstract class YdbRegistry {
+public final class YdbRegistry {
+
+    private YdbRegistry() {}
 
     private static final Map<String, YdbConnector> items = new HashMap<>();
 
@@ -15,7 +17,7 @@ public abstract class YdbRegistry {
         synchronized(items) {
             YdbConnector yc = items.get(name);
             if (yc==null) {
-                yc = new YdbConnector(props);
+                yc = new YdbConnector(name, props);
                 items.put(name, yc);
             }
             return yc;

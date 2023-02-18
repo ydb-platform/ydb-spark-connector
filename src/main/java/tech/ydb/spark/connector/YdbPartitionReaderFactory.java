@@ -11,15 +11,15 @@ import org.apache.spark.sql.connector.read.PartitionReaderFactory;
  */
 public class YdbPartitionReaderFactory implements PartitionReaderFactory {
 
-    private final YdbScan scan;
+    private final YdbScanOptions options;
 
     public YdbPartitionReaderFactory(YdbScan scan) {
-        this.scan = scan;
+        this.options = scan.getOptions();
     }
 
     @Override
     public PartitionReader<InternalRow> createReader(InputPartition partition) {
-        return new YdbPartitionReader(scan, (YdbInputPartition) partition);
+        return new YdbPartitionReader(options, (YdbInputPartition) partition);
     }
 
 }

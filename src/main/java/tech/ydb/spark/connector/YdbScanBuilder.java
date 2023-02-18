@@ -19,12 +19,12 @@ public class YdbScanBuilder implements ScanBuilder,
 
     public YdbScanBuilder(YdbTable table) {
         this.table = table;
-        this.options = new YdbScanOptions(table.getDescription());
+        this.options = new YdbScanOptions(table);
     }
 
     @Override
     public Scan build() {
-        return new YdbScan(table, new YdbScanOptions(options));
+        return new YdbScan(table, options);
     }
 
     @Override

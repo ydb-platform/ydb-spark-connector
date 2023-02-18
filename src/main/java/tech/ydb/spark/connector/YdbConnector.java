@@ -29,14 +29,20 @@ public class YdbConnector implements AutoCloseable {
     public static final String YDB_AUTH_KEY_FILE = "auth.keyfile";
     public static final String YDB_AUTH_TOKEN = "auth.token";
 
+    private final String catalogName;
+    private final Map<String,String> connectOptions;
     private final GrpcTransport transport;
     private final TableClient tableClient;
     private final SchemeClient schemeClient;
     private final SessionRetryContext retryCtx;
     private final String database;
-    private final Map<String,String> connectOptions;
 
-    public YdbConnector(Map<String, String> props) {
+    public YdbConnector(String catalogName, Map<String, String> props) {
+        this.catalogName = catalogName;
+        this.connectOptions = new HashMap<>();
+        for (Map.Entry<String,String> me : props.entrySet()) {
+            this.connectOptions.put(me.getKey().toLowerCase(), me.getValue());
+        }
         final int poolSize;
         try {
             poolSize = Integer.parseInt(props.getOrDefault(YDB_POOL_SIZE, "100"));
@@ -89,10 +95,10 @@ public class YdbConnector implements AutoCloseable {
             if (gt != null)
                 gt.close();
         }
-        this.connectOptions = new HashMap<>();
-        for (Map.Entry<String,String> me : props.entrySet()) {
-            this.connectOptions.put(me.getKey().toLowerCase(), me.getValue());
-        }
+    }
+
+    public String getCatalogName() {
+        return catalogName;
     }
 
     public Map<String, String> getConnectOptions() {

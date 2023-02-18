@@ -35,6 +35,7 @@ public class YdbTable implements Table, SupportsRead {
     private final YdbConnector connector;
     private final String fullName;
     private final TableDescription td;
+    private StructType schema;
 
     YdbTable(YdbConnector connector, String fullName, TableDescription td) {
         this.connector = connector;
@@ -57,7 +58,10 @@ public class YdbTable implements Table, SupportsRead {
 
     @Override
     public StructType schema() {
-        return new StructType(mapFields(td.getColumns()));
+        if (schema==null) {
+            schema = new StructType(mapFields(td.getColumns()));
+        }
+        return schema;
     }
 
     @Override
@@ -87,13 +91,16 @@ public class YdbTable implements Table, SupportsRead {
 
     @Override
     public Transform[] partitioning() {
-        // physical partitioning does not make much sense to be reported here
         return new Transform[0];
     }
 
     @Override
     public ScanBuilder newScanBuilder(CaseInsensitiveStringMap options) {
         return new YdbScanBuilder(this);
+    }
+
+    final List<String> keyColumns() {
+        return new ArrayList<>(td.getPrimaryKeys());
     }
 
 }
