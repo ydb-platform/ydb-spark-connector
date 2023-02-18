@@ -200,6 +200,8 @@ public class YdbCatalog implements CatalogPlugin, TableCatalog, SupportsNamespac
 
     @Override
     public String[][] listNamespaces(String[] namespace) throws NoSuchNamespaceException {
+        if (namespace==null)
+            namespace = new String[0];
         try {
             Result<ListDirectoryResult> res = getSchemeClient()
                     .listDirectory(mergePath(namespace)).get();
