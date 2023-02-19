@@ -12,6 +12,7 @@ public class YdbPartitionReader implements PartitionReader<InternalRow> {
 
     private final YdbScanOptions options;
     private final YdbInputPartition partition;
+    private YdbReadTable query;
 
     public YdbPartitionReader(YdbScanOptions options, YdbInputPartition partition) {
         this.options = options;
@@ -20,17 +21,23 @@ public class YdbPartitionReader implements PartitionReader<InternalRow> {
 
     @Override
     public boolean next() throws IOException {
-        throw new UnsupportedOperationException("Not supported yet."); // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/GeneratedMethodBody
+        if (query==null) {
+            query = new YdbReadTable(options, partition);
+            query.prepare();
+        }
+        return query.next();
     }
 
     @Override
     public InternalRow get() {
-        throw new UnsupportedOperationException("Not supported yet."); // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/GeneratedMethodBody
+        return query.get();
     }
 
     @Override
     public void close() throws IOException {
-        throw new UnsupportedOperationException("Not supported yet."); // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/GeneratedMethodBody
+        if (query!=null)
+            query.close();
+        query = null;
     }
 
 }
