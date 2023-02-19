@@ -2,6 +2,7 @@ package tech.ydb.spark.connector;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -101,6 +102,19 @@ public class YdbTable implements Table, SupportsRead {
 
     final List<String> keyColumns() {
         return new ArrayList<>(td.getPrimaryKeys());
+    }
+
+    final List<YdbFieldType> keyTypes() {
+        Map<String,TableColumn> m = new HashMap<>();
+        for (TableColumn tc : td.getColumns()) {
+            m.put(tc.getName(), tc);
+        }
+        List<YdbFieldType> retval = new ArrayList<>();
+        for (String kname : td.getPrimaryKeys()) {
+            TableColumn tc = m.get(kname);
+            retval.add(YdbFieldType.fromSdkType(tc.getType()));
+        }
+        return retval;
     }
 
 }

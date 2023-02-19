@@ -18,6 +18,7 @@ public class YdbScanOptions implements Serializable {
     private final String tableName;
     private final StructType schema;
     private final List<String> keyColumns;
+    private final List<YdbFieldType> keyTypes;
     private final ArrayList<Object> rangeBegin;
     private final ArrayList<Object> rangeEnd;
     private StructType requiredSchema;
@@ -28,6 +29,7 @@ public class YdbScanOptions implements Serializable {
         this.tableName = table.name();
         this.schema = table.schema();
         this.keyColumns = table.keyColumns();
+        this.keyTypes = table.keyTypes();
         this.rangeBegin = new ArrayList<>();
         this.rangeEnd = new ArrayList<>();
     }
@@ -68,6 +70,10 @@ public class YdbScanOptions implements Serializable {
 
     public List<String> getKeyColumns() {
         return keyColumns;
+    }
+
+    public List<YdbFieldType> getKeyTypes() {
+        return keyTypes;
     }
 
     public List<Object> getRangeBegin() {
