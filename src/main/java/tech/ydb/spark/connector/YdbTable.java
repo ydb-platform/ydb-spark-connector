@@ -67,6 +67,7 @@ public class YdbTable implements Table, SupportsRead {
 
     @Override
     public Map<String, String> properties() {
+        // TODO: return primary key + storage characteristics
         return Collections.emptyMap();
     }
 

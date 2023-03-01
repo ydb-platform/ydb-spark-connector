@@ -18,6 +18,7 @@ public class YdbBatch implements Batch {
 
     @Override
     public InputPartition[] planInputPartitions() {
+        // No partitioning right now, single scan per table.
         return new InputPartition[]{ new YdbInputPartition() };
     }
 

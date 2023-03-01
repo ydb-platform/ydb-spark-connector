@@ -38,7 +38,7 @@ public class YdbScanOptions implements Serializable {
         if (filters==null) {
             return new Filter[0];
         }
-        detectRange(expandFilters(filters));
+        detectRangeSimple(flattenFilters(filters));
         return filters;
     }
 
@@ -84,19 +84,29 @@ public class YdbScanOptions implements Serializable {
         return rangeEnd;
     }
 
-    private List<Filter> expandFilters(Filter[] filters) {
+    /**
+     * Put all filters connected with AND directly into the list of filters, recursively.
+     * @param filters Input filters
+     * @return Flattened filters
+     */
+    private List<Filter> flattenFilters(Filter[] filters) {
         final List<Filter> retval = new ArrayList<>();
         for (Filter f : filters) {
-            expandFilter(f, retval);
+            flattenFilter(f, retval);
         }
         return retval;
     }
 
-    private void expandFilter(Filter f, List<Filter> retval) {
+    /**
+     * Put all filters connected with AND directly into the list of filters, recursively.
+     * @param f Input filter to be processed
+     * @param retval The resulting list of flattened filters
+     */
+    private void flattenFilter(Filter f, List<Filter> retval) {
         if (f instanceof org.apache.spark.sql.sources.And) {
             org.apache.spark.sql.sources.And fand = (org.apache.spark.sql.sources.And) f;
-            expandFilter(fand.left(), retval);
-            expandFilter(fand.right(), retval);
+            flattenFilter(fand.left(), retval);
+            flattenFilter(fand.right(), retval);
         } else {
             retval.add(f);
         }
@@ -108,7 +118,7 @@ public class YdbScanOptions implements Serializable {
      * Does NOT handle complex cases like N-dimensional ranges.
      * @param filters input list of filters
      */
-    private void detectRange(List<Filter> filters) {
+    private void detectRangeSimple(List<Filter> filters) {
         rangeBegin.clear();
         rangeEnd.clear();
         for (String x : keyColumns) {
@@ -141,28 +151,28 @@ public class YdbScanOptions implements Serializable {
                     org.apache.spark.sql.sources.GreaterThan x =
                             (org.apache.spark.sql.sources.GreaterThan) f;
                     if (keyColumn.equals(x.attribute())) {
-                        rangeBegin.set(pos, x.value());
+                        rangeBegin.set(pos, max(rangeBegin.get(pos), x.value()));
                         break;
                     }
                 } else if (f instanceof org.apache.spark.sql.sources.GreaterThanOrEqual) {
                     org.apache.spark.sql.sources.GreaterThanOrEqual x =
                             (org.apache.spark.sql.sources.GreaterThanOrEqual) f;
                     if (keyColumn.equals(x.attribute())) {
-                        rangeBegin.set(pos, x.value());
+                        rangeBegin.set(pos, max(rangeBegin.get(pos), x.value()));
                         break;
                     }
                 } else if (f instanceof org.apache.spark.sql.sources.LessThan) {
                     org.apache.spark.sql.sources.LessThan x =
                             (org.apache.spark.sql.sources.LessThan) f;
                     if (keyColumn.equals(x.attribute())) {
-                        rangeEnd.set(pos, x.value());
+                        rangeEnd.set(pos, min(rangeEnd.get(pos), x.value()));
                         break;
                     }
                 } else if (f instanceof org.apache.spark.sql.sources.LessThanOrEqual) {
                     org.apache.spark.sql.sources.LessThanOrEqual x =
                             (org.apache.spark.sql.sources.LessThanOrEqual) f;
                     if (keyColumn.equals(x.attribute())) {
-                        rangeEnd.set(pos, x.value());
+                        rangeEnd.set(pos, min(rangeEnd.get(pos), x.value()));
                         break;
                     }
                 }
@@ -179,6 +189,32 @@ public class YdbScanOptions implements Serializable {
                 break;
             }
         }
+    }
+
+    private static Object max(Object o1, Object o2) {
+        if (o1==null || o1==o2) {
+            return o2;
+        }
+        if (o2==null) {
+            return o1;
+        }
+        if ((o2 instanceof Comparable) && (o1 instanceof Comparable)) {
+            return ((Comparable)o2).compareTo(o1) > 0 ? o2 : o1;
+        }
+        return o2;
+    }
+
+    private static Object min(Object o1, Object o2) {
+        if (o1==null || o1==o2) {
+            return o2;
+        }
+        if (o2==null) {
+            return o1;
+        }
+        if ((o2 instanceof Comparable) && (o1 instanceof Comparable)) {
+            return ((Comparable)o2).compareTo(o1) < 0 ? o2 : o1;
+        }
+        return o2;
     }
 
 }

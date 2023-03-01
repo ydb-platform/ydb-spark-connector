@@ -161,6 +161,7 @@ public class YdbCatalog implements CatalogPlugin, TableCatalog, SupportsNamespac
 
     @Override
     public Table loadTable(Identifier ident) throws NoSuchTableException {
+        // TODO: naming convention and special support for index "tables".
         Result<TableDescription> res = getRetryCtx().supplyResult(session -> {
             final DescribeTableSettings dts = new DescribeTableSettings();
             dts.setIncludeTableStats(true);
