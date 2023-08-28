@@ -20,9 +20,35 @@
         <maven.compiler.target>1.8</maven.compiler.target>
         <maven.javadoc.skip>true</maven.javadoc.skip>
         <maven.source.skip>true</maven.source.skip>
-        <ydb.sdk.version>2.0.1</ydb.sdk.version>
     </properties>
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>tech.ydb</groupId>
+                <artifactId>ydb-sdk-bom</artifactId>
+                <version>2.1.4</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
     <dependencies>
+        <dependency>
+            <groupId>tech.ydb</groupId>
+            <artifactId>ydb-sdk-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>tech.ydb</groupId>
+            <artifactId>ydb-sdk-scheme</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>tech.ydb</groupId>
+            <artifactId>ydb-sdk-table</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>tech.ydb.auth</groupId>
+            <artifactId>yc-auth-provider</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
@@ -31,39 +57,24 @@
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-core</artifactId>
-            <version>2.19.0</version>
+            <version>2.20.0</version>
         </dependency>
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-slf4j-impl</artifactId>
-            <version>2.19.0</version>
-        </dependency>
-        <dependency>
-            <groupId>tech.ydb</groupId>
-            <artifactId>ydb-sdk-core</artifactId>
-            <version>${ydb.sdk.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>tech.ydb</groupId>
-            <artifactId>ydb-sdk-table</artifactId>
-            <version>${ydb.sdk.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>tech.ydb.auth</groupId>
-            <artifactId>yc-auth-provider</artifactId>
-            <version>2.0.1</version>
-        </dependency>
-        <dependency>
-            <groupId>junit</groupId>
-            <artifactId>junit</artifactId>
-            <version>4.13.2</version>
-            <scope>test</scope>
+            <version>2.20.0</version>
         </dependency>
         <dependency>
             <groupId>org.apache.spark</groupId>
             <artifactId>spark-catalyst_2.12</artifactId>
             <version>3.0.3</version>
             <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <version>4.13.2</version>
+            <scope>test</scope>
         </dependency>
     </dependencies>
     <profiles><profile>

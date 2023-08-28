@@ -9,9 +9,8 @@ import tech.ydb.core.auth.StaticCredentials;
 import tech.ydb.core.grpc.GrpcTransport;
 import tech.ydb.core.grpc.GrpcTransportBuilder;
 import tech.ydb.table.SessionRetryContext;
+import tech.ydb.scheme.SchemeClient;
 import tech.ydb.table.TableClient;
-import tech.ydb.table.SchemeClient;
-import tech.ydb.table.rpc.grpc.GrpcSchemeRpc;
 
 /**
  *
@@ -87,7 +86,7 @@ public class YdbConnector implements AutoCloseable {
             this.tableClient = TableClient.newClient(gt)
                     .sessionPoolSize(0, poolSize)
                     .build();
-            this.schemeClient = SchemeClient.newClient(GrpcSchemeRpc.useTransport(gt)).build();
+            this.schemeClient = SchemeClient.newClient(gt).build();
             this.retryCtx = SessionRetryContext.create(tableClient).build();
             this.transport = gt;
             gt = null; // to avoid closing below

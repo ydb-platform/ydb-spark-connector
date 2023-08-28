@@ -15,11 +15,11 @@ import tech.ydb.core.Issue;
 import tech.ydb.core.Result;
 import tech.ydb.core.Status;
 import tech.ydb.core.StatusCode;
-import tech.ydb.scheme.SchemeOperationProtos;
-import tech.ydb.table.SchemeClient;
+import tech.ydb.proto.scheme.SchemeOperationProtos;
+import tech.ydb.scheme.SchemeClient;
+import tech.ydb.scheme.description.DescribePathResult;
+import tech.ydb.scheme.description.ListDirectoryResult;
 import tech.ydb.table.SessionRetryContext;
-import tech.ydb.table.description.DescribePathResult;
-import tech.ydb.table.description.ListDirectoryResult;
 import tech.ydb.table.description.TableDescription;
 import tech.ydb.table.settings.DescribeTableSettings;
 
@@ -175,23 +175,23 @@ public class YdbCatalog implements CatalogPlugin, TableCatalog, SupportsNamespac
     public Table createTable(Identifier ident, StructType schema, Transform[] partitions, 
             Map<String, String> properties)
             throws TableAlreadyExistsException, NoSuchNamespaceException {
-        throw new UnsupportedOperationException("Not supported yet."); // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/GeneratedMethodBody
+        throw new UnsupportedOperationException("Not supported yet.");
     }
 
     @Override
     public Table alterTable(Identifier ident, TableChange... changes) throws NoSuchTableException {
-        throw new UnsupportedOperationException("Not supported yet."); // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/GeneratedMethodBody
+        throw new UnsupportedOperationException("Not supported yet.");
     }
 
     @Override
     public boolean dropTable(Identifier ident) {
-        throw new UnsupportedOperationException("Not supported yet."); // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/GeneratedMethodBody
+        throw new UnsupportedOperationException("Not supported yet.");
     }
 
     @Override
     public void renameTable(Identifier oldIdent, Identifier newIdent)
             throws NoSuchTableException, TableAlreadyExistsException {
-        throw new UnsupportedOperationException("Not supported yet."); // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/GeneratedMethodBody
+        throw new UnsupportedOperationException("Not supported yet.");
     }
 
     @Override
