@@ -2,12 +2,14 @@ package tech.ydb.spark.connector;
 
 import java.math.BigDecimal;
 import java.time.Duration;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.types.StructField;
+import org.apache.spark.unsafe.types.UTF8String;
 import scala.collection.JavaConversions;
 
 import tech.ydb.core.grpc.GrpcReadStream;
@@ -43,7 +45,7 @@ public class YdbReadTable implements AutoCloseable {
 
     public YdbReadTable(YdbScanOptions options, YdbInputPartition partition) {
         this.options = options;
-        this.queue = new ArrayBlockingQueue<>(10);
+        this.queue = new ArrayBlockingQueue<>(100);
         this.state = State.CREATED;
     }
 
@@ -91,8 +93,16 @@ public class YdbReadTable implements AutoCloseable {
                 @Override
                 public void run() {
                     try {
-                        stream.start(part -> queue.add(new QueueItem(part.getResultSetReader())))
-                                .join().expectSuccess();
+                        stream.start(part -> {
+                            while (true) {
+                                try {
+                                    queue.add(new QueueItem(part.getResultSetReader()));
+                                    return;
+                                } catch(IllegalStateException ise) {
+                                    try { Thread.sleep(100L); } catch(InterruptedException ix) {}
+                                }
+                            }
+                        }).join().expectSuccess();
                         queue.add(EndOfScan);
                     } catch(Exception ex) {
                         LOG.warn("Background scan failed for table {}", tablePath, ex);
@@ -224,9 +234,9 @@ public class YdbReadTable implements AutoCloseable {
                     case Bytes:
                         return vr.getBytes();
                     case Date:
-                        return vr.getDate();
+                        return vr.getDate().toEpochDay();
                     case Datetime:
-                        return vr.getDatetime();
+                        return vr.getDatetime().toInstant(ZoneOffset.UTC).toEpochMilli() * 1000L;
                     case Double:
                         return vr.getDouble();
                     case Float:
@@ -242,13 +252,13 @@ public class YdbReadTable implements AutoCloseable {
                     case Uint8:
                         return vr.getUint8();
                     case Json:
-                        return vr.getJson();
+                        return UTF8String.fromString(vr.getJson());
                     case JsonDocument:
-                        return vr.getJsonDocument();
+                        return UTF8String.fromString(vr.getJsonDocument());
                     case Text:
-                        return vr.getText();
+                        return UTF8String.fromString(vr.getText());
                     case Timestamp:
-                        return vr.getTimestamp();
+                        return vr.getTimestamp().toEpochMilli() * 1000L;
                     case Uint16:
                         return vr.getUint16();
                     case Uint32:
