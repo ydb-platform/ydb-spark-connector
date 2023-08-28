@@ -24,6 +24,7 @@ import tech.ydb.table.description.TableDescription;
 import tech.ydb.table.settings.DescribeTableSettings;
 
 /**
+ * YDB Catalog implements Spark table catalog for YDB data sources.
  *
  * @author mzinal
  */

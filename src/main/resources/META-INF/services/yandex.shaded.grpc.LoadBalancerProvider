@@ -1,0 +1,2 @@
+yandex.shaded.grpc.internal.PickFirstLoadBalancerProvider
+yandex.shaded.grpc.util.SecretRoundRobinLoadBalancerProvider$Provider
