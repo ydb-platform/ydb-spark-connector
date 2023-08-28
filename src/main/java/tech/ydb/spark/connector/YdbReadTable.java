@@ -5,16 +5,22 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
+
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.types.StructField;
+import scala.collection.JavaConversions;
+
 import tech.ydb.core.grpc.GrpcReadStream;
 import tech.ydb.table.Session;
 import tech.ydb.table.query.ReadTablePart;
 import tech.ydb.table.result.ResultSetReader;
+import tech.ydb.table.result.ValueReader;
 import tech.ydb.table.settings.ReadTableSettings;
 import tech.ydb.table.values.DecimalType;
+import tech.ydb.table.values.PrimitiveType;
 import tech.ydb.table.values.PrimitiveValue;
 import tech.ydb.table.values.TupleValue;
+import tech.ydb.table.values.Type;
 import tech.ydb.table.values.Value;
 
 /**
@@ -136,7 +142,12 @@ public class YdbReadTable implements AutoCloseable {
     }
 
     public InternalRow get() {
-        throw new UnsupportedOperationException("Not supported yet."); // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/GeneratedMethodBody
+        final int count = current.getColumnCount();
+        final ArrayList<Object> values = new ArrayList(count);
+        for (int i=0; i<count; ++i) {
+            values.add(convertFromYdb(current.getColumn(i)));
+        }
+        return InternalRow.fromSeq(JavaConversions.asScalaBuffer(values));
     }
 
     @Override
@@ -169,7 +180,7 @@ public class YdbReadTable implements AutoCloseable {
         return TupleValue.of(l);
     }
 
-    private Value<?> convertToYdb(Object x) {
+    private static Value<?> convertToYdb(Object x) {
         if (x instanceof String) {
             return PrimitiveValue.newText(x.toString());
         }
@@ -191,7 +202,69 @@ public class YdbReadTable implements AutoCloseable {
         if (x instanceof BigDecimal) {
             return DecimalType.getDefault().newValue((BigDecimal)x);
         }
+        if (x instanceof Boolean) {
+            return PrimitiveValue.newBool((Boolean)x);
+        }
         throw new IllegalArgumentException(x.getClass().getName());
+    }
+
+    private static Object convertFromYdb(ValueReader vr) {
+        if (vr==null)
+            return null;
+        if (vr.getType().getKind().equals(Type.Kind.OPTIONAL)) {
+            if (! vr.isOptionalItemPresent())
+                return null;
+        }
+        Type t = vr.getType().unwrapOptional();
+        switch (t.getKind()) {
+            case PRIMITIVE:
+                switch ((PrimitiveType)t) {
+                    case Bool:
+                        return vr.getBool();
+                    case Bytes:
+                        return vr.getBytes();
+                    case Date:
+                        return vr.getDate();
+                    case Datetime:
+                        return vr.getDatetime();
+                    case Double:
+                        return vr.getDouble();
+                    case Float:
+                        return vr.getFloat();
+                    case Int16:
+                        return vr.getInt16();
+                    case Int32:
+                        return vr.getInt32();
+                    case Int64:
+                        return vr.getInt64();
+                    case Int8:
+                        return vr.getInt8();
+                    case Uint8:
+                        return vr.getUint8();
+                    case Json:
+                        return vr.getJson();
+                    case JsonDocument:
+                        return vr.getJsonDocument();
+                    case Text:
+                        return vr.getText();
+                    case Timestamp:
+                        return vr.getTimestamp();
+                    case Uint16:
+                        return vr.getUint16();
+                    case Uint32:
+                        return vr.getUint32();
+                    case Uint64:
+                        return vr.getUint64();
+                    case Uuid:
+                        return vr.getUuid();
+                    case Yson:
+                        return vr.getYson();
+                }
+                break;
+            case DECIMAL:
+                return vr.getDecimal();
+        }
+        return null;
     }
 
     static class QueueItem {
