@@ -13,6 +13,9 @@ import org.apache.spark.sql.types.StructType;
  */
 public class YdbScanOptions implements Serializable {
 
+    private static final org.slf4j.Logger LOG =
+            org.slf4j.LoggerFactory.getLogger(YdbScanOptions.class);
+
     private final String catalogName;
     private final Map<String,String> connectOptions;
     private final String tableName;
@@ -119,6 +122,10 @@ public class YdbScanOptions implements Serializable {
      * @param filters input list of filters
      */
     private void detectRangeSimple(List<Filter> filters) {
+        if (filters==null || filters.isEmpty()) {
+            return;
+        }
+        LOG.debug("Calculating scan ranges for filters {}", filters);
         rangeBegin.clear();
         rangeEnd.clear();
         for (String x : keyColumns) {
@@ -181,14 +188,21 @@ public class YdbScanOptions implements Serializable {
                 break;
         }
         // Drop trailing nulls
-        for (int pos = keyColumns.size()-1; pos>=0; --pos) {
-            if (rangeBegin.get(pos)==null && rangeEnd.get(pos)==null) {
+        while (! rangeBegin.isEmpty()) {
+            int pos = rangeBegin.size() - 1;
+            if ( rangeBegin.get(pos) == null )
                 rangeBegin.remove(pos);
-                rangeEnd.remove(pos);
-            } else {
+            else
                 break;
-            }
         }
+        while (! rangeEnd.isEmpty()) {
+            int pos = rangeEnd.size() - 1;
+            if ( rangeEnd.get(pos) == null )
+                rangeEnd.remove(pos);
+            else
+                break;
+        }
+        LOG.debug("Calculated scan ranges {} -> {}", rangeBegin, rangeEnd);
     }
 
     private static Object max(Object o1, Object o2) {

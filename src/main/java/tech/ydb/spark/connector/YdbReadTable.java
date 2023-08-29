@@ -15,6 +15,7 @@ import tech.ydb.table.query.ReadTablePart;
 import tech.ydb.table.result.ResultSetReader;
 import tech.ydb.table.settings.ReadTableSettings;
 import tech.ydb.table.values.TupleValue;
+import tech.ydb.table.values.Type;
 import tech.ydb.table.values.Value;
 
 /**
@@ -60,11 +61,11 @@ public class YdbReadTable implements AutoCloseable {
         }
         if (! options.getRangeBegin().isEmpty()) {
             // Left scan limit.
-            sb.fromKeyInclusive(makeRange(options.getRangeBegin()));
+            sb.fromKeyInclusive(makeRange(options.getRangeBegin(), options.getKeyTypes()));
         }
         if (! options.getRangeEnd().isEmpty()) {
             // Right scan limit.
-            sb.toKeyInclusive(makeRange(options.getRangeEnd()));
+            sb.toKeyInclusive(makeRange(options.getRangeEnd(), options.getKeyTypes()));
         }
         // TODO: add setting for the maximum scan duration.
         sb.withRequestTimeout(Duration.ofHours(8));
@@ -192,10 +193,17 @@ public class YdbReadTable implements AutoCloseable {
     }
 
     @SuppressWarnings("unchecked")
-    private TupleValue makeRange(List<Object> v) {
-        final List<Value<?>> l = new ArrayList<>();
-        for (Object x : v) {
-            l.add(YdbTypes.convertToYdb(x));
+    private TupleValue makeRange(List<Object> values, List<YdbFieldType> types) {
+        if (values.size() > types.size()) {
+            throw new IllegalArgumentException("values size=" + values.size()
+                    + ", types size=" + types.size());
+        }
+        final List<Value<?>> l = new ArrayList<>(values.size());
+        for (int i=0; i<values.size(); ++i) {
+            Value<?> v = YdbTypes.convertToYdb(values.get(i), types.get(i));
+            if (! v.getType().getKind().equals(Type.Kind.OPTIONAL))
+                v = v.makeOptional();
+            l.add(v);
         }
         return TupleValue.of(l);
     }
