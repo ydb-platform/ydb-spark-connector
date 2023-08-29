@@ -2,6 +2,7 @@ package tech.ydb.spark.connector;
 
 import java.math.BigDecimal;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
@@ -43,7 +44,7 @@ public class YdbReadTable implements AutoCloseable {
     private volatile GrpcReadStream<ReadTablePart> stream;
     private ResultSetReader current;
 
-    public YdbReadTable(YdbScanOptions options, YdbInputPartition partition) {
+    public YdbReadTable(YdbScanOptions options) {
         this.options = options;
         this.queue = new ArrayBlockingQueue<>(100);
         this.state = State.CREATED;
@@ -99,7 +100,7 @@ public class YdbReadTable implements AutoCloseable {
                                     queue.add(new QueueItem(part.getResultSetReader()));
                                     return;
                                 } catch(IllegalStateException ise) {
-                                    try { Thread.sleep(100L); } catch(InterruptedException ix) {}
+                                    try { Thread.sleep(123L); } catch(InterruptedException ix) {}
                                 }
                             }
                         }).join().expectSuccess();
@@ -194,6 +195,9 @@ public class YdbReadTable implements AutoCloseable {
         if (x instanceof String) {
             return PrimitiveValue.newText(x.toString());
         }
+        if (x instanceof UTF8String) {
+            return PrimitiveValue.newText(x.toString());
+        }
         if (x instanceof Integer) {
             return PrimitiveValue.newInt32((Integer)x);
         }
@@ -214,6 +218,12 @@ public class YdbReadTable implements AutoCloseable {
         }
         if (x instanceof Boolean) {
             return PrimitiveValue.newBool((Boolean)x);
+        }
+        if (x instanceof java.sql.Timestamp) {
+            return PrimitiveValue.newTimestamp(((java.sql.Timestamp)x).toInstant());
+        }
+        if (x instanceof java.sql.Date) {
+            return PrimitiveValue.newDate(((java.sql.Date)x).toLocalDate());
         }
         throw new IllegalArgumentException(x.getClass().getName());
     }

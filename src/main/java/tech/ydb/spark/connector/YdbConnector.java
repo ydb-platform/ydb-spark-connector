@@ -149,4 +149,9 @@ public class YdbConnector implements AutoCloseable {
         }
     }
 
+    @Override
+    public String toString() {
+        return "YdbConnector{" + "catalogName=" + catalogName + ", database=" + database + '}';
+    }
+
 }

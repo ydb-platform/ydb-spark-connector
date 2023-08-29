@@ -25,7 +25,67 @@ spark.sql("SHOW NAMESPACES FROM ydb.pgimp1").show();
 spark.sql("SHOW TABLES FROM ydb").show();
 ```
 
+```sql
+CREATE TABLE toster(
+  a Uint64 NOT NULL,
+  b Uint32,
+  c Int32,
+  d Int64,
+  e Text,
+  f Bytes,
+  g Timestamp,
+  h Datetime,
+  i Date,
+  j Json,
+  k JsonDocument,
+  l Bool,
+  m Uint8,
+  n Float,
+  o Double,
+  p Decimal(22,9),
+  PRIMARY KEY(a)
+);
+
+UPSERT INTO toster(a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p) VALUES (
+  1001,
+  2002,
+  3003,
+  4004,
+  "Text string"u,
+  "Bytes string",
+  Timestamp("2023-01-07T11:05:32.123456Z"),
+  Datetime("2023-01-07T11:05:32Z"),
+  Date("2023-01-07"),
+  Json(@@{"x": 1, "y": "test"}@@),
+  JsonDocument(@@{"x": 1, "y": "test"}@@),
+  True,
+  7,
+  123.456f,
+  123.456789,
+  Decimal("123.456789", 22, 9)
+), (
+  10001,
+  20002,
+  30003,
+  40004,
+  "New Text string"u,
+  "New Bytes string",
+  Timestamp("2020-01-07T11:05:32.123456Z"),
+  Datetime("2020-01-07T11:05:32Z"),
+  Date("2020-01-07"),
+  Json(@@{"x": 2, "y": "dust"}@@),
+  JsonDocument(@@{"x": 2, "y": "dust"}@@),
+  False,
+  8,
+  1023.456f,
+  1023.456789,
+  Decimal("1023.456789", 22, 9)
+);
+```
+
 ```scala
+spark.sql("SELECT * FROM ydb.toster").show();
+
 spark.sql("SELECT COUNT(*) FROM ydb.test0_fhrw").show();
 spark.sql("SELECT MIN(created_date) FROM ydb.test0_fhrw").show();
 spark.sql("SELECT borough, MIN(created_date), MAX(created_date) FROM ydb.test0_fhrw GROUP BY borough ORDER BY borough").show();

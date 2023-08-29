@@ -118,4 +118,9 @@ public class YdbTable implements Table, SupportsRead {
         return retval;
     }
 
+    @Override
+    public String toString() {
+        return "YdbTable{" + "connector=" + connector + ", fullName=" + fullName + '}';
+    }
+
 }
