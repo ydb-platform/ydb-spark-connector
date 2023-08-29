@@ -1,8 +1,16 @@
 package tech.ydb.spark.connector;
 
+import java.math.BigDecimal;
+import java.time.ZoneOffset;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.DataTypes;
+import org.apache.spark.unsafe.types.UTF8String;
+import tech.ydb.table.result.ValueReader;
+import tech.ydb.table.values.DecimalType;
 import tech.ydb.table.values.PrimitiveType;
+import tech.ydb.table.values.PrimitiveValue;
+import tech.ydb.table.values.Type;
+import tech.ydb.table.values.Value;
 
 /**
  *
@@ -90,5 +98,105 @@ public class YdbTypes {
         }
         return null;
     }
+
+    public static Object convertFromYdb(ValueReader vr) {
+        if (vr==null)
+            return null;
+        if (vr.getType().getKind().equals(Type.Kind.OPTIONAL)) {
+            if (! vr.isOptionalItemPresent())
+                return null;
+        }
+        Type t = vr.getType().unwrapOptional();
+        switch (t.getKind()) {
+            case PRIMITIVE:
+                switch ((PrimitiveType)t) {
+                    case Bool:
+                        return vr.getBool();
+                    case Bytes:
+                        return vr.getBytes();
+                    case Date:
+                        return (int) vr.getDate().toEpochDay();
+                    case Datetime:
+                        return vr.getDatetime().toInstant(ZoneOffset.UTC).toEpochMilli() * 1000L;
+                    case Double:
+                        return vr.getDouble();
+                    case Float:
+                        return vr.getFloat();
+                    case Int16:
+                        return vr.getInt16();
+                    case Int32:
+                        return vr.getInt32();
+                    case Int64:
+                        return vr.getInt64();
+                    case Int8:
+                        return (short) vr.getInt8();
+                    case Uint8:
+                        return (short) vr.getUint8();
+                    case Json:
+                        return UTF8String.fromString(vr.getJson());
+                    case JsonDocument:
+                        return UTF8String.fromString(vr.getJsonDocument());
+                    case Text:
+                        return UTF8String.fromString(vr.getText());
+                    case Timestamp:
+                        return vr.getTimestamp().toEpochMilli() * 1000L;
+                    case Uint16:
+                        return vr.getUint16();
+                    case Uint32:
+                        return vr.getUint32();
+                    case Uint64:
+                        return vr.getUint64();
+                    case Uuid:
+                        return vr.getUuid();
+                    case Yson:
+                        return vr.getYson();
+                }
+                break;
+            case DECIMAL:
+                return vr.getDecimal();
+        }
+        return null;
+    }
+
+    public static Value<?> convertToYdb(Object x) {
+        if (x instanceof String) {
+            return PrimitiveValue.newText(x.toString());
+        }
+        if (x instanceof UTF8String) {
+            return PrimitiveValue.newText(x.toString());
+        }
+        if (x instanceof Integer) {
+            return PrimitiveValue.newInt32((Integer)x);
+        }
+        if (x instanceof Short) {
+            return PrimitiveValue.newInt32((Short)x);
+        }
+        if (x instanceof Long) {
+            return PrimitiveValue.newInt64((Long)x);
+        }
+        if (x instanceof byte[]) {
+            return PrimitiveValue.newBytes((byte[])x);
+        }
+        if (x instanceof Double) {
+            return PrimitiveValue.newDouble((Double)x);
+        }
+        if (x instanceof Float) {
+            return PrimitiveValue.newFloat((Float)x);
+        }
+        if (x instanceof BigDecimal) {
+            return DecimalType.getDefault().newValue((BigDecimal)x);
+        }
+        if (x instanceof Boolean) {
+            return PrimitiveValue.newBool((Boolean)x);
+        }
+        if (x instanceof java.sql.Timestamp) {
+            return PrimitiveValue.newTimestamp(((java.sql.Timestamp)x).toInstant());
+        }
+        if (x instanceof java.sql.Date) {
+            return PrimitiveValue.newDate(((java.sql.Date)x).toLocalDate());
+        }
+        throw new IllegalArgumentException(x.getClass().getName());
+    }
+
 }
 
