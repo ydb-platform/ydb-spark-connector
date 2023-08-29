@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.time.ZoneOffset;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.DataTypes;
+import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.unsafe.types.UTF8String;
 import tech.ydb.table.result.ValueReader;
 import tech.ydb.table.values.DecimalType;
@@ -153,7 +154,7 @@ public class YdbTypes {
                 }
                 break;
             case DECIMAL:
-                return vr.getDecimal();
+                return Decimal.apply(vr.getDecimal().toBigDecimal());
         }
         return null;
     }
@@ -185,6 +186,9 @@ public class YdbTypes {
         }
         if (x instanceof BigDecimal) {
             return DecimalType.getDefault().newValue((BigDecimal)x);
+        }
+        if (x instanceof Decimal) {
+            return DecimalType.getDefault().newValue( ((Decimal)x).toJavaBigDecimal() );
         }
         if (x instanceof Boolean) {
             return PrimitiveValue.newBool((Boolean)x);
