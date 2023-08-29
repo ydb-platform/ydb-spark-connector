@@ -95,7 +95,6 @@ public class YdbReadTable implements AutoCloseable {
                                 }
                             }
                         }).join().expectSuccess();
-                        queue.add(EndOfScan);
                     } catch(Exception ex) {
                         LOG.warn("Background scan failed for table {}", tablePath, ex);
                         synchronized(YdbReadTable.this) {
@@ -103,6 +102,7 @@ public class YdbReadTable implements AutoCloseable {
                                 firstIssue = ex;
                         }
                     }
+                    queue.add(EndOfScan);
                 }
             });
             t.setDaemon(true);
@@ -111,6 +111,7 @@ public class YdbReadTable implements AutoCloseable {
             worker = t;
         } catch(Exception ex) {
             state = State.FAILED;
+            firstIssue = ex;
             LOG.warn("Failed to initiate scan for table {}", tablePath, ex);
             try {
                 if (stream!=null)
@@ -122,8 +123,19 @@ public class YdbReadTable implements AutoCloseable {
     }
 
     public boolean next() {
-        if (state!=State.PREPARED)
-            return false;
+        switch (state) {
+            case PREPARED:
+                return doNext();
+            case FAILED:
+                throw new RuntimeException("Scan failed.", firstIssue);
+            case CREATED:
+                throw new IllegalStateException("Scan has not been prepared.");
+            default:
+                return false;
+        }
+    }
+
+    private boolean doNext() {
         while (true) {
             if (current!=null && current.next())
                 return true; // have next row in the current block
@@ -136,7 +148,13 @@ public class YdbReadTable implements AutoCloseable {
                 } catch(InterruptedException ix) {}
             }
             if (qi==null || qi.reader==null) {
+                if (firstIssue!=null) {
+                    state = State.FAILED;
+                    current = null;
+                    throw new RuntimeException("Scan failed.", firstIssue);
+                }
                 state = State.FINISHED;
+                current = null;
                 return false;
             }
             current = qi.reader;
