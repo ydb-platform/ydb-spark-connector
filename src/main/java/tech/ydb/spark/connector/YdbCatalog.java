@@ -21,6 +21,7 @@ import tech.ydb.scheme.description.DescribePathResult;
 import tech.ydb.scheme.description.ListDirectoryResult;
 import tech.ydb.table.SessionRetryContext;
 import tech.ydb.table.description.TableDescription;
+import tech.ydb.table.description.TableIndex;
 import tech.ydb.table.settings.DescribeTableSettings;
 
 /**
@@ -93,6 +94,19 @@ public class YdbCatalog implements CatalogPlugin, TableCatalog, SupportsNamespac
         return sb.toString();
     }
 
+    private String mergePath(String[] items, String extra) {
+        if (extra==null) {
+            return mergePath(items);
+        }
+        if (items==null) {
+            return mergePath(new String[] {extra});
+        }
+        String[] work = new String[1 + items.length];
+        System.arraycopy(items, 0, work, 0, items.length);
+        work[items.length] = extra;
+        return mergePath(work);
+    }
+
     private static void mergeLocal(Identifier id, StringBuilder sb) {
         mergeLocal(id.namespace(), sb);
         if (sb.length() > 0) sb.append("/");
@@ -152,6 +166,7 @@ public class YdbCatalog implements CatalogPlugin, TableCatalog, SupportsNamespac
             for (SchemeOperationProtos.Entry e : ldr.getChildren()) {
                 if (SchemeOperationProtos.Entry.Type.TABLE.equals(e.getType())) {
                     retval.add(Identifier.of(namespace, e.getName()));
+                    listIndexes(namespace, retval, e);
                 }
             }
             return retval.toArray(new Identifier[0]);
@@ -160,9 +175,49 @@ public class YdbCatalog implements CatalogPlugin, TableCatalog, SupportsNamespac
         }
     }
 
+    private void listIndexes(String[] namespace, List<Identifier> retval,
+            SchemeOperationProtos.Entry tableEntry) {
+        String tablePath = mergePath(namespace, tableEntry.getName());
+        Result<TableDescription> res = getRetryCtx().supplyResult(session -> {
+            return session.describeTable(tablePath, new DescribeTableSettings());
+        }).join();
+        if (! res.isSuccess()) {
+            // Skipping problematic entries.
+            return;
+        }
+        TableDescription td = res.getValue();
+        for (TableIndex ix : td.getIndexes()) {
+            String ixname = "ix/" + tableEntry.getName() + "/" + ix.getName();
+            retval.add(Identifier.of(namespace, ixname));
+        }
+    }
+
     @Override
     public Table loadTable(Identifier ident) throws NoSuchTableException {
-        // TODO: naming convention and special support for index "tables".
+        // Special support for index "tables".
+        String pseudoName = ident.name();
+        if (pseudoName.startsWith("ix/")) {
+            String[] tabParts = pseudoName.split("[/]");
+            if (tabParts.length == 3) {
+                String tabName = tabParts[1];
+                String ixName = tabParts[2];
+                Result<TableDescription> res = getRetryCtx().supplyResult(session -> {
+                    final DescribeTableSettings dts = new DescribeTableSettings();
+                    dts.setIncludeTableStats(true);
+                    return session.describeTable(mergePath(ident.namespace(), tabName), dts);
+                }).join();
+                TableDescription td = checkStatus(res, ident);
+                for (TableIndex ix : td.getIndexes()) {
+                    if (ixName.equals(ix.getName())) {
+                        // TODO: construct the YdbTable object
+                        
+                    }
+                }
+                // Could not find the specified index
+                throw new NoSuchTableException(ident);
+            }
+        }
+        // Processing for regular tables.
         Result<TableDescription> res = getRetryCtx().supplyResult(session -> {
             final DescribeTableSettings dts = new DescribeTableSettings();
             dts.setIncludeTableStats(true);

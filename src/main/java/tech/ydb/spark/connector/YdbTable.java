@@ -19,6 +19,7 @@ import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 import tech.ydb.table.description.TableColumn;
 import tech.ydb.table.description.TableDescription;
+import tech.ydb.table.description.TableIndex;
 
 /**
  *
@@ -35,21 +36,35 @@ public class YdbTable implements Table, SupportsRead {
 
     private final YdbConnector connector;
     private final String fullName;
-    private final TableDescription td;
+    private final List<TableColumn> columns;
+    private final List<String> keyColumns;
+    private final List<YdbFieldType> keyTypes;
     private StructType schema;
 
     YdbTable(YdbConnector connector, String fullName, TableDescription td) {
         this.connector = connector;
         this.fullName = fullName;
-        this.td = td;
+        this.columns = td.getColumns();
+        this.keyColumns = td.getPrimaryKeys();
+        Map<String,TableColumn> cm = buildColumnsMap(td);
+        List<YdbFieldType> kt = new ArrayList<>();
+        for (String kname : td.getPrimaryKeys()) {
+            TableColumn tc = cm.get(kname);
+            kt.add(YdbFieldType.fromSdkType(tc.getType()));
+        }
+        this.keyTypes = kt;
+    }
+
+    private static Map<String, TableColumn> buildColumnsMap(TableDescription td) {
+        Map<String,TableColumn> m = new HashMap<>();
+        for (TableColumn tc : td.getColumns()) {
+            m.put(tc.getName(), tc);
+        }
+        return m;
     }
 
     final YdbConnector getConnector() {
         return connector;
-    }
-
-    final TableDescription getDescription() {
-        return td;
     }
 
     @Override
@@ -60,7 +75,7 @@ public class YdbTable implements Table, SupportsRead {
     @Override
     public StructType schema() {
         if (schema==null) {
-            schema = new StructType(mapFields(td.getColumns()));
+            schema = new StructType(mapFields(columns));
         }
         return schema;
     }
@@ -102,20 +117,11 @@ public class YdbTable implements Table, SupportsRead {
     }
 
     final List<String> keyColumns() {
-        return new ArrayList<>(td.getPrimaryKeys());
+        return keyColumns;
     }
 
     final List<YdbFieldType> keyTypes() {
-        Map<String,TableColumn> m = new HashMap<>();
-        for (TableColumn tc : td.getColumns()) {
-            m.put(tc.getName(), tc);
-        }
-        List<YdbFieldType> retval = new ArrayList<>();
-        for (String kname : td.getPrimaryKeys()) {
-            TableColumn tc = m.get(kname);
-            retval.add(YdbFieldType.fromSdkType(tc.getType()));
-        }
-        return retval;
+        return keyTypes;
     }
 
     @Override

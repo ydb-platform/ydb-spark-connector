@@ -89,4 +89,5 @@ spark.sql("SELECT * FROM ydb.toster").show();
 spark.sql("SELECT COUNT(*) FROM ydb.test0_fhrw").show();
 spark.sql("SELECT MIN(created_date) FROM ydb.test0_fhrw").show();
 spark.sql("SELECT borough, MIN(created_date), MAX(created_date) FROM ydb.test0_fhrw GROUP BY borough ORDER BY borough").show();
+spark.sql("SELECT city, COUNT(*) FROM ydb.pgimp1.public.fhrw WHERE unique_key<'2' GROUP BY city ORDER BY COUNT(*) DESC LIMIT 5").show(100, false);
 ```
