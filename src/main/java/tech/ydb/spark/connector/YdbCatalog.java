@@ -260,10 +260,15 @@ public class YdbCatalog implements CatalogPlugin, TableCatalog, SupportsNamespac
     }
 
     @Override
-    public boolean dropNamespace(String[] namespace) throws NoSuchNamespaceException {
-        // TODO: recursive removal
-        Status status = getSchemeClient().removeDirectory(mergePath(namespace)).join();
-        return status.isSuccess();
+    public boolean dropNamespace(String[] namespace, boolean recursive)
+            throws NoSuchNamespaceException, NonEmptyNamespaceException {
+        if (! recursive) {
+            Status status = getSchemeClient().removeDirectory(mergePath(namespace)).join();
+            return status.isSuccess();
+        } else {
+            // TODO: recursive removal
+            throw new UnsupportedOperationException("Recursive namespace removal is not implemented");
+        }
     }
 
 }

@@ -9,6 +9,7 @@ import org.apache.spark.sql.connector.read.PartitionReaderFactory;
 import org.apache.spark.sql.connector.read.Scan;
 import org.apache.spark.sql.connector.read.ScanBuilder;
 import org.apache.spark.sql.connector.read.SupportsPushDownFilters;
+import org.apache.spark.sql.connector.read.SupportsPushDownLimit;
 import org.apache.spark.sql.connector.read.SupportsPushDownRequiredColumns;
 import org.apache.spark.sql.sources.Filter;
 import org.apache.spark.sql.types.StructType;
@@ -18,7 +19,8 @@ import org.apache.spark.sql.types.StructType;
  * @author zinal
  */
 public class YdbScanBuilder implements ScanBuilder,
-        SupportsPushDownFilters, SupportsPushDownRequiredColumns {
+        SupportsPushDownFilters, SupportsPushDownRequiredColumns,
+        SupportsPushDownLimit {
 
     private static final org.slf4j.Logger LOG =
             org.slf4j.LoggerFactory.getLogger(YdbScanBuilder.class);
@@ -52,6 +54,12 @@ public class YdbScanBuilder implements ScanBuilder,
     public void pruneColumns(StructType requiredSchema) {
         LOG.debug("Required columns {}", requiredSchema);
         options.pruneColumns(requiredSchema);
+    }
+
+    @Override
+    public boolean pushLimit(int count) {
+        options.setRowLimit(count);
+        return false;
     }
 
     public static class YdbScan implements Scan  {

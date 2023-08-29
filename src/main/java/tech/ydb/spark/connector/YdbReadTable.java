@@ -5,10 +5,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 
-import org.apache.spark.sql.catalyst.InternalRow;
-import org.apache.spark.sql.types.StructField;
 import scala.collection.JavaConversions;
 
+import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.types.StructField;
+
+import tech.ydb.core.StatusCode;
+import tech.ydb.core.UnexpectedResultException;
 import tech.ydb.core.grpc.GrpcReadStream;
 import tech.ydb.table.Session;
 import tech.ydb.table.query.ReadTablePart;
@@ -24,11 +27,14 @@ import tech.ydb.table.values.Value;
  */
 public class YdbReadTable implements AutoCloseable {
 
-    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(YdbReadTable.class);
+    private static final org.slf4j.Logger LOG =
+            org.slf4j.LoggerFactory.getLogger(YdbReadTable.class);
 
     private final YdbScanOptions options;
     private final ArrayBlockingQueue<QueueItem> queue;
     private String tablePath;
+    private List<String> outColumns;
+    private int[] outIndexes;
     private Thread worker;
     private volatile State state;
     private volatile Exception firstIssue;
@@ -43,22 +49,26 @@ public class YdbReadTable implements AutoCloseable {
     }
 
     public void prepare() {
-        if (state != State.CREATED)
+        if (getState() != State.CREATED)
             return;
 
         // Configuring settings for the table scan.
         final ReadTableSettings.Builder sb = ReadTableSettings.newBuilder();
         // Add all required fields.
-        int colcount = 0;
+        outColumns = new ArrayList<>();
         scala.collection.Iterator<StructField> sfit = options.readSchema().seq().iterator();
         while (sfit.hasNext()) {
-            sb.column(sfit.next().name());
-            ++colcount;
+            String colname = sfit.next().name();
+            sb.column(colname);
+            outColumns.add(colname);
         }
-        if (colcount == 0) {
+        if (outColumns.isEmpty()) {
             // In case no fields are required, add the first field of the primary key.
-            sb.column(options.getKeyColumns().get(0));
+            String colname = options.getKeyColumns().get(0);
+            sb.column(colname);
+            outColumns.add(colname);
         }
+        outIndexes = new int[outColumns.size()];
         if (! options.getRangeBegin().isEmpty()) {
             // Left scan limit.
             sb.fromKeyInclusive(makeRange(options.getRangeBegin(), options.getKeyTypes()));
@@ -66,6 +76,10 @@ public class YdbReadTable implements AutoCloseable {
         if (! options.getRangeEnd().isEmpty()) {
             // Right scan limit.
             sb.toKeyInclusive(makeRange(options.getRangeEnd(), options.getKeyTypes()));
+        }
+        if (options.getRowLimit() > 0) {
+            LOG.debug("Setting row limit to {}", options.getRowLimit());
+            sb.rowLimit(options.getRowLimit());
         }
         // TODO: add setting for the maximum scan duration.
         sb.withRequestTimeout(Duration.ofHours(8));
@@ -82,37 +96,13 @@ public class YdbReadTable implements AutoCloseable {
             stream = session.executeReadTable(tablePath, sb.build());
             current = null;
             state = State.PREPARED;
-            final Thread t = new Thread(new Runnable() {
-                @Override
-                public void run() {
-                    try {
-                        stream.start(part -> {
-                            while (true) {
-                                try {
-                                    queue.add(new QueueItem(part.getResultSetReader()));
-                                    return;
-                                } catch(IllegalStateException ise) {
-                                    try { Thread.sleep(123L); } catch(InterruptedException ix) {}
-                                }
-                            }
-                        }).join().expectSuccess();
-                    } catch(Exception ex) {
-                        LOG.warn("Background scan failed for table {}", tablePath, ex);
-                        synchronized(YdbReadTable.this) {
-                            if (firstIssue==null)
-                                firstIssue = ex;
-                        }
-                    }
-                    queue.add(EndOfScan);
-                }
-            });
+            Thread t = new Thread(new Worker());
             t.setDaemon(true);
             t.setName("YdbReadTable:"+tablePath);
             t.start();
             worker = t;
         } catch(Exception ex) {
-            state = State.FAILED;
-            firstIssue = ex;
+            setIssue(ex);
             LOG.warn("Failed to initiate scan for table {}", tablePath, ex);
             try {
                 if (stream!=null)
@@ -124,11 +114,15 @@ public class YdbReadTable implements AutoCloseable {
     }
 
     public boolean next() {
-        switch (state) {
+        // If we have a row block, return its rows before checking any state.
+        if (current!=null && current.next())
+            return true; // we have the current row
+        // no block, or end of rows in the block
+        switch (getState()) {
             case PREPARED:
                 return doNext();
             case FAILED:
-                throw new RuntimeException("Scan failed.", firstIssue);
+                throw new RuntimeException("Scan failed.", getIssue());
             case CREATED:
                 throw new IllegalStateException("Scan has not been prepared.");
             default:
@@ -148,32 +142,45 @@ public class YdbReadTable implements AutoCloseable {
                     break;
                 } catch(InterruptedException ix) {}
             }
-            if (qi==null || qi.reader==null) {
-                if (firstIssue!=null) {
-                    state = State.FAILED;
-                    current = null;
-                    throw new RuntimeException("Scan failed.", firstIssue);
-                }
-                state = State.FINISHED;
+            final Exception issue = getIssue();
+            if (issue!=null) {
                 current = null;
+                setState(State.FAILED);
+                throw new RuntimeException("Scan failed.", issue);
+            }
+            if (qi==null || qi.reader==null) {
+                current = null;
+                setState(State.FINISHED);
                 return false;
             }
             current = qi.reader;
+            // Rebuild column indexes each block - API allows to change ordering.
+            if (outIndexes.length != current.getColumnCount()) {
+                throw new RuntimeException("Expected columns count "
+                        + outIndexes.length + ", but got " + current.getColumnCount());
+            }
+            for (int i=0; i<outIndexes.length; ++i) {
+                outIndexes[i] = current.getColumnIndex(outColumns.get(i));
+                if (outIndexes[i] < 0) {
+                    throw new RuntimeException("Lost column [" + outColumns.get(i)
+                            + "] in the result set");
+                }
+            }
         }
     }
 
     public InternalRow get() {
-        final int count = current.getColumnCount();
+        final int count = outIndexes.length;
         final ArrayList<Object> values = new ArrayList(count);
         for (int i=0; i<count; ++i) {
-            values.add(YdbTypes.convertFromYdb(current.getColumn(i)));
+            values.add(YdbTypes.convertFromYdb(current.getColumn(outIndexes[i])));
         }
         return InternalRow.fromSeq(JavaConversions.asScalaBuffer(values));
     }
 
     @Override
     public void close() {
-        state = State.FINISHED;
+        setState(State.FINISHED);
         if (stream!=null) {
             try { stream.cancel(); } catch(Exception tmp) {}
         }
@@ -190,6 +197,25 @@ public class YdbReadTable implements AutoCloseable {
         session = null;
         worker = null;
         current = null;
+    }
+
+    private synchronized void setIssue(Exception issue) {
+        if (firstIssue==null) {
+            firstIssue = issue;
+            state = State.FAILED;
+        }
+    }
+
+    private synchronized Exception getIssue() {
+        return firstIssue;
+    }
+
+    private synchronized State getState() {
+        return state;
+    }
+
+    private synchronized void setState(State state) {
+        this.state = state;
     }
 
     @SuppressWarnings("unchecked")
@@ -224,4 +250,37 @@ public class YdbReadTable implements AutoCloseable {
         FAILED
     }
 
+    class Worker implements Runnable {
+        @Override
+        public void run() {
+            LOG.debug("Entering worker scan thread {}", Thread.currentThread().getName());
+            try {
+                stream.start(part -> {
+                    while (true) {
+                        try {
+                            queue.add(new QueueItem(part.getResultSetReader()));
+                            return;
+                        } catch(IllegalStateException ise) {
+                            try { Thread.sleep(123L); } catch(InterruptedException ix) {}
+                        }
+                    }
+                }).join().expectSuccess();
+            } catch(Exception ex) {
+                boolean needReport = true;
+                if (ex instanceof UnexpectedResultException) {
+                    UnexpectedResultException ure = (UnexpectedResultException) ex;
+                    if ( ure.getStatus().getCode() == StatusCode.CLIENT_CANCELLED ) {
+                        needReport = false;
+                    }
+                }
+                if (needReport) {
+                    LOG.warn("Background scan failed for table {}", tablePath, ex);
+                    setIssue(ex);
+                }
+            }
+            queue.add(EndOfScan);
+            LOG.debug("Exiting worker scan thread {}", Thread.currentThread().getName());
+        }
+    }
+ 
 }

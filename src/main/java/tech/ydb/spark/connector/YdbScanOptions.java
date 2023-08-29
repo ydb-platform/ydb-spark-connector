@@ -24,6 +24,7 @@ public class YdbScanOptions implements Serializable {
     private final List<YdbFieldType> keyTypes;
     private final ArrayList<Object> rangeBegin;
     private final ArrayList<Object> rangeEnd;
+    private int rowLimit;
     private StructType requiredSchema;
 
     public YdbScanOptions(YdbTable table) {
@@ -35,6 +36,7 @@ public class YdbScanOptions implements Serializable {
         this.keyTypes = table.keyTypes();
         this.rangeBegin = new ArrayList<>();
         this.rangeEnd = new ArrayList<>();
+        this.rowLimit = -1;
     }
 
     public Filter[] pushFilters(Filter[] filters) {
@@ -85,6 +87,14 @@ public class YdbScanOptions implements Serializable {
 
     public List<Object> getRangeEnd() {
         return rangeEnd;
+    }
+
+    public int getRowLimit() {
+        return rowLimit;
+    }
+
+    public void setRowLimit(int rowLimit) {
+        this.rowLimit = rowLimit;
     }
 
     /**
