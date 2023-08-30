@@ -41,7 +41,7 @@ The connector exposes the YDB directories, tables and indexes as entries in the 
 Please see the example below on using Spark SQL to list YDB directories, tables, and table columns.
 
 ```sql
-spark-sql> -- List directories in database root
+spark-sql> -- List root directories within the database
 spark-sql> SHOW NAMESPACES FROM ydb;
 `demo-payments`
 myschema1
@@ -50,7 +50,7 @@ pgimp1
 `python-examples`
 zeppelin
 `.sys`
-spark-sql> -- List sub-directories
+spark-sql> -- List sub-directories within the specified directory
 spark-sql> SHOW NAMESPACES FROM ydb.`python-examples`;
 `python-examples`.basic
 `python-examples`.jsondemo
@@ -58,7 +58,7 @@ spark-sql> SHOW NAMESPACES FROM ydb.`python-examples`;
 `python-examples`.pagination
 `python-examples`.secondary_indexes_builtin
 `python-examples`.ttl
-spark-sql> -- List the tables within the specified YDB directory
+spark-sql> -- List the tables within the specified directory
 spark-sql> SHOW TABLES FROM ydb.`python-examples`.`basic`;
 episodes
 seasons
@@ -73,7 +73,7 @@ air_date            	bigint
                     	                    	                    
 # Partitioning      	                    	                    
 Not partitioned     	                    	                    
-spark-sql> -- Run the simple YDB query
+spark-sql> -- Run the simple Spark SQL query on top of YDB table
 spark-sql> SELECT * FROM ydb.`python-examples`.`basic`.episodes LIMIT 5;
 1	1	1	Yesterday's Jam	13182
 1	1	2	Calamity Jen	13182
