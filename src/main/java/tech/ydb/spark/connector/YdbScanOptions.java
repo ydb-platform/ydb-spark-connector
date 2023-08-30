@@ -149,17 +149,12 @@ public class YdbScanOptions implements Serializable {
             rangeBegin.add(null);
             rangeEnd.add(null);
         }
-        if (LOG.isDebugEnabled()) {
-            for (Predicate p : predicates) {
-                debugPredicate(0, p);
-            }
-        }
-
         for (int pos = 0; pos<keyColumns.size(); ++pos) {
             final String keyColumn = keyColumns.get(pos);
             boolean hasEquality = false;
             for (Predicate p : predicates) {
-                if ("=".equalsIgnoreCase(p.name()) || "<=>".equalsIgnoreCase(p.name())) {
+                final String pname = p.name();
+                if ("=".equalsIgnoreCase(pname) || "<=>".equalsIgnoreCase(pname)) {
                     Lyzer lyzer = new Lyzer(keyColumn, p.children());
                     if (lyzer.success) {
                         rangeBegin.set(pos, lyzer.value);
@@ -167,7 +162,7 @@ public class YdbScanOptions implements Serializable {
                         hasEquality = true;
                         break;
                     }
-                } else if (">".equalsIgnoreCase(p.name())) {
+                } else if (">".equalsIgnoreCase(pname)) {
                     Lyzer lyzer = new Lyzer(keyColumn, p.children());
                     if (lyzer.success) {
                         if (lyzer.revert) {
@@ -177,7 +172,7 @@ public class YdbScanOptions implements Serializable {
                         }
                         break;
                     }
-                } else if (">=".equalsIgnoreCase(p.name())) {
+                } else if (">=".equalsIgnoreCase(pname)) {
                     Lyzer lyzer = new Lyzer(keyColumn, p.children());
                     if (lyzer.success) {
                         if (lyzer.revert) {
@@ -187,7 +182,7 @@ public class YdbScanOptions implements Serializable {
                         }
                         break;
                     }
-                } else if ("<".equalsIgnoreCase(p.name())) {
+                } else if ("<".equalsIgnoreCase(pname)) {
                     Lyzer lyzer = new Lyzer(keyColumn, p.children());
                     if (lyzer.success) {
                         if (lyzer.revert) {
@@ -197,7 +192,7 @@ public class YdbScanOptions implements Serializable {
                         }
                         break;
                     }
-                } else if ("<=".equalsIgnoreCase(p.name())) {
+                } else if ("<=".equalsIgnoreCase(pname)) {
                     Lyzer lyzer = new Lyzer(keyColumn, p.children());
                     if (lyzer.success) {
                         if (lyzer.revert) {
@@ -206,6 +201,20 @@ public class YdbScanOptions implements Serializable {
                             rangeEnd.set(pos, min(rangeEnd.get(pos), lyzer.value));
                         }
                         break;
+                    }
+                } else if ("STARTS_WITH".equalsIgnoreCase(pname)) {
+                    Lyzer lyzer = new Lyzer(keyColumn, p.children());
+                    if (lyzer.success && !lyzer.revert) {
+                        String lvalue = lyzer.value.toString();
+                        if (lvalue.length() > 0) {
+                            int lastCharPos = lvalue.length()-1;
+                            String rvalue = new StringBuilder()
+                                    .append(lvalue, 0, lastCharPos)
+                                    .append((char)(1 + lvalue.charAt(lastCharPos)))
+                                    .toString();
+                            rangeBegin.set(pos, max(rangeBegin.get(pos), lvalue));
+                            rangeEnd.set(pos, min(rangeEnd.get(pos), rvalue));
+                        }
                     }
                 }
             } // for (Predicate p : ...)
@@ -257,39 +266,9 @@ public class YdbScanOptions implements Serializable {
         return o2;
     }
 
-    private void debugPredicate(int n, Predicate p) {
-        String step = "";
-        for (int i=0; i<n; ++i)
-            step = step + "  ";
-        LOG.debug("{} predicate {}: {}", step, p.getClass(), p.name());
-        debugReferences(n, p.references());
-        for (Expression xe : p.children()) {
-            debugExpression(n+1, xe);
-        }
-    }
-
-    private void debugExpression(int n, Expression e) {
-        String step = "";
-        for (int i=0; i<n; ++i)
-            step = step + "  ";
-        LOG.debug("{} expression {}", step, e.getClass());
-        debugReferences(n, e.references());
-        for (Expression xe : e.children()) {
-            debugExpression(n+1, xe);
-        }
-    }
-
-    private void debugReferences(int n, NamedReference[] rs) {
-        if (rs==null || rs.length==0)
-            return;
-        String step = "";
-        for (int i=0; i<n; ++i)
-            step = step + "  ";
-        for (NamedReference r : rs) {
-            LOG.debug("{} -> {}", step, r.fieldNames());
-        }
-    }
-
+    /**
+     * Too small to be called "Analyzer"
+     */
     static final class Lyzer {
         final boolean success;
         final boolean revert;
