@@ -1,14 +1,31 @@
-# ydb-spark-ds
-Experimental implementation of Spark Data Source for YDB
+# Experimental Apache Spark connector for YDB
 
-[Reference 1](https://jaceklaskowski.github.io/spark-workshop/slides/spark-sql-Developing-Custom-Data-Source.html)
+Experimental implementation of [Apache Spark](https://spark.apache.org) connector for [YDB](https://ydb.tech).
 
-[Reference 2](https://jaceklaskowski.gitbooks.io/mastering-spark-sql/content/spark-sql-data-source-api-v2.html)
+The connector uses YDB ReadTable API under the covers, and supports basic filters pushdown using the primary keys. YDB indexes are exposed as Spark tables too, and can be used to query the data in a way similar to "normal" tables.
 
-[Cassandra Spark](https://github.com/datastax/spark-cassandra-connector)
+## Configuration
 
+The connector is deployed as a "fat" jar archive containing the code for its dependencies, including the GRPC libraries and YDB Java SDK. Commonly used dependencies are "shaded", e.g. put into the non-usual Java package to avoid the version conflicts with other libraries used in the Spark jobs.
 
-Spark Shell example config:
+Spark jobs using the connector should have its jar defined as a dependency, either explicitly (by putting it into the `--jars` argument of `spark-submit`) or implicitly (by putting into the system jars folder of the Spark installation).
+
+The following Spark configuration parameters must be defined to use the Spark connector for YDB:
+
+* `spark.sql.catalog.<CatalogName>` should be set to `tech.ydb.spark.connector.YdbCatalog`, which configures the `<CatalogName>` as Spark catalog for accessing YDB tables;
+* `spark.sql.catalog.<CatalogName>.url` should be set to YDB database URL, typically in the form of `grpcs://endpoint:port/?database=/Domain/dbname`;
+* `spark.sql.catalog.<CatalogName>.auth.mode` should specify the authentication mode setting, which can be one of:
+    * `NONE` - anonymous access;
+    * `STATIC` - static credentials, e.g. username and password;
+    * `TOKEN` - explicit authentication token;
+    * `KEY` - service account key file;
+    * `ENV` - reading the authenticaton settings from the environment variables, as specified in the [documentation](https://ydb.tech/en/docs/reference/ydb-sdk/auth#env).
+* `spark.sql.catalog.<CatalogName>.auth.{login,password}` - username and password for the STATIC authentication mode;
+* `spark.sql.catalog.<CatalogName>.auth.keyfile` - [authorized key file for Yandex Cloud](https://cloud.yandex.ru/docs/iam/concepts/authorization/key) for the KEY authentication mode;
+* `spark.sql.catalog.<CatalogName>.auth.token` - explicit authentication token for the TOKEN authentication mode;
+* `spark.sql.catalog.<CatalogName>.pool.size` - connection pool size, which should be bigger than the maximum number of concurrent Spark tasks per executor.
+
+Below is the example of running the interactive Spark shell, in the Scala mode, with the necessary configuration options:
 
 ```bash
 ./bin/spark-shell --conf spark.sql.catalog.ydb=tech.ydb.spark.connector.YdbCatalog \
@@ -17,77 +34,50 @@ Spark Shell example config:
   --conf spark.sql.catalog.ydb.auth.keyfile=/home/demo/Magic/key-ydb-sa1.json
 ```
 
+## Supported operations
 
+The connector exposes the YDB directories, tables and indexes as entries in the Spark catalog configured. Spark supports recursive "namespaces", which works naturally with the YDB's directories. Spark SQL uses "." (single dot) as the namespace delimiter, so it should be used instead of YDB's "/" (forward slash) to define sub-directories and tables within the YDB-enabled Spark catalog.
 
-```scala
-spark.sql("SHOW NAMESPACES FROM ydb").show();
-spark.sql("SHOW NAMESPACES FROM ydb.pgimp1").show();
-spark.sql("SHOW TABLES FROM ydb").show();
-```
+Please see the example below on using Spark SQL to list YDB directories, tables, and table columns.
 
 ```sql
-CREATE TABLE toster(
-  a Uint64 NOT NULL,
-  b Uint32,
-  c Int32,
-  d Int64,
-  e Text,
-  f Bytes,
-  g Timestamp,
-  h Datetime,
-  i Date,
-  j Json,
-  k JsonDocument,
-  l Bool,
-  m Uint8,
-  n Float,
-  o Double,
-  p Decimal(22,9),
-  PRIMARY KEY(a)
-);
-
-UPSERT INTO toster(a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p) VALUES (
-  1001,
-  2002,
-  3003,
-  4004,
-  "Text string"u,
-  "Bytes string",
-  Timestamp("2023-01-07T11:05:32.123456Z"),
-  Datetime("2023-01-07T11:05:32Z"),
-  Date("2023-01-07"),
-  Json(@@{"x": 1, "y": "test"}@@),
-  JsonDocument(@@{"x": 1, "y": "test"}@@),
-  True,
-  7,
-  123.456f,
-  123.456789,
-  Decimal("123.456789", 22, 9)
-), (
-  10001,
-  20002,
-  30003,
-  40004,
-  "New Text string"u,
-  "New Bytes string",
-  Timestamp("2020-01-07T11:05:32.123456Z"),
-  Datetime("2020-01-07T11:05:32Z"),
-  Date("2020-01-07"),
-  Json(@@{"x": 2, "y": "dust"}@@),
-  JsonDocument(@@{"x": 2, "y": "dust"}@@),
-  False,
-  8,
-  1023.456f,
-  1023.456789,
-  Decimal("1023.456789", 22, 9)
-);
-```
-
-```scala
-spark.sql("SELECT * FROM ydb.toster").show();
-
-spark.sql("SELECT COUNT(*) FROM ydb.test0_fhrw").show();
-spark.sql("SELECT MIN(created_date) FROM ydb.test0_fhrw").show();
-spark.sql("SELECT borough, MIN(created_date), MAX(created_date) FROM ydb.test0_fhrw GROUP BY borough ORDER BY borough").show();
-spark.sql("SELECT city, COUNT(*) FROM ydb.pgimp1.public.fhrw WHERE unique_key<'2' GROUP BY city ORDER BY COUNT(*) DESC LIMIT 5").show(100, false);
+spark-sql> -- List directories in database root
+spark-sql> SHOW NAMESPACES FROM ydb;
+`demo-payments`
+myschema1
+mysql1
+pgimp1
+`python-examples`
+zeppelin
+`.sys`
+spark-sql> -- List sub-directories
+spark-sql> SHOW NAMESPACES FROM ydb.`python-examples`;
+`python-examples`.basic
+`python-examples`.jsondemo
+`python-examples`.jsondemo1
+`python-examples`.pagination
+`python-examples`.secondary_indexes_builtin
+`python-examples`.ttl
+spark-sql> -- List the tables within the specified YDB directory
+spark-sql> SHOW TABLES FROM ydb.`python-examples`.`basic`;
+episodes
+seasons
+series
+spark-sql> -- Describe the YDB table structure
+spark-sql> DESCRIBE TABLE ydb.`python-examples`.`basic`.episodes;
+series_id           	bigint              	                    
+season_id           	bigint              	                    
+episode_id          	bigint              	                    
+title               	string              	                    
+air_date            	bigint              	                    
+                    	                    	                    
+# Partitioning      	                    	                    
+Not partitioned     	                    	                    
+spark-sql> -- Run the simple YDB query
+spark-sql> SELECT * FROM ydb.`python-examples`.`basic`.episodes LIMIT 5;
+1	1	1	Yesterday's Jam	13182
+1	1	2	Calamity Jen	13182
+1	1	3	Fifty-Fifty	13189
+1	1	4	The Red Door	13196
+1	1	5	The Haunting of Bill Crouse	13203
 ```
