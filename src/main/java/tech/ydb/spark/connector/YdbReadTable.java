@@ -88,8 +88,7 @@ public class YdbReadTable implements AutoCloseable {
         // Create or acquire the connector object.
         YdbConnector c = YdbRegistry.create(options.getCatalogName(), options.getConnectOptions());
         // The full table path is needed.
-        // TODO: detect and convert the index pseudo-tables.
-        tablePath = c.getDatabase() + "/" + options.getTableName();
+        tablePath = options.getTablePath();
         // TODO: add setting for the maximum session creation duration.
         session = c.getTableClient().createSession(Duration.ofSeconds(30)).join().getValue();
         try {

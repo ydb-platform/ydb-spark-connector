@@ -18,6 +18,7 @@ public class YdbScanOptions implements Serializable {
 
     private final String catalogName;
     private final Map<String,String> connectOptions;
+    private final String tablePath;
     private final String tableName;
     private final StructType schema;
     private final List<String> keyColumns;
@@ -31,8 +32,9 @@ public class YdbScanOptions implements Serializable {
         this.catalogName = table.getConnector().getCatalogName();
         this.connectOptions = table.getConnector().getConnectOptions();
         this.tableName = table.name();
+        this.tablePath = table.tablePath();
         this.schema = table.schema();
-        this.keyColumns = table.keyColumns();
+        this.keyColumns = new ArrayList<>(table.keyColumns()); // ensure serializable list
         this.keyTypes = table.keyTypes();
         this.rangeBegin = new ArrayList<>();
         this.rangeEnd = new ArrayList<>();
@@ -71,6 +73,10 @@ public class YdbScanOptions implements Serializable {
 
     public String getTableName() {
         return tableName;
+    }
+
+    public String getTablePath() {
+        return tablePath;
     }
 
     public List<String> getKeyColumns() {

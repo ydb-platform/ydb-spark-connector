@@ -35,24 +35,59 @@ public class YdbTable implements Table, SupportsRead {
     }
 
     private final YdbConnector connector;
-    private final String fullName;
+    private final String logicalName;
+    private final String physicalName;
     private final List<TableColumn> columns;
     private final List<String> keyColumns;
     private final List<YdbFieldType> keyTypes;
     private StructType schema;
 
-    YdbTable(YdbConnector connector, String fullName, TableDescription td) {
+    YdbTable(YdbConnector connector, String logicalName, String physicalName, TableDescription td) {
         this.connector = connector;
-        this.fullName = fullName;
+        this.logicalName = logicalName;
+        this.physicalName = physicalName;
         this.columns = td.getColumns();
         this.keyColumns = td.getPrimaryKeys();
+        this.keyTypes = new ArrayList<>();
         Map<String,TableColumn> cm = buildColumnsMap(td);
-        List<YdbFieldType> kt = new ArrayList<>();
-        for (String kname : td.getPrimaryKeys()) {
-            TableColumn tc = cm.get(kname);
-            kt.add(YdbFieldType.fromSdkType(tc.getType()));
+        for (String cname : td.getPrimaryKeys()) {
+            TableColumn tc = cm.get(cname);
+            this.keyTypes.add(YdbFieldType.fromSdkType(tc.getType()));
         }
-        this.keyTypes = kt;
+    }
+
+    YdbTable(YdbConnector connector, String logicalName, String physicalName,
+            TableDescription td, TableIndex ix) {
+        this.connector = connector;
+        this.logicalName = logicalName;
+        this.physicalName = physicalName + "/" + ix.getName() + "/indexImplTable";
+        this.columns = new ArrayList<>();
+        this.keyColumns = ix.getColumns();
+        this.keyTypes = new ArrayList<>();
+        HashSet<String> known = new HashSet<>();
+        Map<String,TableColumn> cm = buildColumnsMap(td);
+        // Add index key columns
+        for (String cname : ix.getColumns()) {
+            TableColumn tc = cm.get(cname);
+            this.columns.add(tc);
+            this.keyTypes.add(YdbFieldType.fromSdkType(tc.getType()));
+            known.add(cname);
+        }
+        // Add index extra columns
+        if (ix.getDataColumns()!=null) {
+            for (String cname : ix.getDataColumns()) {
+                TableColumn tc = cm.get(cname);
+                this.columns.add(tc);
+                known.add(cname);
+            }
+        }
+        // Add main table's PK columns, as they are in the index too.
+        for (String cname : td.getPrimaryKeys()) {
+            if (known.add(cname)) {
+                TableColumn tc = cm.get(cname);
+                this.columns.add(tc);
+            }
+        }
     }
 
     private static Map<String, TableColumn> buildColumnsMap(TableDescription td) {
@@ -69,7 +104,11 @@ public class YdbTable implements Table, SupportsRead {
 
     @Override
     public String name() {
-        return fullName;
+        return logicalName;
+    }
+
+    public String tablePath() {
+        return physicalName;
     }
 
     @Override
@@ -126,7 +165,7 @@ public class YdbTable implements Table, SupportsRead {
 
     @Override
     public String toString() {
-        return "YdbTable{" + "connector=" + connector + ", fullName=" + fullName + '}';
+        return "YdbTable{" + "connector=" + connector + ", fullName=" + physicalName + '}';
     }
 
 }

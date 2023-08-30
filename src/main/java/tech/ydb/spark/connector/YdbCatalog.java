@@ -107,17 +107,17 @@ public class YdbCatalog implements CatalogPlugin, TableCatalog, SupportsNamespac
         return mergePath(work);
     }
 
-    private static void mergeLocal(Identifier id, StringBuilder sb) {
-        mergeLocal(id.namespace(), sb);
-        if (sb.length() > 0) sb.append("/");
-        sb.append(safeName(id.name()));
-    }
-
     private String mergePath(Identifier id) {
         final StringBuilder sb = new StringBuilder();
         sb.append(getDatabase());
         mergeLocal(id, sb);
         return sb.toString();
+    }
+
+    private static void mergeLocal(Identifier id, StringBuilder sb) {
+        mergeLocal(id.namespace(), sb);
+        if (sb.length() > 0) sb.append("/");
+        sb.append(safeName(id.name()));
     }
 
     private String mergeLocal(Identifier id) {
@@ -194,37 +194,45 @@ public class YdbCatalog implements CatalogPlugin, TableCatalog, SupportsNamespac
 
     @Override
     public Table loadTable(Identifier ident) throws NoSuchTableException {
-        // Special support for index "tables".
-        String pseudoName = ident.name();
-        if (pseudoName.startsWith("ix/")) {
-            String[] tabParts = pseudoName.split("[/]");
-            if (tabParts.length == 3) {
-                String tabName = tabParts[1];
-                String ixName = tabParts[2];
-                Result<TableDescription> res = getRetryCtx().supplyResult(session -> {
-                    final DescribeTableSettings dts = new DescribeTableSettings();
-                    dts.setIncludeTableStats(true);
-                    return session.describeTable(mergePath(ident.namespace(), tabName), dts);
-                }).join();
-                TableDescription td = checkStatus(res, ident);
-                for (TableIndex ix : td.getIndexes()) {
-                    if (ixName.equals(ix.getName())) {
-                        // TODO: construct the YdbTable object
-                        
-                    }
-                }
-                // Could not find the specified index
-                throw new NoSuchTableException(ident);
-            }
+        if (ident.name().startsWith("ix/")) {
+            // Special support for index "tables".
+            return loadIndexTable(ident);
         }
         // Processing for regular tables.
+        String tablePath = mergePath(ident);
         Result<TableDescription> res = getRetryCtx().supplyResult(session -> {
             final DescribeTableSettings dts = new DescribeTableSettings();
             dts.setIncludeTableStats(true);
-            return session.describeTable(mergePath(ident), dts);
+            return session.describeTable(tablePath, dts);
         }).join();
         TableDescription td = checkStatus(res, ident);
-        return new YdbTable(getConnector(), mergeLocal(ident), td);
+        return new YdbTable(getConnector(), mergeLocal(ident), tablePath, td);
+    }
+
+    private Table loadIndexTable(Identifier ident) throws NoSuchTableException {
+        String pseudoName = ident.name();
+        String[] tabParts = pseudoName.split("[/]");
+        if (tabParts.length != 3) {
+            // Illegal name format - so "no such table".
+            throw new NoSuchTableException(ident);
+        }
+        String tabName = tabParts[1];
+        String ixName = tabParts[2];
+        String tablePath = mergePath(ident.namespace(), tabName);
+        Result<TableDescription> res = getRetryCtx().supplyResult(session -> {
+            final DescribeTableSettings dts = new DescribeTableSettings();
+            dts.setIncludeTableStats(true);
+            return session.describeTable(tablePath, dts);
+        }).join();
+        TableDescription td = checkStatus(res, ident);
+        for (TableIndex ix : td.getIndexes()) {
+            if (ixName.equals(ix.getName())) {
+                // construct the YdbTable object
+                return new YdbTable(getConnector(), mergeLocal(ident), tablePath, td, ix);
+            }
+        }
+        // Could not find the specified index
+        throw new NoSuchTableException(ident);
     }
 
     @Override
