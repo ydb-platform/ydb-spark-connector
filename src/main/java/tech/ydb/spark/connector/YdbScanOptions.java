@@ -159,7 +159,7 @@ public class YdbScanOptions implements Serializable {
                         rangeBegin.set(pos, lyzer.value);
                         rangeEnd.set(pos, lyzer.value);
                         hasEquality = true;
-                        break;
+                        break; // we got both upper and lower bounds, moving to next key column
                     }
                 } else if (">".equalsIgnoreCase(pname)) {
                     Lyzer lyzer = new Lyzer(keyColumn, p.children());
@@ -169,7 +169,6 @@ public class YdbScanOptions implements Serializable {
                         } else {
                             rangeBegin.set(pos, max(rangeBegin.get(pos), lyzer.value));
                         }
-                        break;
                     }
                 } else if (">=".equalsIgnoreCase(pname)) {
                     Lyzer lyzer = new Lyzer(keyColumn, p.children());
@@ -179,7 +178,6 @@ public class YdbScanOptions implements Serializable {
                         } else {
                             rangeBegin.set(pos, max(rangeBegin.get(pos), lyzer.value));
                         }
-                        break;
                     }
                 } else if ("<".equalsIgnoreCase(pname)) {
                     Lyzer lyzer = new Lyzer(keyColumn, p.children());
@@ -189,7 +187,6 @@ public class YdbScanOptions implements Serializable {
                         } else {
                             rangeEnd.set(pos, min(rangeEnd.get(pos), lyzer.value));
                         }
-                        break;
                     }
                 } else if ("<=".equalsIgnoreCase(pname)) {
                     Lyzer lyzer = new Lyzer(keyColumn, p.children());
@@ -199,7 +196,6 @@ public class YdbScanOptions implements Serializable {
                         } else {
                             rangeEnd.set(pos, min(rangeEnd.get(pos), lyzer.value));
                         }
-                        break;
                     }
                 } else if ("STARTS_WITH".equalsIgnoreCase(pname)) {
                     Lyzer lyzer = new Lyzer(keyColumn, p.children());
