@@ -2,16 +2,16 @@ package tech.ydb.spark.connector;
 
 import java.io.IOException;
 import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.connector.expressions.filter.Predicate;
 import org.apache.spark.sql.connector.read.Batch;
 import org.apache.spark.sql.connector.read.InputPartition;
 import org.apache.spark.sql.connector.read.PartitionReader;
 import org.apache.spark.sql.connector.read.PartitionReaderFactory;
 import org.apache.spark.sql.connector.read.Scan;
 import org.apache.spark.sql.connector.read.ScanBuilder;
-import org.apache.spark.sql.connector.read.SupportsPushDownFilters;
+import org.apache.spark.sql.connector.read.SupportsPushDownV2Filters;
 import org.apache.spark.sql.connector.read.SupportsPushDownLimit;
 import org.apache.spark.sql.connector.read.SupportsPushDownRequiredColumns;
-import org.apache.spark.sql.sources.Filter;
 import org.apache.spark.sql.types.StructType;
 
 /**
@@ -19,7 +19,8 @@ import org.apache.spark.sql.types.StructType;
  * @author zinal
  */
 public class YdbScanBuilder implements ScanBuilder,
-        SupportsPushDownFilters, SupportsPushDownRequiredColumns,
+        SupportsPushDownV2Filters,
+        SupportsPushDownRequiredColumns,
         SupportsPushDownLimit {
 
     private static final org.slf4j.Logger LOG =
@@ -40,19 +41,18 @@ public class YdbScanBuilder implements ScanBuilder,
     }
 
     @Override
-    public Filter[] pushFilters(Filter[] filters) {
-        LOG.debug("Pushing filters {}", filters);
-        return options.pushFilters(filters);
+    public Predicate[] pushPredicates(Predicate[] predicates) {
+        options.setupPredicates(predicates);
+        return predicates; // all predicates should be re-checked
     }
 
     @Override
-    public Filter[] pushedFilters() {
-        return options.pushedFilters();
+    public Predicate[] pushedPredicates() {
+        return new Predicate[] {}; // all predicates should be re-checked
     }
 
     @Override
     public void pruneColumns(StructType requiredSchema) {
-        LOG.debug("Required columns {}", requiredSchema);
         options.pruneColumns(requiredSchema);
     }
 
@@ -143,7 +143,7 @@ public class YdbScanBuilder implements ScanBuilder,
         @Override
         public boolean next() throws IOException {
             if (query==null) {
-                LOG.debug("Preparing scan for table {}", options.getTableName());
+                LOG.debug("Preparing scan for table {}", options.getTablePath());
                 query = new YdbReadTable(options);
                 query.prepare();
                 LOG.debug("Scan prepared, ready to fetch...");

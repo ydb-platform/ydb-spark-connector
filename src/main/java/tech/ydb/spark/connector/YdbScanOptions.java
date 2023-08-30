@@ -4,8 +4,14 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import org.apache.spark.sql.connector.expressions.Expression;
+import org.apache.spark.sql.connector.expressions.FieldReference;
+import org.apache.spark.sql.connector.expressions.LiteralValue;
+import org.apache.spark.sql.connector.expressions.NamedReference;
+import org.apache.spark.sql.connector.expressions.filter.Predicate;
 import org.apache.spark.sql.sources.Filter;
 import org.apache.spark.sql.types.StructType;
+import org.apache.spark.sql.connector.expressions.filter.And;
 
 /**
  *
@@ -41,16 +47,11 @@ public class YdbScanOptions implements Serializable {
         this.rowLimit = -1;
     }
 
-    public Filter[] pushFilters(Filter[] filters) {
-        if (filters==null) {
-            return new Filter[0];
-        }
-        detectRangeSimple(flattenFilters(filters));
-        return filters;
-    }
-
-    public Filter[] pushedFilters() {
-        return new Filter[0];
+    public void setupPredicates(Predicate[] predicates) {
+        if (predicates==null || predicates.length==0)
+            return;
+        List<Predicate> flat = flattenPredicates(predicates);
+        detectRangeSimple(flat);
     }
 
     public void pruneColumns(StructType requiredSchema) {
@@ -104,14 +105,14 @@ public class YdbScanOptions implements Serializable {
     }
 
     /**
-     * Put all filters connected with AND directly into the list of filters, recursively.
+     * Put all predicates connected with AND directly into the list of predicates, recursively.
      * @param filters Input filters
-     * @return Flattened filters
+     * @return Flattened predicates
      */
-    private List<Filter> flattenFilters(Filter[] filters) {
-        final List<Filter> retval = new ArrayList<>();
-        for (Filter f : filters) {
-            flattenFilter(f, retval);
+    private List<Predicate> flattenPredicates(Predicate[] predicates) {
+        final List<Predicate> retval = new ArrayList<>();
+        for (Predicate p : predicates) {
+            flattenPredicate(p, retval);
         }
         return retval;
     }
@@ -121,13 +122,13 @@ public class YdbScanOptions implements Serializable {
      * @param f Input filter to be processed
      * @param retval The resulting list of flattened filters
      */
-    private void flattenFilter(Filter f, List<Filter> retval) {
-        if (f instanceof org.apache.spark.sql.sources.And) {
-            org.apache.spark.sql.sources.And fand = (org.apache.spark.sql.sources.And) f;
-            flattenFilter(fand.left(), retval);
-            flattenFilter(fand.right(), retval);
+    private void flattenPredicate(Predicate p, List<Predicate> retval) {
+        if ("AND".equalsIgnoreCase(p.name())) {
+            And fand = (And) p;
+            flattenPredicate(fand.left(), retval);
+            flattenPredicate(fand.right(), retval);
         } else {
-            retval.add(f);
+            retval.add(p);
         }
     }
 
@@ -135,74 +136,83 @@ public class YdbScanOptions implements Serializable {
      * Very basic filter-to-range conversion logic.
      * Currently covers N equality conditions + 1 optional following range condition.
      * Does NOT handle complex cases like N-dimensional ranges.
-     * @param filters input list of filters
+     * @param predicates input list of filters
      */
-    private void detectRangeSimple(List<Filter> filters) {
-        if (filters==null || filters.isEmpty()) {
+    private void detectRangeSimple(List<Predicate> predicates) {
+        if (predicates==null || predicates.isEmpty()) {
             return;
         }
-        LOG.debug("Calculating scan ranges for filters {}", filters);
+        LOG.debug("Calculating scan ranges for predicates {}", predicates);
         rangeBegin.clear();
         rangeEnd.clear();
         for (String x : keyColumns) {
             rangeBegin.add(null);
             rangeEnd.add(null);
         }
+        if (LOG.isDebugEnabled()) {
+            for (Predicate p : predicates) {
+                debugPredicate(0, p);
+            }
+        }
+
         for (int pos = 0; pos<keyColumns.size(); ++pos) {
             final String keyColumn = keyColumns.get(pos);
             boolean hasEquality = false;
-            for (Filter f : filters) {
-                if (f instanceof org.apache.spark.sql.sources.EqualTo) {
-                    org.apache.spark.sql.sources.EqualTo x =
-                            (org.apache.spark.sql.sources.EqualTo) f;
-                    if (keyColumn.equals(x.attribute())) {
-                        rangeBegin.set(pos, x.value());
-                        rangeEnd.set(pos, x.value());
+            for (Predicate p : predicates) {
+                if ("=".equalsIgnoreCase(p.name()) || "<=>".equalsIgnoreCase(p.name())) {
+                    Lyzer lyzer = new Lyzer(keyColumn, p.children());
+                    if (lyzer.success) {
+                        rangeBegin.set(pos, lyzer.value);
+                        rangeEnd.set(pos, lyzer.value);
                         hasEquality = true;
                         break;
                     }
-                } else if (f instanceof org.apache.spark.sql.sources.EqualNullSafe) {
-                    org.apache.spark.sql.sources.EqualNullSafe x =
-                            (org.apache.spark.sql.sources.EqualNullSafe) f;
-                    if (keyColumn.equals(x.attribute())) {
-                        rangeBegin.set(pos, x.value());
-                        rangeEnd.set(pos, x.value());
-                        hasEquality = true;
+                } else if (">".equalsIgnoreCase(p.name())) {
+                    Lyzer lyzer = new Lyzer(keyColumn, p.children());
+                    if (lyzer.success) {
+                        if (lyzer.revert) {
+                            rangeEnd.set(pos, min(rangeEnd.get(pos), lyzer.value));
+                        } else {
+                            rangeBegin.set(pos, max(rangeBegin.get(pos), lyzer.value));
+                        }
                         break;
                     }
-                } else if (f instanceof org.apache.spark.sql.sources.GreaterThan) {
-                    org.apache.spark.sql.sources.GreaterThan x =
-                            (org.apache.spark.sql.sources.GreaterThan) f;
-                    if (keyColumn.equals(x.attribute())) {
-                        rangeBegin.set(pos, max(rangeBegin.get(pos), x.value()));
+                } else if (">=".equalsIgnoreCase(p.name())) {
+                    Lyzer lyzer = new Lyzer(keyColumn, p.children());
+                    if (lyzer.success) {
+                        if (lyzer.revert) {
+                            rangeEnd.set(pos, min(rangeEnd.get(pos), lyzer.value));
+                        } else {
+                            rangeBegin.set(pos, max(rangeBegin.get(pos), lyzer.value));
+                        }
                         break;
                     }
-                } else if (f instanceof org.apache.spark.sql.sources.GreaterThanOrEqual) {
-                    org.apache.spark.sql.sources.GreaterThanOrEqual x =
-                            (org.apache.spark.sql.sources.GreaterThanOrEqual) f;
-                    if (keyColumn.equals(x.attribute())) {
-                        rangeBegin.set(pos, max(rangeBegin.get(pos), x.value()));
+                } else if ("<".equalsIgnoreCase(p.name())) {
+                    Lyzer lyzer = new Lyzer(keyColumn, p.children());
+                    if (lyzer.success) {
+                        if (lyzer.revert) {
+                            rangeBegin.set(pos, max(rangeBegin.get(pos), lyzer.value));
+                        } else {
+                            rangeEnd.set(pos, min(rangeEnd.get(pos), lyzer.value));
+                        }
                         break;
                     }
-                } else if (f instanceof org.apache.spark.sql.sources.LessThan) {
-                    org.apache.spark.sql.sources.LessThan x =
-                            (org.apache.spark.sql.sources.LessThan) f;
-                    if (keyColumn.equals(x.attribute())) {
-                        rangeEnd.set(pos, min(rangeEnd.get(pos), x.value()));
-                        break;
-                    }
-                } else if (f instanceof org.apache.spark.sql.sources.LessThanOrEqual) {
-                    org.apache.spark.sql.sources.LessThanOrEqual x =
-                            (org.apache.spark.sql.sources.LessThanOrEqual) f;
-                    if (keyColumn.equals(x.attribute())) {
-                        rangeEnd.set(pos, min(rangeEnd.get(pos), x.value()));
+                } else if ("<=".equalsIgnoreCase(p.name())) {
+                    Lyzer lyzer = new Lyzer(keyColumn, p.children());
+                    if (lyzer.success) {
+                        if (lyzer.revert) {
+                            rangeBegin.set(pos, max(rangeBegin.get(pos), lyzer.value));
+                        } else {
+                            rangeEnd.set(pos, min(rangeEnd.get(pos), lyzer.value));
+                        }
                         break;
                     }
                 }
-            } // for (Filter f : ...)
+            } // for (Predicate p : ...)
             if (! hasEquality)
                 break;
         }
+
         // Drop trailing nulls
         while (! rangeBegin.isEmpty()) {
             int pos = rangeBegin.size() - 1;
@@ -245,6 +255,77 @@ public class YdbScanOptions implements Serializable {
             return ((Comparable)o2).compareTo(o1) < 0 ? o2 : o1;
         }
         return o2;
+    }
+
+    private void debugPredicate(int n, Predicate p) {
+        String step = "";
+        for (int i=0; i<n; ++i)
+            step = step + "  ";
+        LOG.debug("{} predicate {}: {}", step, p.getClass(), p.name());
+        debugReferences(n, p.references());
+        for (Expression xe : p.children()) {
+            debugExpression(n+1, xe);
+        }
+    }
+
+    private void debugExpression(int n, Expression e) {
+        String step = "";
+        for (int i=0; i<n; ++i)
+            step = step + "  ";
+        LOG.debug("{} expression {}", step, e.getClass());
+        debugReferences(n, e.references());
+        for (Expression xe : e.children()) {
+            debugExpression(n+1, xe);
+        }
+    }
+
+    private void debugReferences(int n, NamedReference[] rs) {
+        if (rs==null || rs.length==0)
+            return;
+        String step = "";
+        for (int i=0; i<n; ++i)
+            step = step + "  ";
+        for (NamedReference r : rs) {
+            LOG.debug("{} -> {}", step, r.fieldNames());
+        }
+    }
+
+    static final class Lyzer {
+        final boolean success;
+        final boolean revert;
+        final Object value;
+
+        Lyzer(String keyColumn, Expression[] children) {
+            boolean success = false;
+            boolean revert = false;
+            Object value = null;
+            if (children.length == 2) {
+                Expression left = children[0];
+                Expression right = children[1];
+                if (right instanceof FieldReference) {
+                    Expression temp = right;
+                    right = left;
+                    left = temp;
+                    revert = true;
+                }
+                if (left instanceof FieldReference
+                        && left.references().length > 0
+                        && right instanceof LiteralValue) {
+                    NamedReference nr = left.references()[left.references().length - 1];
+                    if (nr.fieldNames().length > 0) {
+                        String fieldName = nr.fieldNames()[nr.fieldNames().length - 1];
+                        if (keyColumn.equals(fieldName)) {
+                            LiteralValue lv = (LiteralValue) right;
+                            value = lv.value();
+                            success = true;
+                        }
+                    }
+                }
+            }
+            this.success = success;
+            this.revert = revert;
+            this.value = value;
+        }
     }
 
 }
