@@ -81,3 +81,11 @@ spark-sql> SELECT * FROM ydb.`python-examples`.`basic`.episodes LIMIT 5;
 1	1	4	The Red Door	13196
 1	1	5	The Haunting of Bill Crouse	13203
 ```
+
+Below there are some read operations using Scala:
+
+```
+spark.table("ydb.test0_fhrw").select("created_date", "complaint_type", "city").show(10, false);
+
+spark.table("ydb.test0_fhrw").write().parquet("test0_fhrw");
+```
