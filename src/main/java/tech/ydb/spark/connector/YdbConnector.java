@@ -61,6 +61,9 @@ public class YdbConnector implements AutoCloseable {
                 builder = builder.withAuthProvider(
                         CloudAuthHelper.getAuthProviderFromEnviron());
                 break;
+            case META:
+                builder = builder.withAuthProvider(opt -> CloudAuthIdentity.metadataIdentity());
+                break;
             case STATIC:
                 builder = builder.withAuthProvider(
                     new StaticCredentials(props.get(YDB_AUTH_LOGIN), props.get(YDB_AUTH_PASSWORD)));

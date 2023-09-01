@@ -9,6 +9,7 @@ public enum YdbAuthMode {
     NONE,
     ENV,
     TOKEN,
+    META,
     KEY,
     STATIC;
 
