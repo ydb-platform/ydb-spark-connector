@@ -28,6 +28,7 @@ public class YdbBatch implements Batch {
             // Single partition with possible limits taken from the predicates.
             partitions = new ArrayList<>(1);
             partitions.add(YdbKeyRange.UNRESTRICTED);
+            LOG.warn("Missing partitioning information for table {}", options.getTablePath());
         }
         // Predicates restriction
         YdbKeyRange predicates = new YdbKeyRange(
@@ -39,7 +40,8 @@ public class YdbBatch implements Batch {
                 .filter(kr -> ! kr.isEmpty())
                 .map(kr -> new YdbInputPartition(kr))
                 .toArray(InputPartition[]::new);
-        LOG.debug("Filtered input partitions: {}", out);
+        LOG.debug("Input partitions count {}, filtered partitions count {}",
+                partitions.size(), out.length);
         return out;
     }
 

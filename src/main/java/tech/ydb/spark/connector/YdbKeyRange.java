@@ -17,6 +17,9 @@ import tech.ydb.table.values.Value;
  */
 public class YdbKeyRange implements Serializable {
 
+    private static final org.slf4j.Logger LOG =
+            org.slf4j.LoggerFactory.getLogger(YdbKeyRange.class);
+
     private final Limit from;
     private final Limit to;
 
@@ -61,21 +64,26 @@ public class YdbKeyRange implements Serializable {
 
     @Override
     public String toString() {
-        return  (from.isInclusive() ? "[" : "(")
-                + from + " -> " + to
-                + (to.isInclusive() ? "]" : ")");
+        return  (from.isInclusive() ? "[* " : "(* ")
+                + from.value + " -> " + to.value
+                + (to.isInclusive() ? " *]" : " *)");
     }
 
     public YdbKeyRange intersect(YdbKeyRange other) {
         if (other==null ||
                 (other.from.isUnrestricted() && other.to.isUnrestricted())) {
+            LOG.debug("intersect: {} with unrestricted", this);
             return this;
         }
-        if ( from.isUnrestricted() && to.isUnrestricted() )
+        if ( from.isUnrestricted() && to.isUnrestricted() ) {
+            LOG.debug("intersect: unrestricted with {}", other);
             return other;
+        }
         Limit outFrom = (from.compareTo(other.from, true) > 0) ? from : other.from;
         Limit outTo = (to.compareTo(other.to, true) > 0) ? other.to : to;
-        return new YdbKeyRange(outFrom, outTo);
+        YdbKeyRange retval = new YdbKeyRange(outFrom, outTo);
+        LOG.debug("intersect: {} with {} -> {}", this, other, retval);
+        return retval;
     }
 
     public static int compare(List<Object> v1, List<Object> v2, boolean nullsFirst) {

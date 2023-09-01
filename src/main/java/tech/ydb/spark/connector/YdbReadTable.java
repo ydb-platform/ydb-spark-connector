@@ -55,6 +55,8 @@ class YdbReadTable implements AutoCloseable {
         if (getState() != State.CREATED)
             return;
 
+        LOG.debug("Configuring scan for table {}, range {}", tablePath, keyRange);
+
         // Configuring settings for the table scan.
         final ReadTableSettings.Builder rtsb = ReadTableSettings.newBuilder();
         // Add all required fields.
@@ -265,9 +267,9 @@ class YdbReadTable implements AutoCloseable {
     class Worker implements Runnable {
         @Override
         public void run() {
-            LOG.debug("Entering worker scan thread {}", Thread.currentThread().getName());
             try {
                 stream.start(part -> {
+                    LOG.debug("Started background scan for table {}, range {}", tablePath, keyRange);
                     while (true) {
                         try {
                             queue.add(new QueueItem(part.getResultSetReader()));
@@ -286,12 +288,12 @@ class YdbReadTable implements AutoCloseable {
                     }
                 }
                 if (needReport) {
-                    LOG.warn("Background scan failed for table {}", tablePath, ex);
+                    LOG.warn("Background scan failed for table {}, range {}", tablePath, keyRange, ex);
                     setIssue(ex);
                 }
             }
             queue.add(EndOfScan);
-            LOG.debug("Exiting worker scan thread {}", Thread.currentThread().getName());
+            LOG.debug("Completed background scan for table {}, range {}", tablePath, keyRange);
         }
     }
  
