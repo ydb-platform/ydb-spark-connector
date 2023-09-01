@@ -1,6 +1,7 @@
 package tech.ydb.spark.connector;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import org.apache.spark.sql.connector.read.Batch;
 import org.apache.spark.sql.connector.read.InputPartition;
@@ -40,8 +41,11 @@ public class YdbBatch implements Batch {
                 .filter(kr -> ! kr.isEmpty())
                 .map(kr -> new YdbInputPartition(kr))
                 .toArray(InputPartition[]::new);
-        LOG.debug("Input partitions count {}, filtered partitions count {}",
-                partitions.size(), out.length);
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Input partitions count {}, filtered partitions count {}",
+                    partitions.size(), out.length);
+            LOG.debug("Filtered partition ranges: {}", Arrays.toString(out));
+        }
         return out;
     }
 

@@ -2,9 +2,11 @@ package tech.ydb.spark.connector;
 
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import tech.ydb.table.description.KeyBound;
 import tech.ydb.table.description.KeyRange;
@@ -21,12 +23,20 @@ public class YdbKeyRange implements Serializable {
     private final Limit to;
 
     public YdbKeyRange(Limit from, Limit to) {
-        this.from = (from==null) ? NO_LIMIT : from;
-        this.to = (to==null) ? NO_LIMIT : to;
+        this.from = (from==null) ? NO_LIMIT : cleanup(from);
+        this.to = (to==null) ? NO_LIMIT : cleanup(to);
     }
 
     public YdbKeyRange(KeyRange kr) {
         this(convert(kr.getFrom()), convert(kr.getTo()));
+    }
+
+    public YdbKeyRange(List<Object> from, List<Object> to) {
+        this(new Limit(from, true), new Limit(to, false));
+    }
+
+    public YdbKeyRange(Object[] from, Object[] to) {
+        this(new Limit(Arrays.asList(from), true), new Limit(Arrays.asList(to), false));
     }
 
     public Limit getFrom() {
@@ -67,6 +77,14 @@ public class YdbKeyRange implements Serializable {
             if ( cmp < 0 )
                 return false;
         }
+        if (!from.inclusive) {
+            if (!i1.hasNext())
+                return true;
+        }
+        if (!to.inclusive) {
+            if (!i2.hasNext())
+                return true;
+        }
         return false;
     }
 
@@ -104,7 +122,7 @@ public class YdbKeyRange implements Serializable {
             return other;
         }
         Limit outFrom = (from.compareTo(other.from, true) > 0) ? from : other.from;
-        Limit outTo = (to.compareTo(other.to, true) > 0) ? other.to : to;
+        Limit outTo = (to.compareTo(other.to, false) > 0) ? other.to : to;
         YdbKeyRange retval = new YdbKeyRange(outFrom, outTo);
         return retval;
     }
@@ -147,6 +165,25 @@ public class YdbKeyRange implements Serializable {
         return 0;
     }
 
+    public static Limit cleanup(Limit v) {
+        if (v==null)
+            return NO_LIMIT;
+        if (v.isUnrestricted())
+            return NO_LIMIT;
+        int pos = v.value.size();
+        while (pos > 0) {
+            Object o = v.value.get(pos - 1);
+            if (o!=null)
+                break;
+            pos -= 1;
+        }
+        if (pos==v.value.size())
+            return v;
+        if (pos<=1)
+            return NO_LIMIT;
+        return new Limit(new ArrayList<>(v.value.subList(0, pos)), v.inclusive);
+    }
+
     public static class Limit implements Serializable {
         private final List<Object> value;
         private final boolean inclusive;
@@ -166,6 +203,32 @@ public class YdbKeyRange implements Serializable {
 
         public boolean isUnrestricted() {
             return value==null || value.isEmpty();
+        }
+
+        @Override
+        public int hashCode() {
+            int hash = 7;
+            hash = 29 * hash + Objects.hashCode(this.value);
+            hash = 29 * hash + (this.inclusive ? 1 : 0);
+            return hash;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) {
+                return true;
+            }
+            if (obj == null) {
+                return false;
+            }
+            if (getClass() != obj.getClass()) {
+                return false;
+            }
+            final Limit other = (Limit) obj;
+            if (this.inclusive != other.inclusive) {
+                return false;
+            }
+            return Objects.equals(this.value, other.value);
         }
 
         @Override
