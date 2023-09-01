@@ -16,7 +16,7 @@ import tech.ydb.table.TableClient;
  *
  * @author zinal
  */
-public class YdbConnector implements AutoCloseable {
+class YdbConnector implements AutoCloseable {
 
     private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(YdbConnector.class);
 

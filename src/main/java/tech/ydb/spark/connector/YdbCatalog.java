@@ -6,6 +6,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import org.apache.spark.sql.catalyst.analysis.*;
 import org.apache.spark.sql.connector.catalog.*;
 import org.apache.spark.sql.connector.expressions.Transform;
@@ -143,12 +144,13 @@ public class YdbCatalog implements CatalogPlugin, TableCatalog, SupportsNamespac
 
     private <T> T checkStatus(Result<T> res, Identifier id)
             throws NoSuchTableException {
-        if (! res.isSuccess()) {
+        if (!res.isSuccess()) {
             final Status status = res.getStatus();
-            if ( StatusCode.SCHEME_ERROR.equals(status.getCode()) ) {
+            if (StatusCode.SCHEME_ERROR.equals(status.getCode())) {
                 for (Issue i : status.getIssues()) {
-                    if (i!=null && i.getMessage().endsWith("Path not found"))
+                    if (i != null && i.getMessage().endsWith("Path not found")) {
                         throw new NoSuchTableException(id);
+                    }
                 }
             }
             status.expectSuccess("ydb.listDirectory failed on " + id);
@@ -202,7 +204,7 @@ public class YdbCatalog implements CatalogPlugin, TableCatalog, SupportsNamespac
         String tablePath = mergePath(ident);
         Result<TableDescription> res = getRetryCtx().supplyResult(session -> {
             final DescribeTableSettings dts = new DescribeTableSettings();
-            dts.setIncludeTableStats(true);
+            dts.setIncludeShardKeyBounds(true);
             return session.describeTable(tablePath, dts);
         }).join();
         TableDescription td = checkStatus(res, ident);
@@ -219,20 +221,30 @@ public class YdbCatalog implements CatalogPlugin, TableCatalog, SupportsNamespac
         String tabName = tabParts[1];
         String ixName = tabParts[2];
         String tablePath = mergePath(ident.namespace(), tabName);
-        Result<TableDescription> res = getRetryCtx().supplyResult(session -> {
-            final DescribeTableSettings dts = new DescribeTableSettings();
-            dts.setIncludeTableStats(true);
-            return session.describeTable(tablePath, dts);
-        }).join();
-        TableDescription td = checkStatus(res, ident);
-        for (TableIndex ix : td.getIndexes()) {
-            if (ixName.equals(ix.getName())) {
-                // construct the YdbTable object
-                return new YdbTable(getConnector(), mergeLocal(ident), tablePath, td, ix);
+        Result<Table> res =  getRetryCtx().supplyResult(session -> {
+            DescribeTableSettings dts = new DescribeTableSettings();
+            Result<TableDescription> td_res = session.describeTable(tablePath, dts).join();
+            if (! td_res.isSuccess())
+                return CompletableFuture.completedFuture(Result.fail(td_res.getStatus()));
+            TableDescription td = td_res.getValue();
+            for (TableIndex ix : td.getIndexes()) {
+                if (ixName.equals(ix.getName())) {
+                    // Grab the description for secondary index table.
+                    String indexPath = tablePath + "/" + ix.getName() + "/indexImplTable";
+                    dts.setIncludeShardKeyBounds(true);
+                    td_res = session.describeTable(indexPath, dts).join();
+                    if (! td_res.isSuccess())
+                        return CompletableFuture.completedFuture(Result.fail(td_res.getStatus()));
+                    TableDescription td_ix = td_res.getValue();
+                    // Construct the YdbTable object
+                    return CompletableFuture.completedFuture( Result.success(
+                            new YdbTable(getConnector(), mergeLocal(ident), tablePath, td, ix, td_ix)) );
+                }
             }
-        }
-        // Could not find the specified index
-        throw new NoSuchTableException(ident);
+            return CompletableFuture.completedFuture( Result.success((Table) null) );
+        }).join();
+
+        return checkStatus(res, ident);
     }
 
     @Override

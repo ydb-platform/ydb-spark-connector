@@ -10,10 +10,6 @@ public class YdbInputPartition implements InputPartition {
 
     private final YdbKeyRange range;
 
-    public YdbInputPartition() {
-        this.range = null;
-    }
-
     public YdbInputPartition(YdbKeyRange range) {
         this.range = range;
     }
@@ -24,6 +20,6 @@ public class YdbInputPartition implements InputPartition {
 
     @Override
     public String toString() {
-        return (range == null) ? "range-unconfined" : range.toString();
+        return (range == null) ? "range:unconfined" : ("range:" + range.toString());
     }
 }

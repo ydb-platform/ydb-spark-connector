@@ -7,7 +7,7 @@ import java.util.HashMap;
  *
  * @author zinal
  */
-public final class YdbRegistry {
+final class YdbRegistry {
 
     private YdbRegistry() {}
 

@@ -2,6 +2,7 @@ package tech.ydb.spark.connector;
 
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Optional;
@@ -20,8 +21,8 @@ public class YdbKeyRange implements Serializable {
     private final Limit to;
 
     public YdbKeyRange(Limit from, Limit to) {
-        this.from = from;
-        this.to = to;
+        this.from = (from==null) ? NO_LIMIT : from;
+        this.to = (to==null) ? NO_LIMIT : to;
     }
 
     public YdbKeyRange(KeyRange kr) {
@@ -34,6 +35,10 @@ public class YdbKeyRange implements Serializable {
 
     public Limit getTo() {
         return to;
+    }
+
+    public boolean isEmpty() {
+        return from.compareTo(to, true) > 0;
     }
 
     public static Limit convert(Optional<KeyBound> v) {
@@ -56,15 +61,33 @@ public class YdbKeyRange implements Serializable {
 
     @Override
     public String toString() {
-        return "KeyRange{" + from + " -> " + to + '}';
+        return  (from.isInclusive() ? "[" : "(")
+                + from + " -> " + to
+                + (to.isInclusive() ? "]" : ")");
+    }
+
+    public YdbKeyRange intersect(YdbKeyRange other) {
+        if (other==null ||
+                (other.from.isUnrestricted() && other.to.isUnrestricted())) {
+            return this;
+        }
+        if ( from.isUnrestricted() && to.isUnrestricted() )
+            return other;
+        Limit outFrom = (from.compareTo(other.from, true) > 0) ? from : other.from;
+        Limit outTo = (to.compareTo(other.to, true) > 0) ? other.to : to;
+        return new YdbKeyRange(outFrom, outTo);
     }
 
     public static int compare(List<Object> v1, List<Object> v2, boolean nullsFirst) {
-        if (v1==v2)
-            return 0;
         if (v1==null)
-            return nullsFirst ? -1 : 1;
+            v1 = Collections.emptyList();
         if (v2==null)
+            v2 = Collections.emptyList();
+        if (v1==v2 || (v1.isEmpty() && v2.isEmpty()))
+            return 0;
+        if (v1.isEmpty())
+            return nullsFirst ? -1 : 1;
+        if (v2.isEmpty())
             return nullsFirst ? 1 : -1;
 
         final Iterator<?> i1 = v1.iterator(), i2 = v2.iterator();
@@ -110,7 +133,7 @@ public class YdbKeyRange implements Serializable {
             return inclusive;
         }
 
-        public boolean isUnlimited() {
+        public boolean isUnrestricted() {
             return value==null || value.isEmpty();
         }
 
@@ -133,5 +156,6 @@ public class YdbKeyRange implements Serializable {
     }
 
     public static final Limit NO_LIMIT = new Limit(new ArrayList<>(), true);
+    public static final YdbKeyRange UNRESTRICTED = new YdbKeyRange(NO_LIMIT, NO_LIMIT);
 
 }

@@ -2,7 +2,6 @@ package tech.ydb.spark.connector;
 
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 
@@ -27,7 +26,7 @@ import tech.ydb.table.values.Value;
  *
  * @author zinal
  */
-public class YdbReadTable implements AutoCloseable {
+class YdbReadTable implements AutoCloseable {
 
     private static final org.slf4j.Logger LOG =
             org.slf4j.LoggerFactory.getLogger(YdbReadTable.class);
@@ -217,13 +216,6 @@ public class YdbReadTable implements AutoCloseable {
     @SuppressWarnings("unchecked")
     private TupleValue makeRange(List<Object> values) {
         final List<YdbFieldType> types = options.getKeyTypes();
-        if (values.size() > types.size()) {
-            throw new IllegalArgumentException("values size=" + values.size()
-                    + ", types size=" + types.size());
-        }
-        // 1. Compare values and key range
-        
-        // 3. Use values instead
         final List<Value<?>> l = new ArrayList<>(values.size());
         for (int i=0; i<values.size(); ++i) {
             Value<?> v = YdbTypes.convertToYdb(values.get(i), types.get(i));
@@ -235,40 +227,17 @@ public class YdbReadTable implements AutoCloseable {
     }
 
     private void configureRanges(ReadTableSettings.Builder rtsb) {
-        final YdbKeyRange.Limit customLeft = new YdbKeyRange.Limit(options.getRangeBegin(), true);
-        final YdbKeyRange.Limit customRight = new YdbKeyRange.Limit(options.getRangeEnd(), true);
+        final YdbKeyRange.Limit realLeft = keyRange.getFrom();
+        final YdbKeyRange.Limit realRight = keyRange.getTo();
 
-        final YdbKeyRange.Limit partLeft;
-        final YdbKeyRange.Limit partRight;
-        if (keyRange != null) {
-            partLeft = keyRange.getFrom();
-            partRight = keyRange.getTo();
-        } else {
-            partLeft = YdbKeyRange.NO_LIMIT;
-            partRight = YdbKeyRange.NO_LIMIT;
-        }
-
-        final YdbKeyRange.Limit realLeft;
-        final YdbKeyRange.Limit realRight;
-        if (customLeft.compareTo(partLeft, true) > 0) {
-            realLeft = customLeft;
-        } else {
-            realLeft = partLeft;
-        }
-        if (customRight.compareTo(partRight, true) > 0) {
-            realRight = customRight;
-        } else {
-            realRight = partRight;
-        }
-
-        if (! realLeft.isUnlimited()) {
+        if (! realLeft.isUnrestricted()) {
             if (realLeft.isInclusive()) {
                 rtsb.fromKeyInclusive(makeRange(realLeft.getValue()));
             } else {
                 rtsb.fromKeyExclusive(makeRange(realLeft.getValue()));
             }
         }
-        if (! realRight.isUnlimited()) {
+        if (! realRight.isUnrestricted()) {
             if (realRight.isInclusive()) {
                 rtsb.toKeyInclusive(makeRange(realRight.getValue()));
             } else {

@@ -33,6 +33,6 @@ public class YdbScan implements Scan {
 
     @Override
     public Batch toBatch() {
-        return new YdbBatch(this);
+        return new YdbBatch(options);
     }
 }

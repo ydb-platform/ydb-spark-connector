@@ -29,6 +29,9 @@ import tech.ydb.table.description.TableIndex;
  */
 public class YdbTable implements Table, SupportsRead {
 
+    private static final org.slf4j.Logger LOG =
+            org.slf4j.LoggerFactory.getLogger(YdbTable.class);
+
     static final Set<TableCapability> CAPABILITIES;
     static {
         final Set<TableCapability> c = new HashSet<>();
@@ -63,10 +66,12 @@ public class YdbTable implements Table, SupportsRead {
                 partitions.add(new YdbKeyRange(kr));
             }
         }
+        LOG.debug("Loaded table {} with {} columns and {} partitions",
+                this.physicalName, this.columns.size(), this.partitions.size());
     }
 
     YdbTable(YdbConnector connector, String logicalName, String physicalName,
-            TableDescription td, TableIndex ix) {
+            TableDescription td, TableIndex ix, TableDescription td_ix) {
         this.connector = connector;
         this.logicalName = logicalName;
         this.physicalName = physicalName + "/" + ix.getName() + "/indexImplTable";
@@ -98,6 +103,13 @@ public class YdbTable implements Table, SupportsRead {
                 this.columns.add(tc);
             }
         }
+        if (td_ix.getKeyRanges()!=null) {
+            for (KeyRange kr : td_ix.getKeyRanges()) {
+                partitions.add(new YdbKeyRange(kr));
+            }
+        }
+        LOG.debug("Loaded index {} with {} columns and {} partitions",
+                this.physicalName, this.columns.size(), this.partitions.size());
     }
 
     private static Map<String, TableColumn> buildColumnsMap(TableDescription td) {

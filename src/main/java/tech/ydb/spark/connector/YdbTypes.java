@@ -13,6 +13,7 @@ import org.apache.spark.unsafe.types.UTF8String;
 import tech.ydb.table.result.ValueReader;
 import tech.ydb.table.values.DecimalType;
 import tech.ydb.table.values.DecimalValue;
+import tech.ydb.table.values.OptionalValue;
 import tech.ydb.table.values.PrimitiveType;
 import tech.ydb.table.values.PrimitiveValue;
 import tech.ydb.table.values.Type;
@@ -197,6 +198,11 @@ public class YdbTypes {
         Type t = v.getType();
         if (t.getKind().equals(Type.Kind.OPTIONAL)) {
             t = t.unwrapOptional();
+            OptionalValue ov = v.asOptional();
+            if (ov.isPresent())
+                v = ov.get();
+            else
+                return null;
         }
         switch (t.getKind()) {
             case PRIMITIVE:
