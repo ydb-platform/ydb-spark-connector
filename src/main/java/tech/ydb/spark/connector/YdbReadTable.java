@@ -2,6 +2,7 @@ package tech.ydb.spark.connector;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 
@@ -56,36 +57,29 @@ public class YdbReadTable implements AutoCloseable {
             return;
 
         // Configuring settings for the table scan.
-        final ReadTableSettings.Builder sb = ReadTableSettings.newBuilder();
+        final ReadTableSettings.Builder rtsb = ReadTableSettings.newBuilder();
         // Add all required fields.
         outColumns = new ArrayList<>();
         scala.collection.Iterator<StructField> sfit = options.readSchema().seq().iterator();
         while (sfit.hasNext()) {
             String colname = sfit.next().name();
-            sb.column(colname);
+            rtsb.column(colname);
             outColumns.add(colname);
         }
         if (outColumns.isEmpty()) {
             // In case no fields are required, add the first field of the primary key.
             String colname = options.getKeyColumns().get(0);
-            sb.column(colname);
+            rtsb.column(colname);
             outColumns.add(colname);
         }
         outIndexes = new int[outColumns.size()];
-        if (! options.getRangeBegin().isEmpty()) {
-            // Left scan limit.
-            sb.fromKeyInclusive(makeRange(options.getRangeBegin(), true));
-        }
-        if (! options.getRangeEnd().isEmpty()) {
-            // Right scan limit.
-            sb.toKeyInclusive(makeRange(options.getRangeEnd(), false));
-        }
+        configureRanges(rtsb);
         if (options.getRowLimit() > 0) {
             LOG.debug("Setting row limit to {}", options.getRowLimit());
-            sb.rowLimit(options.getRowLimit());
+            rtsb.rowLimit(options.getRowLimit());
         }
         // TODO: add setting for the maximum scan duration.
-        sb.withRequestTimeout(Duration.ofHours(8));
+        rtsb.withRequestTimeout(Duration.ofHours(8));
 
         // Create or acquire the connector object.
         YdbConnector c = YdbRegistry.create(options.getCatalogName(), options.getConnectOptions());
@@ -95,7 +89,7 @@ public class YdbReadTable implements AutoCloseable {
         session = c.getTableClient().createSession(Duration.ofSeconds(30)).join().getValue();
         try {
             // Opening the stream - which can be canceled.
-            stream = session.executeReadTable(tablePath, sb.build());
+            stream = session.executeReadTable(tablePath, rtsb.build());
             current = null;
             state = State.PREPARED;
             Thread t = new Thread(new Worker());
@@ -221,7 +215,7 @@ public class YdbReadTable implements AutoCloseable {
     }
 
     @SuppressWarnings("unchecked")
-    private TupleValue makeRange(List<Object> values, boolean left) {
+    private TupleValue makeRange(List<Object> values) {
         final List<YdbFieldType> types = options.getKeyTypes();
         if (values.size() > types.size()) {
             throw new IllegalArgumentException("values size=" + values.size()
@@ -238,6 +232,49 @@ public class YdbReadTable implements AutoCloseable {
             l.add(v);
         }
         return TupleValue.of(l);
+    }
+
+    private void configureRanges(ReadTableSettings.Builder rtsb) {
+        final YdbKeyRange.Limit customLeft = new YdbKeyRange.Limit(options.getRangeBegin(), true);
+        final YdbKeyRange.Limit customRight = new YdbKeyRange.Limit(options.getRangeEnd(), true);
+
+        final YdbKeyRange.Limit partLeft;
+        final YdbKeyRange.Limit partRight;
+        if (keyRange != null) {
+            partLeft = keyRange.getFrom();
+            partRight = keyRange.getTo();
+        } else {
+            partLeft = YdbKeyRange.NO_LIMIT;
+            partRight = YdbKeyRange.NO_LIMIT;
+        }
+
+        final YdbKeyRange.Limit realLeft;
+        final YdbKeyRange.Limit realRight;
+        if (customLeft.compareTo(partLeft, true) > 0) {
+            realLeft = customLeft;
+        } else {
+            realLeft = partLeft;
+        }
+        if (customRight.compareTo(partRight, true) > 0) {
+            realRight = customRight;
+        } else {
+            realRight = partRight;
+        }
+
+        if (! realLeft.isUnlimited()) {
+            if (realLeft.isInclusive()) {
+                rtsb.fromKeyInclusive(makeRange(realLeft.getValue()));
+            } else {
+                rtsb.fromKeyExclusive(makeRange(realLeft.getValue()));
+            }
+        }
+        if (! realRight.isUnlimited()) {
+            if (realRight.isInclusive()) {
+                rtsb.toKeyInclusive(makeRange(realRight.getValue()));
+            } else {
+                rtsb.toKeyExclusive(makeRange(realRight.getValue()));
+            }
+        }
     }
 
     static class QueueItem {

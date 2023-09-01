@@ -2,6 +2,7 @@ package tech.ydb.spark.connector;
 
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Optional;
 import tech.ydb.table.description.KeyBound;
@@ -58,6 +59,40 @@ public class YdbKeyRange implements Serializable {
         return "KeyRange{" + from + " -> " + to + '}';
     }
 
+    public static int compare(List<Object> v1, List<Object> v2, boolean nullsFirst) {
+        if (v1==v2)
+            return 0;
+        if (v1==null)
+            return nullsFirst ? -1 : 1;
+        if (v2==null)
+            return nullsFirst ? 1 : -1;
+
+        final Iterator<?> i1 = v1.iterator(), i2 = v2.iterator();
+        while (i1.hasNext() && i2.hasNext()) {
+            final Object o1 = i1.next();
+            final Object o2 = i2.next();
+            if (o1==o2)
+                continue;
+            if (o1==null)
+                return nullsFirst ? -1 : 1;
+            if (o2==null)
+                return nullsFirst ? 1 : -1;
+            if (o1.getClass()!=o2.getClass()) {
+                throw new IllegalArgumentException("Incompatible data types "
+                        + o1.getClass().toString() + " and " + o2.getClass().toString());
+            }
+            if (!(o1 instanceof Comparable)) {
+                throw new IllegalArgumentException("Uncomparable data type "
+                        + o1.getClass().toString());
+            }
+            final int cmp = ((Comparable)o1).compareTo(o2);
+            if (cmp != 0) return cmp;
+        }
+        if (!i1.hasNext() && i2.hasNext()) return nullsFirst ? -1 : 1;
+        if (i1.hasNext() && !i2.hasNext()) return nullsFirst ? 1 : -1;
+        return 0;
+    }
+
     public static class Limit implements Serializable {
         private final List<Object> value;
         private final boolean inclusive;
@@ -75,10 +110,28 @@ public class YdbKeyRange implements Serializable {
             return inclusive;
         }
 
+        public boolean isUnlimited() {
+            return value==null || value.isEmpty();
+        }
+
         @Override
         public String toString() {
             return "{" + "value=" + value + ", inclusive=" + inclusive + '}';
         }
+
+        public int compareTo(Limit t, boolean nullsFirst) {
+            int cmp = compare(this.value, t.value, nullsFirst);
+            if (cmp==0) {
+                if (this.inclusive == t.inclusive)
+                    return 0;
+                if (this.inclusive)
+                    return nullsFirst ? -1 : 1;
+                return nullsFirst ? 1 : -1;
+            }
+            return cmp;
+        }
     }
+
+    public static final Limit NO_LIMIT = new Limit(new ArrayList<>(), true);
 
 }
