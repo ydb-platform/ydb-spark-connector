@@ -17,9 +17,6 @@ import tech.ydb.table.values.Value;
  */
 public class YdbKeyRange implements Serializable {
 
-    private static final org.slf4j.Logger LOG =
-            org.slf4j.LoggerFactory.getLogger(YdbKeyRange.class);
-
     private final Limit from;
     private final Limit to;
 
@@ -40,8 +37,37 @@ public class YdbKeyRange implements Serializable {
         return to;
     }
 
+    /**
+     * Empty range means left is greater than right.
+     * Missing values on left means MIN, on right - MAX.
+     * @return true for empty range, false otherwise
+     */
     public boolean isEmpty() {
-        return from.compareTo(to, true) > 0;
+        final Iterator<?> i1 = from.value.iterator(), i2 = to.value.iterator();
+        while (i1.hasNext() && i2.hasNext()) {
+            final Object o1 = i1.next();
+            final Object o2 = i2.next();
+            if (o1==o2)
+                continue;
+            if (o1==null)
+                return false;
+            if (o2==null)
+                return false;
+            if (o1.getClass()!=o2.getClass()) {
+                throw new IllegalArgumentException("Incompatible data types "
+                        + o1.getClass().toString() + " and " + o2.getClass().toString());
+            }
+            if (!(o1 instanceof Comparable)) {
+                throw new IllegalArgumentException("Uncomparable data type "
+                        + o1.getClass().toString());
+            }
+            int cmp = ((Comparable)o1).compareTo(o2);
+            if ( cmp > 0 )
+                return true;
+            if ( cmp < 0 )
+                return false;
+        }
+        return false;
     }
 
     public static Limit convert(Optional<KeyBound> v) {
@@ -72,17 +98,14 @@ public class YdbKeyRange implements Serializable {
     public YdbKeyRange intersect(YdbKeyRange other) {
         if (other==null ||
                 (other.from.isUnrestricted() && other.to.isUnrestricted())) {
-            LOG.debug("intersect: {} with unrestricted", this);
             return this;
         }
         if ( from.isUnrestricted() && to.isUnrestricted() ) {
-            LOG.debug("intersect: unrestricted with {}", other);
             return other;
         }
         Limit outFrom = (from.compareTo(other.from, true) > 0) ? from : other.from;
         Limit outTo = (to.compareTo(other.to, true) > 0) ? other.to : to;
         YdbKeyRange retval = new YdbKeyRange(outFrom, outTo);
-        LOG.debug("intersect: {} with {} -> {}", this, other, retval);
         return retval;
     }
 
