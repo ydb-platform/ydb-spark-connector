@@ -18,6 +18,7 @@ The following Spark configuration parameters must be defined to use the Spark co
     * `NONE` - anonymous access;
     * `STATIC` - static credentials, e.g. username and password;
     * `TOKEN` - explicit authentication token;
+    * `META` - cloud virtual machine metadata authentication;
     * `KEY` - service account key file;
     * `ENV` - reading the authenticaton settings from the environment variables, as specified in the [documentation](https://ydb.tech/en/docs/reference/ydb-sdk/auth#env).
 * `spark.sql.catalog.<CatalogName>.auth.{login,password}` - username and password for the STATIC authentication mode;
