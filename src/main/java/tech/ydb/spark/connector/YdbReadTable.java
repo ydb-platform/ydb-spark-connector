@@ -32,6 +32,7 @@ public class YdbReadTable implements AutoCloseable {
             org.slf4j.LoggerFactory.getLogger(YdbReadTable.class);
 
     private final YdbScanOptions options;
+    private final YdbKeyRange keyRange;
     private final ArrayBlockingQueue<QueueItem> queue;
     private String tablePath;
     private List<String> outColumns;
@@ -43,8 +44,9 @@ public class YdbReadTable implements AutoCloseable {
     private volatile GrpcReadStream<ReadTablePart> stream;
     private ResultSetReader current;
 
-    public YdbReadTable(YdbScanOptions options) {
+    public YdbReadTable(YdbScanOptions options, YdbKeyRange keyRange) {
         this.options = options;
+        this.keyRange = keyRange;
         this.queue = new ArrayBlockingQueue<>(100);
         this.state = State.CREATED;
     }
@@ -72,11 +74,11 @@ public class YdbReadTable implements AutoCloseable {
         outIndexes = new int[outColumns.size()];
         if (! options.getRangeBegin().isEmpty()) {
             // Left scan limit.
-            sb.fromKeyInclusive(makeRange(options.getRangeBegin(), options.getKeyTypes()));
+            sb.fromKeyInclusive(makeRange(options.getRangeBegin(), true));
         }
         if (! options.getRangeEnd().isEmpty()) {
             // Right scan limit.
-            sb.toKeyInclusive(makeRange(options.getRangeEnd(), options.getKeyTypes()));
+            sb.toKeyInclusive(makeRange(options.getRangeEnd(), false));
         }
         if (options.getRowLimit() > 0) {
             LOG.debug("Setting row limit to {}", options.getRowLimit());
@@ -219,11 +221,15 @@ public class YdbReadTable implements AutoCloseable {
     }
 
     @SuppressWarnings("unchecked")
-    private TupleValue makeRange(List<Object> values, List<YdbFieldType> types) {
+    private TupleValue makeRange(List<Object> values, boolean left) {
+        final List<YdbFieldType> types = options.getKeyTypes();
         if (values.size() > types.size()) {
             throw new IllegalArgumentException("values size=" + values.size()
                     + ", types size=" + types.size());
         }
+        // 1. Compare values and key range
+        
+        // 3. Use values instead
         final List<Value<?>> l = new ArrayList<>(values.size());
         for (int i=0; i<values.size(); ++i) {
             Value<?> v = YdbTypes.convertToYdb(values.get(i), types.get(i));

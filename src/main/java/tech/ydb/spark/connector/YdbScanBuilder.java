@@ -91,7 +91,6 @@ public class YdbScanBuilder implements ScanBuilder,
     }
 
     public static class YdbBatch implements Batch {
-
         private final YdbScan scan;
 
         public YdbBatch(YdbScan scan) {
@@ -100,23 +99,42 @@ public class YdbScanBuilder implements ScanBuilder,
 
         @Override
         public InputPartition[] planInputPartitions() {
-            // No partitioning right now, single scan per table.
-            return new InputPartition[]{ new YdbInputPartition() };
+            if (scan.getOptions().getPartitions()==null
+                    || scan.getOptions().getPartitions().isEmpty()) {
+                return new InputPartition[]{ new YdbInputPartition() };
+            }
+            return scan.getOptions().getPartitions().stream()
+                    .map(kr -> new YdbInputPartition(kr)).toArray(InputPartition[]::new);
         }
 
         @Override
         public PartitionReaderFactory createReaderFactory() {
             return new YdbPartitionReaderFactory(scan);
         }
-
     }
 
     public static class YdbInputPartition implements InputPartition {
-        // Scans are not partitioned (yet?)
+        private final YdbKeyRange range;
+
+        public YdbInputPartition() {
+            this.range = null;
+        }
+
+        public YdbInputPartition(YdbKeyRange range) {
+            this.range = range;
+        }
+
+        public YdbKeyRange getRange() {
+            return range;
+        }
+
+        @Override
+        public String toString() {
+            return (range==null) ? "range-unconfined" : range.toString();
+        }
     }
 
     public static class YdbPartitionReaderFactory implements PartitionReaderFactory {
-
         private final YdbScanOptions options;
 
         public YdbPartitionReaderFactory(YdbScan scan) {
@@ -125,26 +143,26 @@ public class YdbScanBuilder implements ScanBuilder,
 
         @Override
         public PartitionReader<InternalRow> createReader(InputPartition partition) {
-            // Partition is ignored, scans are not partitioned (yet?)
-            return new YdbPartitionReader(options);
+            return new YdbPartitionReader(options, (YdbInputPartition) partition);
         }
-
     }
 
     public static class YdbPartitionReader implements PartitionReader<InternalRow> {
-
         private final YdbScanOptions options;
+        private final YdbInputPartition partition;
         private YdbReadTable query;
 
-        public YdbPartitionReader(YdbScanOptions options) {
+        public YdbPartitionReader(YdbScanOptions options, YdbInputPartition partition) {
             this.options = options;
+            this.partition = partition;
         }
 
         @Override
         public boolean next() throws IOException {
             if (query==null) {
-                LOG.debug("Preparing scan for table {}", options.getTablePath());
-                query = new YdbReadTable(options);
+                LOG.debug("Preparing scan for table {} at partition {}",
+                        options.getTablePath(), partition);
+                query = new YdbReadTable(options, partition.getRange());
                 query.prepare();
                 LOG.debug("Scan prepared, ready to fetch...");
             }

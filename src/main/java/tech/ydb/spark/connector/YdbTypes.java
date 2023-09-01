@@ -12,6 +12,7 @@ import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.unsafe.types.UTF8String;
 import tech.ydb.table.result.ValueReader;
 import tech.ydb.table.values.DecimalType;
+import tech.ydb.table.values.DecimalValue;
 import tech.ydb.table.values.PrimitiveType;
 import tech.ydb.table.values.PrimitiveValue;
 import tech.ydb.table.values.Type;
@@ -22,6 +23,32 @@ import tech.ydb.table.values.Value;
  * @author zinal
  */
 public class YdbTypes {
+
+    public static Object max(Object o1, Object o2) {
+        if (o1==null || o1==o2) {
+            return o2;
+        }
+        if (o2==null) {
+            return o1;
+        }
+        if ((o2 instanceof Comparable) && (o1 instanceof Comparable)) {
+            return ((Comparable)o2).compareTo(o1) > 0 ? o2 : o1;
+        }
+        return o2;
+    }
+
+    public static Object min(Object o1, Object o2) {
+        if (o1==null || o1==o2) {
+            return o2;
+        }
+        if (o2==null) {
+            return o1;
+        }
+        if ((o2 instanceof Comparable) && (o1 instanceof Comparable)) {
+            return ((Comparable)o2).compareTo(o1) < 0 ? o2 : o1;
+        }
+        return o2;
+    }
 
     public static boolean mapNullable(tech.ydb.table.values.Type yt) {
         switch (yt.getKind()) {
@@ -107,11 +134,12 @@ public class YdbTypes {
     public static Object convertFromYdb(ValueReader vr) {
         if (vr==null)
             return null;
-        if (vr.getType().getKind().equals(Type.Kind.OPTIONAL)) {
+        Type t = vr.getType();
+        if (t.getKind().equals(Type.Kind.OPTIONAL)) {
             if (! vr.isOptionalItemPresent())
                 return null;
+            t = t.unwrapOptional();
         }
-        Type t = vr.getType().unwrapOptional();
         switch (t.getKind()) {
             case PRIMITIVE:
                 switch ((PrimitiveType)t) {
@@ -159,6 +187,63 @@ public class YdbTypes {
                 break;
             case DECIMAL:
                 return Decimal.apply(vr.getDecimal().toBigDecimal());
+        }
+        return null;
+    }
+
+    public static Object convertFromYdb(Value<?> v) {
+        if (v==null)
+            return null;
+        Type t = v.getType();
+        if (t.getKind().equals(Type.Kind.OPTIONAL)) {
+            t = t.unwrapOptional();
+        }
+        switch (t.getKind()) {
+            case PRIMITIVE:
+                switch ((PrimitiveType)t) {
+                    case Bool:
+                        return v.asData().getBool();
+                    case Bytes:
+                        return v.asData().getBytes();
+                    case Date:
+                        return (int) v.asData().getDate().toEpochDay();
+                    case Datetime:
+                        return v.asData().getDatetime()
+                                .toInstant(ZoneOffset.UTC).toEpochMilli() * 1000L;
+                    case Double:
+                        return v.asData().getDouble();
+                    case Float:
+                        return v.asData().getFloat();
+                    case Int16:
+                        return v.asData().getInt16();
+                    case Int32:
+                        return v.asData().getInt32();
+                    case Int64:
+                        return v.asData().getInt64();
+                    case Int8:
+                        return (short) v.asData().getInt8();
+                    case Uint8:
+                        return (short) v.asData().getUint8();
+                    case Json:
+                        return UTF8String.fromString(v.asData().getJson());
+                    case JsonDocument:
+                        return UTF8String.fromString(v.asData().getJsonDocument());
+                    case Text:
+                        return UTF8String.fromString(v.asData().getText());
+                    case Timestamp:
+                        return v.asData().getTimestamp().toEpochMilli() * 1000L;
+                    case Uint16:
+                        return v.asData().getUint16();
+                    case Uint32:
+                        return v.asData().getUint32();
+                    case Uint64:
+                        return v.asData().getUint64();
+                    case Yson:
+                        return v.asData().getYson();
+                }
+                break;
+            case DECIMAL:
+                return Decimal.apply(((DecimalValue)v).toBigDecimal());
         }
         return null;
     }

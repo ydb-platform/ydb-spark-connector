@@ -16,7 +16,7 @@ import org.apache.spark.sql.connector.expressions.filter.And;
  *
  * @author zinal
  */
-public class YdbScanOptions implements Serializable {
+public class YdbScanOptions extends YdbTypes implements Serializable {
 
     private static final org.slf4j.Logger LOG =
             org.slf4j.LoggerFactory.getLogger(YdbScanOptions.class);
@@ -30,6 +30,7 @@ public class YdbScanOptions implements Serializable {
     private final List<YdbFieldType> keyTypes;
     private final ArrayList<Object> rangeBegin;
     private final ArrayList<Object> rangeEnd;
+    private final List<YdbKeyRange> partitions;
     private int rowLimit;
     private StructType requiredSchema;
 
@@ -43,6 +44,7 @@ public class YdbScanOptions implements Serializable {
         this.keyTypes = table.keyTypes();
         this.rangeBegin = new ArrayList<>();
         this.rangeEnd = new ArrayList<>();
+        this.partitions = table.partitions();
         this.rowLimit = -1;
     }
 
@@ -93,6 +95,10 @@ public class YdbScanOptions implements Serializable {
 
     public List<Object> getRangeEnd() {
         return rangeEnd;
+    }
+
+    public List<YdbKeyRange> getPartitions() {
+        return partitions;
     }
 
     public int getRowLimit() {
@@ -235,32 +241,6 @@ public class YdbScanOptions implements Serializable {
         LOG.debug("Calculated scan ranges {} -> {}", rangeBegin, rangeEnd);
     }
 
-    private static Object max(Object o1, Object o2) {
-        if (o1==null || o1==o2) {
-            return o2;
-        }
-        if (o2==null) {
-            return o1;
-        }
-        if ((o2 instanceof Comparable) && (o1 instanceof Comparable)) {
-            return ((Comparable)o2).compareTo(o1) > 0 ? o2 : o1;
-        }
-        return o2;
-    }
-
-    private static Object min(Object o1, Object o2) {
-        if (o1==null || o1==o2) {
-            return o2;
-        }
-        if (o2==null) {
-            return o1;
-        }
-        if ((o2 instanceof Comparable) && (o1 instanceof Comparable)) {
-            return ((Comparable)o2).compareTo(o1) < 0 ? o2 : o1;
-        }
-        return o2;
-    }
-
     /**
      * Too small to be called "Analyzer"
      */
@@ -270,9 +250,9 @@ public class YdbScanOptions implements Serializable {
         final Object value;
 
         Lyzer(String keyColumn, Expression[] children) {
-            boolean success = false;
-            boolean revert = false;
-            Object value = null;
+            boolean localSuccess = false;
+            boolean localRevert = false;
+            Object localValue = null;
             if (children.length == 2) {
                 Expression left = children[0];
                 Expression right = children[1];
@@ -280,7 +260,7 @@ public class YdbScanOptions implements Serializable {
                     Expression temp = right;
                     right = left;
                     left = temp;
-                    revert = true;
+                    localRevert = true;
                 }
                 if (left instanceof FieldReference
                         && left.references().length > 0
@@ -290,15 +270,15 @@ public class YdbScanOptions implements Serializable {
                         String fieldName = nr.fieldNames()[nr.fieldNames().length - 1];
                         if (keyColumn.equals(fieldName)) {
                             LiteralValue lv = (LiteralValue) right;
-                            value = lv.value();
-                            success = true;
+                            localValue = lv.value();
+                            localSuccess = true;
                         }
                     }
                 }
             }
-            this.success = success;
-            this.revert = revert;
-            this.value = value;
+            this.success = localSuccess;
+            this.revert = localRevert;
+            this.value = localValue;
         }
     }
 

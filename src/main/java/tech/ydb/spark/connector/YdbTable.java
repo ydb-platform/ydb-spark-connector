@@ -10,6 +10,7 @@ import java.util.Set;
 import org.apache.spark.sql.connector.catalog.SupportsRead;
 import org.apache.spark.sql.connector.catalog.Table;
 import org.apache.spark.sql.connector.catalog.TableCapability;
+import org.apache.spark.sql.connector.expressions.Expressions;
 import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.connector.read.ScanBuilder;
 import org.apache.spark.sql.types.DataType;
@@ -17,6 +18,7 @@ import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
+import tech.ydb.table.description.KeyRange;
 import tech.ydb.table.description.TableColumn;
 import tech.ydb.table.description.TableDescription;
 import tech.ydb.table.description.TableIndex;
@@ -40,6 +42,7 @@ public class YdbTable implements Table, SupportsRead {
     private final List<TableColumn> columns;
     private final List<String> keyColumns;
     private final List<YdbFieldType> keyTypes;
+    private final List<YdbKeyRange> partitions;
     private StructType schema;
 
     YdbTable(YdbConnector connector, String logicalName, String physicalName, TableDescription td) {
@@ -49,10 +52,16 @@ public class YdbTable implements Table, SupportsRead {
         this.columns = td.getColumns();
         this.keyColumns = td.getPrimaryKeys();
         this.keyTypes = new ArrayList<>();
+        this.partitions = new ArrayList<>();
         Map<String,TableColumn> cm = buildColumnsMap(td);
         for (String cname : td.getPrimaryKeys()) {
             TableColumn tc = cm.get(cname);
             this.keyTypes.add(YdbFieldType.fromSdkType(tc.getType()));
+        }
+        if (td.getKeyRanges()!=null) {
+            for (KeyRange kr : td.getKeyRanges()) {
+                partitions.add(new YdbKeyRange(kr));
+            }
         }
     }
 
@@ -64,6 +73,7 @@ public class YdbTable implements Table, SupportsRead {
         this.columns = new ArrayList<>();
         this.keyColumns = ix.getColumns();
         this.keyTypes = new ArrayList<>();
+        this.partitions = new ArrayList<>();
         HashSet<String> known = new HashSet<>();
         Map<String,TableColumn> cm = buildColumnsMap(td);
         // Add index key columns
@@ -147,7 +157,7 @@ public class YdbTable implements Table, SupportsRead {
 
     @Override
     public Transform[] partitioning() {
-        return new Transform[0];
+        return keyColumns.stream().map(v -> Expressions.identity(v)).toArray(Transform[]::new);
     }
 
     @Override
@@ -163,9 +173,14 @@ public class YdbTable implements Table, SupportsRead {
         return keyTypes;
     }
 
+    final List<YdbKeyRange> partitions() {
+        return partitions;
+    }
+
     @Override
     public String toString() {
-        return "YdbTable{" + "connector=" + connector + ", fullName=" + physicalName + '}';
+        return "YdbTable{" + "connector=" + connector.getCatalogName()
+                + ", physicalName=" + physicalName + '}';
     }
 
 }
