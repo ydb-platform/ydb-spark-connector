@@ -7,20 +7,14 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
 
-import org.apache.spark.sql.catalyst.analysis.NoSuchTableException;
-import org.apache.spark.sql.connector.catalog.Identifier;
-import org.apache.spark.sql.connector.catalog.SupportsRead;
-import org.apache.spark.sql.connector.catalog.Table;
-import org.apache.spark.sql.connector.catalog.TableCapability;
+import org.apache.spark.sql.connector.catalog.*;
 import org.apache.spark.sql.connector.expressions.Expressions;
 import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.connector.read.ScanBuilder;
-import org.apache.spark.sql.types.DataType;
-import org.apache.spark.sql.types.Metadata;
-import org.apache.spark.sql.types.StructField;
-import org.apache.spark.sql.types.StructType;
+import org.apache.spark.sql.connector.write.LogicalWriteInfo;
+import org.apache.spark.sql.connector.write.WriteBuilder;
+import org.apache.spark.sql.types.*;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 import tech.ydb.table.description.KeyRange;
@@ -33,7 +27,7 @@ import tech.ydb.table.description.TableIndex;
  *
  * @author zinal
  */
-public class YdbTable implements Table, SupportsRead {
+public class YdbTable implements Table, SupportsRead, SupportsWrite {
 
     private static final org.slf4j.Logger LOG =
             org.slf4j.LoggerFactory.getLogger(YdbTable.class);
@@ -183,6 +177,11 @@ public class YdbTable implements Table, SupportsRead {
     @Override
     public ScanBuilder newScanBuilder(CaseInsensitiveStringMap options) {
         return new YdbScanBuilder(this);
+    }
+
+    @Override
+    public WriteBuilder newWriteBuilder(LogicalWriteInfo info) {
+        throw new UnsupportedOperationException("Not supported yet."); // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/GeneratedMethodBody
     }
 
     final List<String> keyColumns() {
