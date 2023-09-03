@@ -3,6 +3,7 @@ package tech.ydb.spark.connector;
 import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.Map;
+import org.apache.spark.sql.connector.catalog.Identifier;
 import tech.ydb.auth.iam.CloudAuthHelper;
 import tech.ydb.auth.iam.CloudAuthIdentity;
 import tech.ydb.core.auth.StaticCredentials;
@@ -148,6 +149,66 @@ class YdbConnector extends YdbOptions implements AutoCloseable {
                 LOG.warn("GrpcTransport closing threw an exception", ex);
             }
         }
+    }
+
+    public static String safeName(String v) {
+        if (v==null)
+            return "";
+        if (v.contains("/"))
+            v = v.replace("/", "_");
+        if (v.contains("\\"))
+            v = v.replace("\\", "_");
+        return v;
+    }
+
+    public static void mergeLocal(String[] items, StringBuilder sb) {
+        if (items != null) {
+            for (String i : items) {
+                if (sb.length() > 0) sb.append("/");
+                sb.append(safeName(i));
+            }
+        }
+    }
+
+    public static void mergeLocal(Identifier id, StringBuilder sb) {
+        mergeLocal(id.namespace(), sb);
+        if (sb.length() > 0) sb.append("/");
+        sb.append(safeName(id.name()));
+    }
+
+    public static String mergeLocal(Identifier id) {
+        final StringBuilder sb = new StringBuilder();
+        mergeLocal(id, sb);
+        return sb.toString();
+    }
+
+    public String mergePath(String[] items) {
+        if (items==null || items.length==0)
+            return getDatabase();
+        final StringBuilder sb = new StringBuilder();
+        sb.append(getDatabase());
+        mergeLocal(items, sb);
+        return sb.toString();
+    }
+
+    public String mergePath(String[] items, String extra) {
+        if (extra==null) {
+            return mergePath(items);
+        }
+        if (items==null) {
+            return mergePath(new String[] {extra});
+        }
+        String[] work = new String[1 + items.length];
+        System.arraycopy(items, 0, work, 0, items.length);
+        work[items.length] = extra;
+        return mergePath(work);
+    }
+
+    public String mergePath(Identifier id) {
+        final StringBuilder sb = new StringBuilder();
+        sb.append(getDatabase());
+        mergeLocal(id, sb);
+        return sb.toString();
     }
 
     @Override

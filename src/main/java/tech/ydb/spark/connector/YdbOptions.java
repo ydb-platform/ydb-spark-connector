@@ -1,5 +1,11 @@
 package tech.ydb.spark.connector;
 
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+
 /**
  * YDB connection configuration options.
  * 
@@ -47,4 +53,31 @@ public abstract class YdbOptions {
      * true to list indexes as tables, false otherwise. Default false.
      */
     public static final String YDB_LIST_INDEXES = "list.indexes";
+
+    /**
+     * Table name in the YDB syntax (with the '/' separators).
+     */
+    public static final String YDB_TABLE_NAME = "table.name";
+
+    private static final List<String> YDB_IMPORTANT_PROPS =
+            Collections.unmodifiableList(Arrays.asList(YDB_URL,
+                    YDB_AUTH_MODE, YDB_AUTH_LOGIN, YDB_AUTH_KEY_FILE, YDB_AUTH_TOKEN));
+
+    /**
+     * Check whether existing connection's properties matches the provided referenced values.
+     * Only important values are checked.
+     * 
+     * @param existing properties for the existing connection
+     * @param referenced properties for the connection to be found or created
+     * @return true, if properties matches, false otherwise
+     */
+    public static boolean matches(Map<String, String> existing, Map<String, String> referenced) {
+        for (String propName : YDB_IMPORTANT_PROPS) {
+            String v1 = existing.get(propName);
+            String v2 = referenced.get(propName);
+            if ( ! Objects.equals(v1, v2) )
+                return false;
+        }
+        return true;
+    }
 }

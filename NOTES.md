@@ -6,6 +6,9 @@
 
 [Cassandra Spark](https://github.com/datastax/spark-cassandra-connector)
 
+https://levelup.gitconnected.com/easy-guide-to-create-a-custom-read-data-source-in-apache-spark-3-194afdc9627a
+https://levelup.gitconnected.com/easy-guide-to-create-a-write-data-source-in-apache-spark-3-f7d1e5a93bdb
+https://github.com/aamargajbhiye/big-data-projects/tree/master/Datasource%20spark3/src/main/java/com/bugdbug/customsource/jdbc
 
 Spark Shell example config:
 

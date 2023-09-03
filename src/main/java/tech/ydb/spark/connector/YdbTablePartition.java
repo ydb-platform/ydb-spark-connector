@@ -7,11 +7,12 @@ import org.apache.spark.sql.connector.read.InputPartition;
  *
  * @author zinal
  */
-public class YdbInputPartition implements InputPartition {
+public class YdbTablePartition implements InputPartition {
+    // TODO: improve with HasPartitionKey
 
     private final YdbKeyRange range;
 
-    public YdbInputPartition(YdbKeyRange range) {
+    public YdbTablePartition(YdbKeyRange range) {
         this.range = range;
     }
 

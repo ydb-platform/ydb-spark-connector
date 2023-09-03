@@ -26,10 +26,10 @@ import tech.ydb.table.values.Value;
  *
  * @author zinal
  */
-class YdbReadTable implements AutoCloseable {
+class YdbViaReadTable implements AutoCloseable {
 
     private static final org.slf4j.Logger LOG =
-            org.slf4j.LoggerFactory.getLogger(YdbReadTable.class);
+            org.slf4j.LoggerFactory.getLogger(YdbViaReadTable.class);
 
     private final YdbScanOptions options;
     private final YdbKeyRange keyRange;
@@ -44,7 +44,7 @@ class YdbReadTable implements AutoCloseable {
     private volatile GrpcReadStream<ReadTablePart> stream;
     private ResultSetReader current;
 
-    public YdbReadTable(YdbScanOptions options, YdbKeyRange keyRange) {
+    public YdbViaReadTable(YdbScanOptions options, YdbKeyRange keyRange) {
         this.options = options;
         this.keyRange = keyRange;
         this.queue = new ArrayBlockingQueue<>(100);
