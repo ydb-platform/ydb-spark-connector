@@ -5,8 +5,9 @@ import org.apache.spark.sql.connector.read.Scan;
 import org.apache.spark.sql.types.StructType;
 
 /**
+ *  Scan is the factory for the Batch.
  *
- * @author mzinal
+ * @author zinal
  */
 public class YdbScan implements Scan {
 

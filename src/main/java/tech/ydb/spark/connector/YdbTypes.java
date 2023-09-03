@@ -20,6 +20,7 @@ import tech.ydb.table.values.Type;
 import tech.ydb.table.values.Value;
 
 /**
+ * YDB data type conversion, mapping and comparison.
  *
  * @author zinal
  */

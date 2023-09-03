@@ -35,6 +35,15 @@ Below is the example of running the interactive Spark shell, in the Scala mode, 
   --conf spark.sql.catalog.ydb.auth.keyfile=/home/demo/Magic/key-ydb-sa1.json
 ```
 
+Using both Delta Lake and YDB connector to run interactive Spark SQL session:
+
+```bash
+spark-sql --conf spark.sql.catalog.ydb=tech.ydb.spark.connector.YdbCatalog \
+  --conf spark.sql.catalog.ydb.url='grpcs://lb.etnr08b003e9d9kvihck.ydb.mdb.yandexcloud.net:2135/?database=/ru-central1/b1gfvslmokutuvt2g019/etnr08b003e9d9kvihck' \
+  --conf spark.sql.catalog.ydb.auth.mode=META \
+  --jars s3a://dproc-wh/jars/yc-delta23-multi-dp21-1.1-fatjar.jar,s3a://dproc-wh/jars/ydb-spark-connector-1.0-SNAPSHOT.jar
+```
+
 ## Supported operations
 
 The connector exposes the YDB directories, tables and indexes as entries in the Spark catalog configured. Spark supports recursive "namespaces", which works naturally with the YDB's directories. Spark SQL uses "." (single dot) as the namespace delimiter, so it should be used instead of YDB's "/" (forward slash) to define sub-directories and tables within the YDB-enabled Spark catalog.

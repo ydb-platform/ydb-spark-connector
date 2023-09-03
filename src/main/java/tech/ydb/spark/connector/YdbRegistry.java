@@ -4,6 +4,7 @@ import java.util.Map;
 import java.util.HashMap;
 
 /**
+ * YDB Connector registry helps to create and retrieve the connector instances.
  *
  * @author zinal
  */

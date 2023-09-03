@@ -14,6 +14,7 @@ import tech.ydb.table.values.TupleValue;
 import tech.ydb.table.values.Value;
 
 /**
+ * Key range: two border vectors, plus the border inclusivity flag.
  *
  * @author zinal
  */

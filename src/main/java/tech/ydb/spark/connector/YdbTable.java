@@ -24,8 +24,9 @@ import tech.ydb.table.description.TableDescription;
 import tech.ydb.table.description.TableIndex;
 
 /**
+ * YDB table metadata representation for Spark.
  *
- * @author mzinal
+ * @author zinal
  */
 public class YdbTable implements Table, SupportsRead {
 

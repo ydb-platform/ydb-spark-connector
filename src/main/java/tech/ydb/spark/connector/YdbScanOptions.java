@@ -13,6 +13,7 @@ import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.connector.expressions.filter.And;
 
 /**
+ * All settings for the scan operations, shared between the partition readers.
  *
  * @author zinal
  */

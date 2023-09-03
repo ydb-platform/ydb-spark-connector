@@ -13,20 +13,14 @@ import tech.ydb.scheme.SchemeClient;
 import tech.ydb.table.TableClient;
 
 /**
+ * YDB Database Connector.
+ * YDB Connector implements connection initialization and session pool management.
  *
  * @author zinal
  */
-class YdbConnector implements AutoCloseable {
+class YdbConnector extends YdbOptions implements AutoCloseable {
 
     private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(YdbConnector.class);
-
-    public static final String YDB_URL = "url";
-    public static final String YDB_POOL_SIZE = "pool.size";
-    public static final String YDB_AUTH_MODE = "auth.mode";
-    public static final String YDB_AUTH_LOGIN = "auth.login";
-    public static final String YDB_AUTH_PASSWORD = "auth.password";
-    public static final String YDB_AUTH_KEY_FILE = "auth.keyfile";
-    public static final String YDB_AUTH_TOKEN = "auth.token";
 
     private final String catalogName;
     private final Map<String,String> connectOptions;
@@ -44,7 +38,11 @@ class YdbConnector implements AutoCloseable {
         }
         final int poolSize;
         try {
-            poolSize = Integer.parseInt(props.getOrDefault(YDB_POOL_SIZE, "100"));
+            int ncores = Runtime.getRuntime().availableProcessors();
+            if (ncores < 2)
+                ncores = 2;
+            String defaultCores = String.valueOf(4 * ncores);
+            poolSize = Integer.parseInt(props.getOrDefault(YDB_POOL_SIZE, defaultCores));
         } catch(NumberFormatException nfe) {
             throw new IllegalArgumentException("Incorrect value for property " + YDB_POOL_SIZE, nfe);
         }

@@ -5,8 +5,9 @@ import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.connector.read.PartitionReader;
 
 /**
+ * Partition reader implements partition scan invocation.
  *
- * @author mzinal
+ * @author zinal
  */
 public class YdbPartitionReader implements PartitionReader<InternalRow> {
 

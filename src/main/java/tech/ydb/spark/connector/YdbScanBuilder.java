@@ -9,6 +9,7 @@ import org.apache.spark.sql.connector.read.SupportsPushDownRequiredColumns;
 import org.apache.spark.sql.types.StructType;
 
 /**
+ * Scan Builder configures the scan options.
  *
  * @author zinal
  */

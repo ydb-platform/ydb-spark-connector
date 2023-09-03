@@ -4,6 +4,8 @@ import tech.ydb.table.values.Type;
 import tech.ydb.table.values.PrimitiveType;
 
 /**
+ * Supported YDB data types for the columns.
+ * Had to duplicate the type definitions here to simplify the type processing logic.
  *
  * @author zinal
  */

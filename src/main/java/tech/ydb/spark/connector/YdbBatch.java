@@ -8,8 +8,9 @@ import org.apache.spark.sql.connector.read.InputPartition;
 import org.apache.spark.sql.connector.read.PartitionReaderFactory;
 
 /**
+ * Per-partition scan planning, including the partition elimination logic.
  *
- * @author mzinal
+ * @author zinal
  */
 public class YdbBatch implements Batch {
 

@@ -28,20 +28,26 @@ import tech.ydb.table.settings.DescribeTableSettings;
 /**
  * YDB Catalog implements Spark table catalog for YDB data sources.
  *
- * @author mzinal
+ * @author zinal
  */
-public class YdbCatalog implements CatalogPlugin, TableCatalog, SupportsNamespaces {
+public class YdbCatalog extends YdbOptions
+        implements CatalogPlugin, TableCatalog, SupportsNamespaces {
+
+    private static final org.slf4j.Logger LOG =
+            org.slf4j.LoggerFactory.getLogger(YdbCatalog.class);
 
     public static final String ENTRY_TYPE = "ydb_entry_type";
     public static final String ENTRY_OWNER = "ydb_entry_owner";
 
     private String catalogName;
     private YdbConnector connector;
+    private boolean listIndexes;
 
     @Override
     public void initialize(String name, CaseInsensitiveStringMap options) {
         this.catalogName = name;
         this.connector = YdbRegistry.create(name, options);
+        this.listIndexes = options.getBoolean(YDB_LIST_INDEXES, false);
     }
 
     @Override
@@ -168,7 +174,9 @@ public class YdbCatalog implements CatalogPlugin, TableCatalog, SupportsNamespac
             for (SchemeOperationProtos.Entry e : ldr.getChildren()) {
                 if (SchemeOperationProtos.Entry.Type.TABLE.equals(e.getType())) {
                     retval.add(Identifier.of(namespace, e.getName()));
-                    listIndexes(namespace, retval, e);
+                    if (listIndexes) {
+                        listIndexes(namespace, retval, e);
+                    }
                 }
             }
             return retval.toArray(new Identifier[0]);
@@ -185,6 +193,8 @@ public class YdbCatalog implements CatalogPlugin, TableCatalog, SupportsNamespac
         }).join();
         if (! res.isSuccess()) {
             // Skipping problematic entries.
+            LOG.warn("Skipping index listing for table {} due to failed describe, status {}",
+                    tablePath, res.getStatus());
             return;
         }
         TableDescription td = res.getValue();
@@ -221,7 +231,7 @@ public class YdbCatalog implements CatalogPlugin, TableCatalog, SupportsNamespac
         String tabName = tabParts[1];
         String ixName = tabParts[2];
         String tablePath = mergePath(ident.namespace(), tabName);
-        Result<Table> res =  getRetryCtx().supplyResult(session -> {
+        Result<YdbTable> res =  getRetryCtx().supplyResult(session -> {
             DescribeTableSettings dts = new DescribeTableSettings();
             Result<TableDescription> td_res = session.describeTable(tablePath, dts).join();
             if (! td_res.isSuccess())
@@ -241,7 +251,9 @@ public class YdbCatalog implements CatalogPlugin, TableCatalog, SupportsNamespac
                             new YdbTable(getConnector(), mergeLocal(ident), tablePath, td, ix, td_ix)) );
                 }
             }
-            return CompletableFuture.completedFuture( Result.success((Table) null) );
+            return CompletableFuture.completedFuture(
+                    Result.fail(Status.of(StatusCode.SCHEME_ERROR)
+                            .withIssues(Issue.of("Path not found", Issue.Severity.ERROR))));
         }).join();
 
         return checkStatus(res, ident);

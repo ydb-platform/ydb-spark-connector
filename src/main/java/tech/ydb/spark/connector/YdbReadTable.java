@@ -22,7 +22,7 @@ import tech.ydb.table.values.Type;
 import tech.ydb.table.values.Value;
 
 /**
- * YDB table or index scan implementation.
+ * YDB table or index scan implementation through the ReadTable call.
  *
  * @author zinal
  */

@@ -6,8 +6,9 @@ import org.apache.spark.sql.connector.read.PartitionReader;
 import org.apache.spark.sql.connector.read.PartitionReaderFactory;
 
 /**
+ * Partition reader factory delivers the scan options to partition reader instances.
  *
- * @author mzinal
+ * @author zinal
  */
 public class YdbPartitionReaderFactory implements PartitionReaderFactory {
 
