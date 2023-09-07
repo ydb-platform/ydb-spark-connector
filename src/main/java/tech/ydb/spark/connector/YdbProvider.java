@@ -15,27 +15,39 @@ public class YdbProvider implements TableProvider {
 
     private YdbTable table;
 
-    /*
-    private YdbTable getOrLoadTable(Map<String, String> properties) {
-        
-        YdbConnector connector = YdbRegistry.create(properties);
-        return
+    private YdbTable getOrLoadTable(Map<String, String> props) {
+        String tableName = props.get(YdbOptions.YDB_TABLE);
+        if (tableName==null) {
+            throw new IllegalArgumentException("Missing table name property");
+        }
+
+        synchronized(this) {
+            if (table!=null) {
+                if (tableName.equals(table.name())
+                        && YdbOptions.matches(props, table.getConnector().getConnectOptions())) {
+                    return table;
+                }
+            }
+        }
+
+        YdbConnector connector = YdbRegistry.create(props);
+        // TODO
+        return null;
     }
-    */
 
     @Override
     public StructType inferSchema(CaseInsensitiveStringMap options) {
-        throw new UnsupportedOperationException("Not supported yet."); // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/GeneratedMethodBody
+        return getOrLoadTable(options).schema();
     }
 
     @Override
     public Transform[] inferPartitioning(CaseInsensitiveStringMap options) {
-        return TableProvider.super.inferPartitioning(options); // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/OverriddenMethodBody
+        return getOrLoadTable(options).partitioning();
     }
 
     @Override
     public Table getTable(StructType schema, Transform[] partitioning, Map<String, String> properties) {
-        throw new UnsupportedOperationException("Not supported yet."); // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/GeneratedMethodBody
+        return getOrLoadTable(properties);
     }
 
 }

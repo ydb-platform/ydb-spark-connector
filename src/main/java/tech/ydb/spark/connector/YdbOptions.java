@@ -55,6 +55,11 @@ public abstract class YdbOptions {
     public static final String YDB_LIST_INDEXES = "list.indexes";
 
     /**
+     * Logical table name to be accessed, as returned by the catalog.
+     */
+    public static final String YDB_TABLE = "table";
+
+    /**
      * Table name in the YDB syntax (with the '/' separators).
      */
     public static final String YDB_TABLE_NAME = "table.name";

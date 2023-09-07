@@ -41,17 +41,25 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
 
     private final YdbConnector connector;
     private final String logicalName;
-    private final String physicalName;
+    private final String actualPath;
     private final List<TableColumn> columns;
     private final List<String> keyColumns;
     private final List<YdbFieldType> keyTypes;
     private final List<YdbKeyRange> partitions;
     private StructType schema;
 
-    YdbTable(YdbConnector connector, String logicalName, String physicalName, TableDescription td) {
+    /**
+     * Create table provider for the real YDB table.
+     *
+     * @param connector YDB connector
+     * @param logicalName Table logical name
+     * @param actualPath Table path
+     * @param td Table description object obtained from YDB
+     */
+    YdbTable(YdbConnector connector, String logicalName, String actualPath, TableDescription td) {
         this.connector = connector;
         this.logicalName = logicalName;
-        this.physicalName = physicalName;
+        this.actualPath = actualPath;
         this.columns = td.getColumns();
         this.keyColumns = td.getPrimaryKeys();
         this.keyTypes = new ArrayList<>();
@@ -67,14 +75,24 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
             }
         }
         LOG.debug("Loaded table {} with {} columns and {} partitions",
-                this.physicalName, this.columns.size(), this.partitions.size());
+                this.actualPath, this.columns.size(), this.partitions.size());
     }
 
-    YdbTable(YdbConnector connector, String logicalName, String physicalName,
+    /**
+     * Create table provider for YDB index.
+     *
+     * @param connector YDB connector
+     * @param logicalName Index table logical name
+     * @param actualPath Table path for the actual table (not index)
+     * @param td Table description object for the actual table
+     * @param ix Index information entry
+     * @param td_ix Table description object for the index table
+     */
+    YdbTable(YdbConnector connector, String logicalName, String actualPath,
             TableDescription td, TableIndex ix, TableDescription td_ix) {
         this.connector = connector;
         this.logicalName = logicalName;
-        this.physicalName = physicalName + "/" + ix.getName() + "/indexImplTable";
+        this.actualPath = actualPath + "/" + ix.getName() + "/indexImplTable";
         this.columns = new ArrayList<>();
         this.keyColumns = ix.getColumns();
         this.keyTypes = new ArrayList<>();
@@ -109,7 +127,7 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
             }
         }
         LOG.debug("Loaded index {} with {} columns and {} partitions",
-                this.physicalName, this.columns.size(), this.partitions.size());
+                this.actualPath, this.columns.size(), this.partitions.size());
     }
 
     private static Map<String, TableColumn> buildColumnsMap(TableDescription td) {
@@ -120,17 +138,9 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
         return m;
     }
 
-    final YdbConnector getConnector() {
-        return connector;
-    }
-
     @Override
     public String name() {
         return logicalName;
-    }
-
-    public String tablePath() {
-        return physicalName;
     }
 
     @Override
@@ -152,6 +162,43 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
         return CAPABILITIES;
     }
 
+    @Override
+    public Transform[] partitioning() {
+        return new Transform[] {
+            Expressions.bucket(partitions.size(), keyColumns.toArray(new String[]{}))
+        };
+    }
+
+    @Override
+    public ScanBuilder newScanBuilder(CaseInsensitiveStringMap options) {
+        return new YdbScanBuilder(this);
+    }
+
+    @Override
+    public WriteBuilder newWriteBuilder(LogicalWriteInfo info) {
+        throw new UnsupportedOperationException("Not supported yet.");
+    }
+
+    final YdbConnector getConnector() {
+        return connector;
+    }
+
+    final String tablePath() {
+        return actualPath;
+    }
+
+    final List<String> keyColumns() {
+        return keyColumns;
+    }
+
+    final List<YdbFieldType> keyTypes() {
+        return keyTypes;
+    }
+
+    final List<YdbKeyRange> partitions() {
+        return partitions;
+    }
+
     private StructField[] mapFields(List<TableColumn> columns) {
         final List<StructField> fields = new ArrayList<>();
         for (TableColumn tc : columns) {
@@ -168,38 +215,8 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
     }
 
     @Override
-    public Transform[] partitioning() {
-        return new Transform[] {
-            Expressions.bucket(partitions.size(), keyColumns.toArray(new String[]{}))
-        };
-    }
-
-    @Override
-    public ScanBuilder newScanBuilder(CaseInsensitiveStringMap options) {
-        return new YdbScanBuilder(this);
-    }
-
-    @Override
-    public WriteBuilder newWriteBuilder(LogicalWriteInfo info) {
-        throw new UnsupportedOperationException("Not supported yet."); // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/GeneratedMethodBody
-    }
-
-    final List<String> keyColumns() {
-        return keyColumns;
-    }
-
-    final List<YdbFieldType> keyTypes() {
-        return keyTypes;
-    }
-
-    final List<YdbKeyRange> partitions() {
-        return partitions;
-    }
-
-    @Override
     public String toString() {
-        return "YdbTable{" + "connector=" + connector.getCatalogName()
-                + ", physicalName=" + physicalName + '}';
+        return "YdbTable:" + connector.getCatalogName() + ":" + actualPath;
     }
 
 }
