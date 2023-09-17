@@ -29,20 +29,22 @@ The following Spark configuration parameters must be defined to use the Spark co
 Below is the example of running the interactive Spark shell, in the Scala mode, with the necessary configuration options:
 
 ```bash
-./bin/spark-shell --conf spark.sql.catalog.ydb=tech.ydb.spark.connector.YdbCatalog \
-  --conf spark.sql.catalog.ydb.url='grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1gfvslmokutuvt2g019/etnuogblap3e7dok6tf5' \
-  --conf spark.sql.catalog.ydb.auth.mode=KEY \
-  --conf spark.sql.catalog.ydb.auth.keyfile=/home/demo/Magic/key-ydb-sa1.json
+./bin/spark-shell --conf spark.sql.catalog.ydb1=tech.ydb.spark.connector.YdbCatalog \
+  --conf spark.sql.catalog.ydb1.url='grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1gfvslmokutuvt2g019/etnuogblap3e7dok6tf5' \
+  --conf spark.sql.catalog.ydb1.auth.mode=KEY \
+  --conf spark.sql.catalog.ydb1.auth.keyfile=/home/demo/Magic/key-ydb-sa1.json
 ```
 
 Using both Delta Lake and YDB connector to run interactive Spark SQL session:
 
 ```bash
-spark-sql --conf spark.sql.catalog.ydb=tech.ydb.spark.connector.YdbCatalog \
-  --conf spark.sql.catalog.ydb.url='grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1gfvslmokutuvt2g019/etnd6mguvlul8qm4psvn' \
-  --conf spark.sql.catalog.ydb.auth.mode=META \
+spark-sql --conf spark.sql.catalog.ydb1=tech.ydb.spark.connector.YdbCatalog \
+  --conf spark.sql.catalog.ydb1.url='grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1gfvslmokutuvt2g019/etnd6mguvlul8qm4psvn' \
+  --conf spark.sql.catalog.ydb1.auth.mode=META \
   --jars s3a://mzinal-dproc1/jars/yc-delta23-multi-dp21-1.1-fatjar.jar,s3a://mzinal-dproc1/jars/ydb-spark-connector-1.0-SNAPSHOT.jar
 ```
+
+> Note: do not use the literal value "ydb" for the catalog name ("ydb1" will work fine, for example). The attempt to use the YDB provider identifier - e.g. "ydb" - as the catalog name will cause calls like `spark.table("ydb.table_name")` to fail with the following error: "Unsupported data source type for direct query on files".
 
 ## Supported operations
 
@@ -52,7 +54,7 @@ Please see the example below on using Spark SQL to list YDB directories, tables,
 
 ```sql
 spark-sql> -- List root directories within the database
-spark-sql> SHOW NAMESPACES FROM ydb;
+spark-sql> SHOW NAMESPACES FROM ydb1;
 `demo-payments`
 myschema1
 mysql1
@@ -61,7 +63,7 @@ pgimp1
 zeppelin
 `.sys`
 spark-sql> -- List sub-directories within the specified directory
-spark-sql> SHOW NAMESPACES FROM ydb.`python-examples`;
+spark-sql> SHOW NAMESPACES FROM ydb1.`python-examples`;
 `python-examples`.basic
 `python-examples`.jsondemo
 `python-examples`.jsondemo1
@@ -69,12 +71,12 @@ spark-sql> SHOW NAMESPACES FROM ydb.`python-examples`;
 `python-examples`.secondary_indexes_builtin
 `python-examples`.ttl
 spark-sql> -- List the tables within the specified directory
-spark-sql> SHOW TABLES FROM ydb.`python-examples`.`basic`;
+spark-sql> SHOW TABLES FROM ydb1.`python-examples`.`basic`;
 episodes
 seasons
 series
 spark-sql> -- Describe the YDB table structure
-spark-sql> DESCRIBE TABLE ydb.`python-examples`.`basic`.episodes;
+spark-sql> DESCRIBE TABLE ydb1.`python-examples`.`basic`.episodes;
 series_id           	bigint              	                    
 season_id           	bigint              	                    
 episode_id          	bigint              	                    
@@ -84,7 +86,7 @@ air_date            	bigint
 # Partitioning      	                    	                    
 Not partitioned     	                    	                    
 spark-sql> -- Run the simple Spark SQL query on top of YDB table
-spark-sql> SELECT * FROM ydb.`python-examples`.`basic`.episodes LIMIT 5;
+spark-sql> SELECT * FROM ydb1.`python-examples`.`basic`.episodes LIMIT 5;
 1	1	1	Yesterday's Jam	13182
 1	1	2	Calamity Jen	13182
 1	1	3	Fifty-Fifty	13189
@@ -96,13 +98,13 @@ Below there are some read operations using Scala:
 
 ```
 // table access
-spark.table("ydb.test2_fhrw").select("created_date", "complaint_type", "city").show(10, false)
+spark.table("ydb1.test2_fhrw").select("created_date", "complaint_type", "city").show(10, false)
 
-// index access - note the backticks
-spark.table("ydb.`ix/test2_fhrw/ix1`").show(10, false)
+// index access - note the backticks and the naming format
+spark.table("ydb1.`ix/test2_fhrw/ix1`").show(10, false)
 
 // read from ydb, write to parquet files
-spark.table("ydb.test2_fhrw").write.parquet("s3a://mzinal-dproc1/tests/test2_fhrw");
+spark.table("ydb1.test2_fhrw").write.parquet("s3a://mzinal-dproc1/tests/test2_fhrw");
 
 val ydb_url = "grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1gfvslmokutuvt2g019/etnd6mguvlul8qm4psvn"
 

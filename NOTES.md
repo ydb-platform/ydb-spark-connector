@@ -106,4 +106,11 @@ spark.sql("SELECT city, COUNT(*) FROM ydb.pgimp1.public.fhrw WHERE unique_key<'2
 val df2 = spark.table("ydb1.`ix/test2_fhrw/ix1`")
 df2.filter(df2("closed_date").gt(to_timestamp(lit("2010-02-01")))).show(10, false)
 
+val df2 = (spark.read.format("ydb")
+    .option("url", ydb_url)
+    .option("auth.mode", "KEY")
+    .option("auth.keyfile", "/home/zinal/Keys/mzinal-dp1.json")
+    .option("table", "test2_fhrw/ix1/indexImplTable")
+    .load)
+df2.filter(df2("closed_date").gt(to_timestamp(lit("2010-02-02")))).show(10, false)
 ```
