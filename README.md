@@ -44,7 +44,8 @@ spark-sql --conf spark.sql.catalog.ydb1=tech.ydb.spark.connector.YdbCatalog \
   --jars s3a://mzinal-dproc1/jars/yc-delta23-multi-dp21-1.1-fatjar.jar,s3a://mzinal-dproc1/jars/ydb-spark-connector-1.0-SNAPSHOT.jar
 ```
 
-> Note: do not use the literal value "ydb" for the catalog name ("ydb1" will work fine, for example). The attempt to use the YDB provider identifier - e.g. "ydb" - as the catalog name will cause calls like `spark.table("ydb.table_name")` to fail with the following error: "Unsupported data source type for direct query on files".
+> [!IMPORTANT]
+> Do not use the literal value "ydb" for the catalog name ("ydb1" will work fine, for example). The attempt to use the YDB provider identifier - e.g. "ydb" - as the catalog name will cause calls like `spark.table("ydb.table_name")` to fail with the following error: "Unsupported data source type for direct query on files".
 
 ## Supported operations
 
