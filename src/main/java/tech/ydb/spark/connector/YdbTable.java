@@ -41,7 +41,7 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
 
     private final YdbConnector connector;
     private final String logicalName;
-    private final String actualPath;
+    private final String tablePath;
     private final List<TableColumn> columns;
     private final List<String> keyColumns;
     private final List<YdbFieldType> keyTypes;
@@ -56,10 +56,10 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
      * @param actualPath Table path
      * @param td Table description object obtained from YDB
      */
-    YdbTable(YdbConnector connector, String logicalName, String actualPath, TableDescription td) {
+    YdbTable(YdbConnector connector, String logicalName, String tablePath, TableDescription td) {
         this.connector = connector;
         this.logicalName = logicalName;
-        this.actualPath = actualPath;
+        this.tablePath = tablePath;
         this.columns = td.getColumns();
         this.keyColumns = td.getPrimaryKeys();
         this.keyTypes = new ArrayList<>();
@@ -75,7 +75,7 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
             }
         }
         LOG.debug("Loaded table {} with {} columns and {} partitions",
-                this.actualPath, this.columns.size(), this.partitions.size());
+                this.tablePath, this.columns.size(), this.partitions.size());
     }
 
     /**
@@ -83,16 +83,16 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
      *
      * @param connector YDB connector
      * @param logicalName Index table logical name
-     * @param actualPath Table path for the actual table (not index)
+     * @param tablePath Table path for the actual table (not index)
      * @param td Table description object for the actual table
      * @param ix Index information entry
      * @param td_ix Table description object for the index table
      */
-    YdbTable(YdbConnector connector, String logicalName, String actualPath,
+    YdbTable(YdbConnector connector, String logicalName, String tablePath,
             TableDescription td, TableIndex ix, TableDescription td_ix) {
         this.connector = connector;
         this.logicalName = logicalName;
-        this.actualPath = actualPath + "/" + ix.getName() + "/indexImplTable";
+        this.tablePath = tablePath + "/" + ix.getName() + "/indexImplTable";
         this.columns = new ArrayList<>();
         this.keyColumns = ix.getColumns();
         this.keyTypes = new ArrayList<>();
@@ -127,7 +127,7 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
             }
         }
         LOG.debug("Loaded index {} with {} columns and {} partitions",
-                this.actualPath, this.columns.size(), this.partitions.size());
+                this.tablePath, this.columns.size(), this.partitions.size());
     }
 
     private static Map<String, TableColumn> buildColumnsMap(TableDescription td) {
@@ -153,8 +153,16 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
 
     @Override
     public Map<String, String> properties() {
-        // TODO: return primary key + storage characteristics
-        return Collections.emptyMap();
+        final Map<String,String> m = new HashMap<>();
+        StringBuilder sb = new StringBuilder();
+        for (String kc : keyColumns) {
+            if (sb.length()>0)
+                sb.append(", ");
+            sb.append("`").append(kc).append("`");
+        }
+        m.put("primary_key", sb.toString());
+        m.put("table_path", tablePath);
+        return m;
     }
 
     @Override
@@ -184,7 +192,7 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
     }
 
     final String tablePath() {
-        return actualPath;
+        return tablePath;
     }
 
     final List<String> keyColumns() {
@@ -216,7 +224,7 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
 
     @Override
     public String toString() {
-        return "YdbTable:" + connector.getCatalogName() + ":" + actualPath;
+        return "YdbTable:" + connector.getCatalogName() + ":" + tablePath;
     }
 
 }

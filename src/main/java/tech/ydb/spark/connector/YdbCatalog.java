@@ -7,11 +7,13 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+
 import org.apache.spark.sql.catalyst.analysis.*;
 import org.apache.spark.sql.connector.catalog.*;
 import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
+
 import tech.ydb.core.Issue;
 import tech.ydb.core.Result;
 import tech.ydb.core.Status;
@@ -46,7 +48,7 @@ public class YdbCatalog extends YdbOptions
     @Override
     public void initialize(String name, CaseInsensitiveStringMap options) {
         this.catalogName = name;
-        this.connector = YdbRegistry.create(name, options);
+        this.connector = YdbRegistry.getOrCreate(name, options);
         this.listIndexes = options.getBoolean(YDB_LIST_INDEXES, false);
     }
 
@@ -104,7 +106,7 @@ public class YdbCatalog extends YdbOptions
     public Identifier[] listTables(String[] namespace) throws NoSuchNamespaceException {
         try {
             Result<ListDirectoryResult> res = getSchemeClient()
-                    .listDirectory(connector.mergePath(namespace)).join();
+                    .listDirectory(mergePath(namespace)).join();
             ListDirectoryResult ldr = checkStatus(res, namespace);
             List<Identifier> retval = new ArrayList<>();
             for (SchemeOperationProtos.Entry e : ldr.getChildren()) {
@@ -123,7 +125,7 @@ public class YdbCatalog extends YdbOptions
 
     private void listIndexes(String[] namespace, List<Identifier> retval,
             SchemeOperationProtos.Entry tableEntry) {
-        String tablePath = connector.mergePath(namespace, tableEntry.getName());
+        String tablePath = mergePath(namespace, tableEntry.getName());
         Result<TableDescription> res = getRetryCtx().supplyResult(session -> {
             return session.describeTable(tablePath, new DescribeTableSettings());
         }).join();
@@ -147,14 +149,14 @@ public class YdbCatalog extends YdbOptions
             return loadIndexTable(ident);
         }
         // Processing for regular tables.
-        String tablePath = connector.mergePath(ident);
+        String tablePath = mergePath(ident);
         Result<TableDescription> res = getRetryCtx().supplyResult(session -> {
             final DescribeTableSettings dts = new DescribeTableSettings();
             dts.setIncludeShardKeyBounds(true);
             return session.describeTable(tablePath, dts);
         }).join();
         TableDescription td = checkStatus(res, ident);
-        return new YdbTable(getConnector(), YdbConnector.mergeLocal(ident), tablePath, td);
+        return new YdbTable(getConnector(), mergeLocal(ident), tablePath, td);
     }
 
     private Table loadIndexTable(Identifier ident) throws NoSuchTableException {
@@ -166,7 +168,7 @@ public class YdbCatalog extends YdbOptions
         }
         String tabName = tabParts[1];
         String ixName = tabParts[2];
-        String tablePath = connector.mergePath(ident.namespace(), tabName);
+        String tablePath = mergePath(ident.namespace(), tabName);
         Result<YdbTable> res =  getRetryCtx().supplyResult(session -> {
             DescribeTableSettings dts = new DescribeTableSettings();
             Result<TableDescription> td_res = session.describeTable(tablePath, dts).join();
@@ -184,7 +186,7 @@ public class YdbCatalog extends YdbOptions
                     TableDescription td_ix = td_res.getValue();
                     // Construct the YdbTable object
                     return CompletableFuture.completedFuture( Result.success(
-                            new YdbTable(getConnector(), YdbConnector.mergeLocal(ident), tablePath, td, ix, td_ix)) );
+                            new YdbTable(getConnector(), mergeLocal(ident), tablePath, td, ix, td_ix)) );
                 }
             }
             return CompletableFuture.completedFuture(
@@ -229,7 +231,7 @@ public class YdbCatalog extends YdbOptions
             namespace = new String[0];
         try {
             Result<ListDirectoryResult> res = getSchemeClient()
-                    .listDirectory(connector.mergePath(namespace)).get();
+                    .listDirectory(mergePath(namespace)).get();
             ListDirectoryResult ldr = checkStatus(res, namespace);
             List<String[]> retval = new ArrayList<>();
             for (SchemeOperationProtos.Entry e : ldr.getChildren()) {
@@ -253,7 +255,7 @@ public class YdbCatalog extends YdbOptions
             return Collections.emptyMap();
         final Map<String,String> m = new HashMap<>();
         Result<DescribePathResult> res = getSchemeClient()
-                .describePath(connector.mergePath(namespace)).join();
+                .describePath(mergePath(namespace)).join();
         DescribePathResult dpr = checkStatus(res, namespace);
         m.put(ENTRY_TYPE, dpr.getSelf().getType().name());
         m.put(ENTRY_TYPE, dpr.getSelf().getOwner());
@@ -263,7 +265,7 @@ public class YdbCatalog extends YdbOptions
     @Override
     public void createNamespace(String[] namespace, Map<String, String> metadata)
             throws NamespaceAlreadyExistsException {
-        Status status = getSchemeClient().makeDirectory(connector.mergePath(namespace)).join();
+        Status status = getSchemeClient().makeDirectory(mergePath(namespace)).join();
         if (status.isSuccess()
                 && status.getIssues() != null
                 && status.getIssues().length > 0) {
@@ -286,12 +288,76 @@ public class YdbCatalog extends YdbOptions
     public boolean dropNamespace(String[] namespace, boolean recursive)
             throws NoSuchNamespaceException, NonEmptyNamespaceException {
         if (! recursive) {
-            Status status = getSchemeClient().removeDirectory(connector.mergePath(namespace)).join();
+            Status status = getSchemeClient().removeDirectory(mergePath(namespace)).join();
             return status.isSuccess();
         } else {
             // TODO: recursive removal
             throw new UnsupportedOperationException("Recursive namespace removal is not implemented");
         }
+    }
+
+    private String getDatabase() {
+        return connector.getDatabase();
+    }
+
+    private static String safeName(String v) {
+        if (v==null)
+            return "";
+        if (v.contains("/"))
+            v = v.replace("/", "_");
+        if (v.contains("\\"))
+            v = v.replace("\\", "_");
+        return v;
+    }
+
+    private void mergeLocal(String[] items, StringBuilder sb) {
+        if (items != null) {
+            for (String i : items) {
+                if (sb.length() > 0) sb.append("/");
+                sb.append(safeName(i));
+            }
+        }
+    }
+
+    private void mergeLocal(Identifier id, StringBuilder sb) {
+        mergeLocal(id.namespace(), sb);
+        if (sb.length() > 0) sb.append("/");
+        sb.append(safeName(id.name()));
+    }
+
+    private String mergeLocal(Identifier id) {
+        final StringBuilder sb = new StringBuilder();
+        mergeLocal(id, sb);
+        return sb.toString();
+    }
+
+    private String mergePath(String[] items) {
+        if (items==null || items.length==0)
+            return getDatabase();
+        final StringBuilder sb = new StringBuilder();
+        sb.append(getDatabase());
+        mergeLocal(items, sb);
+        return sb.toString();
+    }
+
+    private String mergePath(String[] items, String extra) {
+        if (extra==null) {
+            return mergePath(items);
+        }
+        if (items==null) {
+            return mergePath(new String[] {extra});
+        }
+        String[] work = new String[1 + items.length];
+        System.arraycopy(items, 0, work, 0, items.length);
+        work[items.length] = extra;
+        return mergePath(work);
+    }
+
+    private String mergePath(Identifier id) {
+        final StringBuilder sb = new StringBuilder();
+        sb.append(getDatabase());
+        mergeLocal(id, sb);
+        return sb.toString();
     }
 
 }

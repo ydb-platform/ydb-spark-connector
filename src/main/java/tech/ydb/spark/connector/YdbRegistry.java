@@ -4,7 +4,7 @@ import java.util.Map;
 import java.util.HashMap;
 
 /**
- * YDB Connector registry helps to create and retrieve the connector instances.
+ * YDB Connector registry helps to getOrCreate and retrieve the connector instances.
  *
  * @author zinal
  */
@@ -20,7 +20,7 @@ final class YdbRegistry {
         }
     }
 
-    public static YdbConnector create(String name, Map<String, String> props) {
+    public static YdbConnector getOrCreate(String name, Map<String, String> props) {
         synchronized(items) {
             YdbConnector yc = items.get(name);
             if (yc==null) {
@@ -31,10 +31,10 @@ final class YdbRegistry {
         }
     }
 
-    public static YdbConnector create(Map<String, String> props) {
+    public static YdbConnector getOrCreate(Map<String, String> props) {
         synchronized(items) {
             for (YdbConnector yc : items.values()) {
-                if (YdbOptions.matches(yc.getConnectOptions(), props))
+                if (YdbOptions.connectionMatches(yc.getConnectOptions(), props))
                     return yc;
             }
             int index = items.size();

@@ -83,7 +83,7 @@ class YdbViaReadTable implements AutoCloseable {
         rtsb.withRequestTimeout(Duration.ofHours(8));
 
         // Create or acquire the connector object.
-        YdbConnector c = YdbRegistry.create(options.getCatalogName(), options.getConnectOptions());
+        YdbConnector c = YdbRegistry.getOrCreate(options.getCatalogName(), options.getConnectOptions());
         // The full table path is needed.
         tablePath = options.getTablePath();
         // TODO: add setting for the maximum session creation duration.
