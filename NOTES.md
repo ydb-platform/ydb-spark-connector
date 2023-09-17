@@ -94,3 +94,16 @@ spark.sql("SELECT borough, MIN(created_date), MAX(created_date) FROM ydb.test0_f
 spark.sql("SELECT city, COUNT(*) FROM ydb.pgimp1.public.fhrw WHERE unique_key<'2' GROUP BY city ORDER BY COUNT(*) DESC LIMIT 5").show(100, false);
 spark.sql("SELECT city, COUNT(*) FROM ydb.pgimp1.public.fhrw WHERE unique_key<'2' AND unique_key>='1' GROUP BY city ORDER BY COUNT(*) DESC LIMIT 5").show(100, false);
 ```
+
+```bash
+./bin/spark-shell --conf spark.sql.catalog.ydb1=tech.ydb.spark.connector.YdbCatalog \
+  --conf spark.sql.catalog.ydb1.url='grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1gfvslmokutuvt2g019/etnd6mguvlul8qm4psvn' \
+  --conf spark.sql.catalog.ydb1.auth.mode=KEY \
+  --conf spark.sql.catalog.ydb1.auth.keyfile=/home/zinal/Keys/mzinal-dp1.json
+```
+
+```scala
+val df2 = spark.table("ydb1.`ix/test2_fhrw/ix1`")
+df2.filter(df2("closed_date").gt(to_timestamp(lit("2010-02-01")))).show(10, false)
+
+```

@@ -55,7 +55,8 @@ class YdbViaReadTable implements AutoCloseable {
         if (getState() != State.CREATED)
             return;
 
-        LOG.debug("Configuring scan for table {}, range {}", tablePath, keyRange);
+        LOG.debug("Configuring scan for table {}, range {}, columns {}, types {}",
+                tablePath, keyRange, options.getKeyColumns(), options.getKeyTypes());
 
         // Configuring settings for the table scan.
         final ReadTableSettings.Builder rtsb = ReadTableSettings.newBuilder();
@@ -231,20 +232,23 @@ class YdbViaReadTable implements AutoCloseable {
     private void configureRanges(ReadTableSettings.Builder rtsb) {
         final YdbKeyRange.Limit realLeft = keyRange.getFrom();
         final YdbKeyRange.Limit realRight = keyRange.getTo();
-
         if (! realLeft.isUnrestricted()) {
+            TupleValue tv = makeRange(realLeft.getValue());
             if (realLeft.isInclusive()) {
-                rtsb.fromKeyInclusive(makeRange(realLeft.getValue()));
+                rtsb.fromKeyInclusive(tv);
             } else {
-                rtsb.fromKeyExclusive(makeRange(realLeft.getValue()));
+                rtsb.fromKeyExclusive(tv);
             }
+            LOG.debug("fromKey: {} -> {}", realLeft, tv);
         }
         if (! realRight.isUnrestricted()) {
+            TupleValue tv = makeRange(realRight.getValue());
             if (realRight.isInclusive()) {
-                rtsb.toKeyInclusive(makeRange(realRight.getValue()));
+                rtsb.toKeyInclusive(tv);
             } else {
-                rtsb.toKeyExclusive(makeRange(realRight.getValue()));
+                rtsb.toKeyExclusive(tv);
             }
+            LOG.debug("toKey: {} -> {}", realRight, tv);
         }
     }
 

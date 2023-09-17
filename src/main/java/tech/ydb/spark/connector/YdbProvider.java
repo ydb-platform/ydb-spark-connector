@@ -74,13 +74,14 @@ public class YdbProvider extends YdbOptions implements TableProvider, DataSource
                 }
             }
         }
-        LOG.warn("Table identity: {}\n{}\n{}\n{}", ti.logicalName, ti.tablePath, ti.indexName, ti.indexPath);
+        LOG.debug("Table identity: {}, {}, {}, {}",
+                ti.logicalName, ti.tablePath, ti.indexName, ti.indexPath);
         YdbTable retval = connector.getRetryCtx().supplyResult(session -> {
             DescribeTableSettings dts = new DescribeTableSettings();
             dts.setIncludeShardKeyBounds(ti.indexName==null); // shard keys for table case
             Result<TableDescription> td_res = session.describeTable(ti.tablePath, dts).join();
             if (! td_res.isSuccess()) {
-                LOG.warn("Failed to load table description for {}: {}", ti.tablePath, td_res.getStatus());
+                LOG.debug("Failed to load table description for {}: {}", ti.tablePath, td_res.getStatus());
                 return CompletableFuture.completedFuture(Result.fail(td_res.getStatus()));
             }
             TableDescription td = td_res.getValue();
@@ -91,7 +92,7 @@ public class YdbProvider extends YdbOptions implements TableProvider, DataSource
             dts.setIncludeShardKeyBounds(true); // shard keys for index case
             td_res = session.describeTable(ti.indexPath, dts).join();
             if (! td_res.isSuccess()) {
-                LOG.warn("Failed to load index description for {}: {}", ti.indexPath, td_res.getStatus());
+                LOG.debug("Failed to load index description for {}: {}", ti.indexPath, td_res.getStatus());
                 return CompletableFuture.completedFuture(Result.fail(td_res.getStatus()));
             }
             for (TableIndex ix : td.getIndexes()) {
@@ -101,7 +102,7 @@ public class YdbProvider extends YdbOptions implements TableProvider, DataSource
                             new YdbTable(connector, ti.logicalName, ti.tablePath, td, ix, td_ix)) );
                 }
             }
-            LOG.warn("Missing index description in the table for {}", ti.indexPath);
+            LOG.debug("Missing index description in the table for {}", ti.indexPath);
             return CompletableFuture.completedFuture(
                     Result.fail(Status.of(StatusCode.SCHEME_ERROR)
                             .withIssues(Issue.of("Path not found", Issue.Severity.ERROR))));

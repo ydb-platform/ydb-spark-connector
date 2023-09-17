@@ -120,5 +120,5 @@ val df2 = (spark.read.format("ydb")
     .option("auth.mode", "META")
     .option("table", "test2_fhrw/ix1/indexImplTable")
     .load)
-df2.filter(df2("closed_date").gt(to_date(lit("2010-02-01")))).show(10, false)
+df2.filter(df2("closed_date").gt(to_timestamp(lit("2010-02-01")))).show(10, false)
 ```
