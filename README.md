@@ -97,7 +97,7 @@ spark-sql> SELECT * FROM ydb1.`python-examples`.`basic`.episodes LIMIT 5;
 
 Below there are some read operations using Scala:
 
-```
+```scala
 // table access
 spark.table("ydb1.test2_fhrw").select("created_date", "complaint_type", "city").show(10, false)
 
