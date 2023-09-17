@@ -6,6 +6,9 @@
 
 [Cassandra Spark](https://github.com/datastax/spark-cassandra-connector)
 
+https://levelup.gitconnected.com/easy-guide-to-create-a-custom-read-data-source-in-apache-spark-3-194afdc9627a
+https://levelup.gitconnected.com/easy-guide-to-create-a-write-data-source-in-apache-spark-3-f7d1e5a93bdb
+https://github.com/aamargajbhiye/big-data-projects/tree/master/Datasource%20spark3/src/main/java/com/bugdbug/customsource/jdbc
 
 Spark Shell example config:
 
@@ -90,4 +93,17 @@ spark.sql("SELECT MIN(created_date) FROM ydb.test0_fhrw").show();
 spark.sql("SELECT borough, MIN(created_date), MAX(created_date) FROM ydb.test0_fhrw GROUP BY borough ORDER BY borough").show();
 spark.sql("SELECT city, COUNT(*) FROM ydb.pgimp1.public.fhrw WHERE unique_key<'2' GROUP BY city ORDER BY COUNT(*) DESC LIMIT 5").show(100, false);
 spark.sql("SELECT city, COUNT(*) FROM ydb.pgimp1.public.fhrw WHERE unique_key<'2' AND unique_key>='1' GROUP BY city ORDER BY COUNT(*) DESC LIMIT 5").show(100, false);
+```
+
+```bash
+./bin/spark-shell --conf spark.sql.catalog.ydb1=tech.ydb.spark.connector.YdbCatalog \
+  --conf spark.sql.catalog.ydb1.url='grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1gfvslmokutuvt2g019/etnd6mguvlul8qm4psvn' \
+  --conf spark.sql.catalog.ydb1.auth.mode=KEY \
+  --conf spark.sql.catalog.ydb1.auth.keyfile=/home/zinal/Keys/mzinal-dp1.json
+```
+
+```scala
+val df2 = spark.table("ydb1.`ix/test2_fhrw/ix1`")
+df2.filter(df2("closed_date").gt(to_timestamp(lit("2010-02-01")))).show(10, false)
+
 ```

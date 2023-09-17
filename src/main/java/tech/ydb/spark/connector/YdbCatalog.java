@@ -7,11 +7,13 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+
 import org.apache.spark.sql.catalyst.analysis.*;
 import org.apache.spark.sql.connector.catalog.*;
 import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
+
 import tech.ydb.core.Issue;
 import tech.ydb.core.Result;
 import tech.ydb.core.Status;
@@ -46,7 +48,7 @@ public class YdbCatalog extends YdbOptions
     @Override
     public void initialize(String name, CaseInsensitiveStringMap options) {
         this.catalogName = name;
-        this.connector = YdbRegistry.create(name, options);
+        this.connector = YdbRegistry.getOrCreate(name, options);
         this.listIndexes = options.getBoolean(YDB_LIST_INDEXES, false);
     }
 
@@ -61,10 +63,6 @@ public class YdbCatalog extends YdbOptions
         return connector;
     }
 
-    private String getDatabase() {
-        return getConnector().getDatabase();
-    }
-
     private SchemeClient getSchemeClient() {
         return getConnector().getSchemeClient();
     }
@@ -73,67 +71,7 @@ public class YdbCatalog extends YdbOptions
         return getConnector().getRetryCtx();
     }
 
-    private static String safeName(String v) {
-        if (v==null)
-            return "";
-        if (v.contains("/"))
-            v = v.replace("/", "_");
-        if (v.contains("\\"))
-            v = v.replace("\\", "_");
-        return v;
-    }
-
-    private static void mergeLocal(String[] items, StringBuilder sb) {
-        if (items != null) {
-            for (String i : items) {
-                if (sb.length() > 0) sb.append("/");
-                sb.append(safeName(i));
-            }
-        }
-    }
-
-    private String mergePath(String[] items) {
-        if (items==null || items.length==0)
-            return getDatabase();
-        final StringBuilder sb = new StringBuilder();
-        sb.append(getDatabase());
-        mergeLocal(items, sb);
-        return sb.toString();
-    }
-
-    private String mergePath(String[] items, String extra) {
-        if (extra==null) {
-            return mergePath(items);
-        }
-        if (items==null) {
-            return mergePath(new String[] {extra});
-        }
-        String[] work = new String[1 + items.length];
-        System.arraycopy(items, 0, work, 0, items.length);
-        work[items.length] = extra;
-        return mergePath(work);
-    }
-
-    private String mergePath(Identifier id) {
-        final StringBuilder sb = new StringBuilder();
-        sb.append(getDatabase());
-        mergeLocal(id, sb);
-        return sb.toString();
-    }
-
-    private static void mergeLocal(Identifier id, StringBuilder sb) {
-        mergeLocal(id.namespace(), sb);
-        if (sb.length() > 0) sb.append("/");
-        sb.append(safeName(id.name()));
-    }
-
-    private String mergeLocal(Identifier id) {
-        final StringBuilder sb = new StringBuilder();
-        mergeLocal(id, sb);
-        return sb.toString();
-    }
-
-    private <T> T checkStatus(Result<T> res, String[] namespace)
+    public static <T> T checkStatus(Result<T> res, String[] namespace)
             throws NoSuchNamespaceException {
         if (! res.isSuccess()) {
             final Status status = res.getStatus();
@@ -143,12 +81,12 @@ public class YdbCatalog extends YdbOptions
                         throw new NoSuchNamespaceException(namespace);
                 }
             }
-            status.expectSuccess("ydb.listDirectory failed on " + Arrays.toString(namespace));
+            status.expectSuccess("ydb metadata query failed on " + Arrays.toString(namespace));
         }
         return res.getValue();
     }
 
-    private <T> T checkStatus(Result<T> res, Identifier id)
+    public static <T> T checkStatus(Result<T> res, Identifier id)
             throws NoSuchTableException {
         if (!res.isSuccess()) {
             final Status status = res.getStatus();
@@ -159,7 +97,7 @@ public class YdbCatalog extends YdbOptions
                     }
                 }
             }
-            status.expectSuccess("ydb.listDirectory failed on " + id);
+            status.expectSuccess("ydb metadata query failed on " + id);
         }
         return res.getValue();
     }
@@ -356,6 +294,70 @@ public class YdbCatalog extends YdbOptions
             // TODO: recursive removal
             throw new UnsupportedOperationException("Recursive namespace removal is not implemented");
         }
+    }
+
+    private String getDatabase() {
+        return connector.getDatabase();
+    }
+
+    private static String safeName(String v) {
+        if (v==null)
+            return "";
+        if (v.contains("/"))
+            v = v.replace("/", "_");
+        if (v.contains("\\"))
+            v = v.replace("\\", "_");
+        return v;
+    }
+
+    private void mergeLocal(String[] items, StringBuilder sb) {
+        if (items != null) {
+            for (String i : items) {
+                if (sb.length() > 0) sb.append("/");
+                sb.append(safeName(i));
+            }
+        }
+    }
+
+    private void mergeLocal(Identifier id, StringBuilder sb) {
+        mergeLocal(id.namespace(), sb);
+        if (sb.length() > 0) sb.append("/");
+        sb.append(safeName(id.name()));
+    }
+
+    private String mergeLocal(Identifier id) {
+        final StringBuilder sb = new StringBuilder();
+        mergeLocal(id, sb);
+        return sb.toString();
+    }
+
+    private String mergePath(String[] items) {
+        if (items==null || items.length==0)
+            return getDatabase();
+        final StringBuilder sb = new StringBuilder();
+        sb.append(getDatabase());
+        mergeLocal(items, sb);
+        return sb.toString();
+    }
+
+    private String mergePath(String[] items, String extra) {
+        if (extra==null) {
+            return mergePath(items);
+        }
+        if (items==null) {
+            return mergePath(new String[] {extra});
+        }
+        String[] work = new String[1 + items.length];
+        System.arraycopy(items, 0, work, 0, items.length);
+        work[items.length] = extra;
+        return mergePath(work);
+    }
+
+    private String mergePath(Identifier id) {
+        final StringBuilder sb = new StringBuilder();
+        sb.append(getDatabase());
+        mergeLocal(id, sb);
+        return sb.toString();
     }
 
 }

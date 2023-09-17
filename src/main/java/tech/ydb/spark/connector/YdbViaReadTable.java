@@ -26,10 +26,10 @@ import tech.ydb.table.values.Value;
  *
  * @author zinal
  */
-class YdbReadTable implements AutoCloseable {
+class YdbViaReadTable implements AutoCloseable {
 
     private static final org.slf4j.Logger LOG =
-            org.slf4j.LoggerFactory.getLogger(YdbReadTable.class);
+            org.slf4j.LoggerFactory.getLogger(YdbViaReadTable.class);
 
     private final YdbScanOptions options;
     private final YdbKeyRange keyRange;
@@ -44,7 +44,7 @@ class YdbReadTable implements AutoCloseable {
     private volatile GrpcReadStream<ReadTablePart> stream;
     private ResultSetReader current;
 
-    public YdbReadTable(YdbScanOptions options, YdbKeyRange keyRange) {
+    public YdbViaReadTable(YdbScanOptions options, YdbKeyRange keyRange) {
         this.options = options;
         this.keyRange = keyRange;
         this.queue = new ArrayBlockingQueue<>(100);
@@ -55,7 +55,8 @@ class YdbReadTable implements AutoCloseable {
         if (getState() != State.CREATED)
             return;
 
-        LOG.debug("Configuring scan for table {}, range {}", tablePath, keyRange);
+        LOG.debug("Configuring scan for table {}, range {}, columns {}, types {}",
+                tablePath, keyRange, options.getKeyColumns(), options.getKeyTypes());
 
         // Configuring settings for the table scan.
         final ReadTableSettings.Builder rtsb = ReadTableSettings.newBuilder();
@@ -83,7 +84,7 @@ class YdbReadTable implements AutoCloseable {
         rtsb.withRequestTimeout(Duration.ofHours(8));
 
         // Create or acquire the connector object.
-        YdbConnector c = YdbRegistry.create(options.getCatalogName(), options.getConnectOptions());
+        YdbConnector c = YdbRegistry.getOrCreate(options.getCatalogName(), options.getConnectOptions());
         // The full table path is needed.
         tablePath = options.getTablePath();
         // TODO: add setting for the maximum session creation duration.
@@ -231,20 +232,23 @@ class YdbReadTable implements AutoCloseable {
     private void configureRanges(ReadTableSettings.Builder rtsb) {
         final YdbKeyRange.Limit realLeft = keyRange.getFrom();
         final YdbKeyRange.Limit realRight = keyRange.getTo();
-
         if (! realLeft.isUnrestricted()) {
+            TupleValue tv = makeRange(realLeft.getValue());
             if (realLeft.isInclusive()) {
-                rtsb.fromKeyInclusive(makeRange(realLeft.getValue()));
+                rtsb.fromKeyInclusive(tv);
             } else {
-                rtsb.fromKeyExclusive(makeRange(realLeft.getValue()));
+                rtsb.fromKeyExclusive(tv);
             }
+            LOG.debug("fromKey: {} -> {}", realLeft, tv);
         }
         if (! realRight.isUnrestricted()) {
+            TupleValue tv = makeRange(realRight.getValue());
             if (realRight.isInclusive()) {
-                rtsb.toKeyInclusive(makeRange(realRight.getValue()));
+                rtsb.toKeyInclusive(tv);
             } else {
-                rtsb.toKeyExclusive(makeRange(realRight.getValue()));
+                rtsb.toKeyExclusive(tv);
             }
+            LOG.debug("toKey: {} -> {}", realRight, tv);
         }
     }
 

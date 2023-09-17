@@ -7,17 +7,16 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import org.apache.spark.sql.connector.catalog.SupportsRead;
-import org.apache.spark.sql.connector.catalog.Table;
-import org.apache.spark.sql.connector.catalog.TableCapability;
+
+import org.apache.spark.sql.connector.catalog.*;
 import org.apache.spark.sql.connector.expressions.Expressions;
 import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.connector.read.ScanBuilder;
-import org.apache.spark.sql.types.DataType;
-import org.apache.spark.sql.types.Metadata;
-import org.apache.spark.sql.types.StructField;
-import org.apache.spark.sql.types.StructType;
+import org.apache.spark.sql.connector.write.LogicalWriteInfo;
+import org.apache.spark.sql.connector.write.WriteBuilder;
+import org.apache.spark.sql.types.*;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
+
 import tech.ydb.table.description.KeyRange;
 import tech.ydb.table.description.TableColumn;
 import tech.ydb.table.description.TableDescription;
@@ -28,7 +27,7 @@ import tech.ydb.table.description.TableIndex;
  *
  * @author zinal
  */
-public class YdbTable implements Table, SupportsRead {
+public class YdbTable implements Table, SupportsRead, SupportsWrite {
 
     private static final org.slf4j.Logger LOG =
             org.slf4j.LoggerFactory.getLogger(YdbTable.class);
@@ -42,17 +41,25 @@ public class YdbTable implements Table, SupportsRead {
 
     private final YdbConnector connector;
     private final String logicalName;
-    private final String physicalName;
+    private final String tablePath;
     private final List<TableColumn> columns;
     private final List<String> keyColumns;
     private final List<YdbFieldType> keyTypes;
     private final List<YdbKeyRange> partitions;
     private StructType schema;
 
-    YdbTable(YdbConnector connector, String logicalName, String physicalName, TableDescription td) {
+    /**
+     * Create table provider for the real YDB table.
+     *
+     * @param connector YDB connector
+     * @param logicalName Table logical name
+     * @param actualPath Table path
+     * @param td Table description object obtained from YDB
+     */
+    YdbTable(YdbConnector connector, String logicalName, String tablePath, TableDescription td) {
         this.connector = connector;
         this.logicalName = logicalName;
-        this.physicalName = physicalName;
+        this.tablePath = tablePath;
         this.columns = td.getColumns();
         this.keyColumns = td.getPrimaryKeys();
         this.keyTypes = new ArrayList<>();
@@ -68,14 +75,24 @@ public class YdbTable implements Table, SupportsRead {
             }
         }
         LOG.debug("Loaded table {} with {} columns and {} partitions",
-                this.physicalName, this.columns.size(), this.partitions.size());
+                this.tablePath, this.columns.size(), this.partitions.size());
     }
 
-    YdbTable(YdbConnector connector, String logicalName, String physicalName,
+    /**
+     * Create table provider for YDB index.
+     *
+     * @param connector YDB connector
+     * @param logicalName Index table logical name
+     * @param tablePath Table path for the actual table (not index)
+     * @param td Table description object for the actual table
+     * @param ix Index information entry
+     * @param td_ix Table description object for the index table
+     */
+    YdbTable(YdbConnector connector, String logicalName, String tablePath,
             TableDescription td, TableIndex ix, TableDescription td_ix) {
         this.connector = connector;
         this.logicalName = logicalName;
-        this.physicalName = physicalName + "/" + ix.getName() + "/indexImplTable";
+        this.tablePath = tablePath + "/" + ix.getName() + "/indexImplTable";
         this.columns = new ArrayList<>();
         this.keyColumns = ix.getColumns();
         this.keyTypes = new ArrayList<>();
@@ -110,7 +127,7 @@ public class YdbTable implements Table, SupportsRead {
             }
         }
         LOG.debug("Loaded index {} with {} columns and {} partitions",
-                this.physicalName, this.columns.size(), this.partitions.size());
+                this.tablePath, this.columns.size(), this.partitions.size());
     }
 
     private static Map<String, TableColumn> buildColumnsMap(TableDescription td) {
@@ -121,17 +138,9 @@ public class YdbTable implements Table, SupportsRead {
         return m;
     }
 
-    final YdbConnector getConnector() {
-        return connector;
-    }
-
     @Override
     public String name() {
         return logicalName;
-    }
-
-    public String tablePath() {
-        return physicalName;
     }
 
     @Override
@@ -144,13 +153,58 @@ public class YdbTable implements Table, SupportsRead {
 
     @Override
     public Map<String, String> properties() {
-        // TODO: return primary key + storage characteristics
-        return Collections.emptyMap();
+        final Map<String,String> m = new HashMap<>();
+        StringBuilder sb = new StringBuilder();
+        for (String kc : keyColumns) {
+            if (sb.length()>0)
+                sb.append(", ");
+            sb.append("`").append(kc).append("`");
+        }
+        m.put("primary_key", sb.toString());
+        m.put("table_path", tablePath);
+        return m;
     }
 
     @Override
     public Set<TableCapability> capabilities() {
         return CAPABILITIES;
+    }
+
+    @Override
+    public Transform[] partitioning() {
+        return new Transform[] {
+            Expressions.bucket(partitions.size(), keyColumns.toArray(new String[]{}))
+        };
+    }
+
+    @Override
+    public ScanBuilder newScanBuilder(CaseInsensitiveStringMap options) {
+        return new YdbScanBuilder(this);
+    }
+
+    @Override
+    public WriteBuilder newWriteBuilder(LogicalWriteInfo info) {
+        throw new UnsupportedOperationException("Not supported yet.");
+    }
+
+    final YdbConnector getConnector() {
+        return connector;
+    }
+
+    final String tablePath() {
+        return tablePath;
+    }
+
+    final List<String> keyColumns() {
+        return keyColumns;
+    }
+
+    final List<YdbFieldType> keyTypes() {
+        return keyTypes;
+    }
+
+    final List<YdbKeyRange> partitions() {
+        return partitions;
     }
 
     private StructField[] mapFields(List<TableColumn> columns) {
@@ -169,31 +223,8 @@ public class YdbTable implements Table, SupportsRead {
     }
 
     @Override
-    public Transform[] partitioning() {
-        return keyColumns.stream().map(v -> Expressions.identity(v)).toArray(Transform[]::new);
-    }
-
-    @Override
-    public ScanBuilder newScanBuilder(CaseInsensitiveStringMap options) {
-        return new YdbScanBuilder(this);
-    }
-
-    final List<String> keyColumns() {
-        return keyColumns;
-    }
-
-    final List<YdbFieldType> keyTypes() {
-        return keyTypes;
-    }
-
-    final List<YdbKeyRange> partitions() {
-        return partitions;
-    }
-
-    @Override
     public String toString() {
-        return "YdbTable{" + "connector=" + connector.getCatalogName()
-                + ", physicalName=" + physicalName + '}';
+        return "YdbTable:" + connector.getCatalogName() + ":" + tablePath;
     }
 
 }

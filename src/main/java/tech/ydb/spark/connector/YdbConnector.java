@@ -3,6 +3,7 @@ package tech.ydb.spark.connector;
 import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.Map;
+
 import tech.ydb.auth.iam.CloudAuthHelper;
 import tech.ydb.auth.iam.CloudAuthIdentity;
 import tech.ydb.core.auth.StaticCredentials;
@@ -18,7 +19,7 @@ import tech.ydb.table.TableClient;
  *
  * @author zinal
  */
-class YdbConnector extends YdbOptions implements AutoCloseable {
+final class YdbConnector extends YdbOptions implements AutoCloseable {
 
     private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(YdbConnector.class);
 

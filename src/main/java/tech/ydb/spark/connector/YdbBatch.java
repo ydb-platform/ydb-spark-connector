@@ -40,7 +40,7 @@ public class YdbBatch implements Batch {
         InputPartition[] out = partitions.stream()
                 .map(kr -> kr.intersect(predicates))
                 .filter(kr -> ! kr.isEmpty())
-                .map(kr -> new YdbInputPartition(kr))
+                .map(kr -> new YdbTablePartition(kr))
                 .toArray(InputPartition[]::new);
         if (LOG.isDebugEnabled()) {
             LOG.debug("Input partitions count {}, filtered partitions count {}",

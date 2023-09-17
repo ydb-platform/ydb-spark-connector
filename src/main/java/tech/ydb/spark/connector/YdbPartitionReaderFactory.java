@@ -20,6 +20,6 @@ public class YdbPartitionReaderFactory implements PartitionReaderFactory {
 
     @Override
     public PartitionReader<InternalRow> createReader(InputPartition partition) {
-        return new YdbPartitionReader(options, (YdbInputPartition) partition);
+        return new YdbPartitionReader(options, (YdbTablePartition) partition);
     }
 }

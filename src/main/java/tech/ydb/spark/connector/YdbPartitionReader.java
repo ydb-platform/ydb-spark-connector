@@ -15,10 +15,10 @@ public class YdbPartitionReader implements PartitionReader<InternalRow> {
             org.slf4j.LoggerFactory.getLogger(YdbPartitionReader.class);
 
     private final YdbScanOptions options;
-    private final YdbInputPartition partition;
-    private YdbReadTable query;
+    private final YdbTablePartition partition;
+    private YdbViaReadTable query;
 
-    public YdbPartitionReader(YdbScanOptions options, YdbInputPartition partition) {
+    public YdbPartitionReader(YdbScanOptions options, YdbTablePartition partition) {
         this.options = options;
         this.partition = partition;
     }
@@ -28,7 +28,7 @@ public class YdbPartitionReader implements PartitionReader<InternalRow> {
         if (query == null) {
             LOG.debug("Preparing scan for table {} at partition {}",
                     options.getTablePath(), partition);
-            query = new YdbReadTable(options, partition.getRange());
+            query = new YdbViaReadTable(options, partition.getRange());
             query.prepare();
             LOG.debug("Scan prepared, ready to fetch...");
         }

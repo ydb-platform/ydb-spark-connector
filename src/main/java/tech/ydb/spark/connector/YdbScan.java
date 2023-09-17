@@ -2,6 +2,9 @@ package tech.ydb.spark.connector;
 
 import org.apache.spark.sql.connector.read.Batch;
 import org.apache.spark.sql.connector.read.Scan;
+import org.apache.spark.sql.connector.read.SupportsReportPartitioning;
+import org.apache.spark.sql.connector.read.partitioning.Partitioning;
+import org.apache.spark.sql.connector.read.partitioning.UnknownPartitioning;
 import org.apache.spark.sql.types.StructType;
 
 /**
@@ -9,7 +12,7 @@ import org.apache.spark.sql.types.StructType;
  *
  * @author zinal
  */
-public class YdbScan implements Scan {
+public class YdbScan implements Scan, SupportsReportPartitioning {
 
     private final YdbTable table;
     private final YdbScanOptions options;
@@ -35,5 +38,13 @@ public class YdbScan implements Scan {
     @Override
     public Batch toBatch() {
         return new YdbBatch(options);
+    }
+
+    @Override
+    public Partitioning outputPartitioning() {
+        // TODO: KeyGroupedPartitioning (requires HasPartitionKey for partitions)
+        if (options.getPartitions() == null || options.getPartitions().isEmpty())
+            return new UnknownPartitioning(1);
+        return new UnknownPartitioning(options.getPartitions().size());
     }
 }

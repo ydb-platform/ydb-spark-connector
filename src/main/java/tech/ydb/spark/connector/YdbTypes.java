@@ -301,7 +301,7 @@ public class YdbTypes {
                 }
                 if (v instanceof Number) {
                     return PrimitiveValue.newDatetime(
-                            Instant.ofEpochMilli(((Number)v).longValue()));
+                            Instant.ofEpochMilli(((Number)v).longValue() / 1000L));
                 }
                 try {
                     if (v instanceof String || v instanceof UTF8String) {
@@ -315,7 +315,7 @@ public class YdbTypes {
                 }
                 if (v instanceof Number) {
                     return PrimitiveValue.newTimestamp(
-                            Instant.ofEpochMilli(((Number)v).longValue()));
+                            Instant.ofEpochMilli(((Number)v).longValue() / 1000L));
                 }
                 try {
                     if (v instanceof String || v instanceof UTF8String) {
