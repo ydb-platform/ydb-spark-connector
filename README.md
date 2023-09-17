@@ -95,7 +95,30 @@ spark-sql> SELECT * FROM ydb.`python-examples`.`basic`.episodes LIMIT 5;
 Below there are some read operations using Scala:
 
 ```
-spark.table("ydb.test0_fhrw").select("created_date", "complaint_type", "city").show(10, false);
+// table access
+spark.table("ydb.test2_fhrw").select("created_date", "complaint_type", "city").show(10, false)
 
-spark.table("ydb.test0_fhrw").write().parquet("test0_fhrw");
+// index access - note the backticks
+spark.table("ydb.`ix/test2_fhrw/ix1`").show(10, false)
+
+// read from ydb, write to parquet files
+spark.table("ydb.test2_fhrw").write.parquet("s3a://mzinal-dproc1/tests/test2_fhrw");
+
+val ydb_url = "grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1gfvslmokutuvt2g019/etnd6mguvlul8qm4psvn"
+
+// direct specification of connection properties
+val df1 = (spark.read.format("ydb")
+    .option("url", ydb_url)
+    .option("auth.mode", "META")
+    .option("table", "test2_fhrw")
+    .load)
+df1.select("created_date", "complaint_type", "city").show(10, false)
+
+// same for index table access - note the "indexImplTable" name
+val df2 = (spark.read.format("ydb")
+    .option("url", ydb_url)
+    .option("auth.mode", "META")
+    .option("table", "test2_fhrw/ix1/indexImplTable")
+    .load)
+df2.filter(df2("closed_date").gt(to_date(lit("2010-02-01")))).show(10, false)
 ```

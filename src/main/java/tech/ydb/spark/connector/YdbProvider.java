@@ -8,6 +8,7 @@ import org.apache.spark.sql.connector.catalog.TableProvider;
 import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
+import org.apache.spark.sql.sources.DataSourceRegister;
 
 import tech.ydb.core.Issue;
 import tech.ydb.core.Result;
@@ -22,9 +23,38 @@ import tech.ydb.table.settings.DescribeTableSettings;
  * 
  * @author zinal
  */
-public class YdbProvider extends YdbOptions implements TableProvider {
+public class YdbProvider extends YdbOptions implements TableProvider, DataSourceRegister {
+
+    private static final org.slf4j.Logger LOG =
+            org.slf4j.LoggerFactory.getLogger(YdbProvider.class);
 
     private YdbTable table;
+
+    /**
+     * "Implementations must have a public, 0-arg constructor".
+     */
+    public YdbProvider() {
+    }
+
+    @Override
+    public String shortName() {
+        return "ydb";
+    }
+
+    @Override
+    public StructType inferSchema(CaseInsensitiveStringMap options) {
+        return getOrLoadTable(options).schema();
+    }
+
+    @Override
+    public Transform[] inferPartitioning(CaseInsensitiveStringMap options) {
+        return getOrLoadTable(options).partitioning();
+    }
+
+    @Override
+    public Table getTable(StructType schema, Transform[] partitioning, Map<String, String> properties) {
+        return getOrLoadTable(properties);
+    }
 
     private YdbTable getOrLoadTable(Map<String, String> props) {
         // Check that table path is provided
@@ -44,28 +74,34 @@ public class YdbProvider extends YdbOptions implements TableProvider {
                 }
             }
         }
+        LOG.warn("Table identity: {}\n{}\n{}\n{}", ti.logicalName, ti.tablePath, ti.indexName, ti.indexPath);
         YdbTable retval = connector.getRetryCtx().supplyResult(session -> {
             DescribeTableSettings dts = new DescribeTableSettings();
             dts.setIncludeShardKeyBounds(ti.indexName==null); // shard keys for table case
             Result<TableDescription> td_res = session.describeTable(ti.tablePath, dts).join();
-            if (! td_res.isSuccess())
+            if (! td_res.isSuccess()) {
+                LOG.warn("Failed to load table description for {}: {}", ti.tablePath, td_res.getStatus());
                 return CompletableFuture.completedFuture(Result.fail(td_res.getStatus()));
+            }
             TableDescription td = td_res.getValue();
             if (ti.indexName==null) {
                 return CompletableFuture.completedFuture( Result.success(
                         new YdbTable(connector, ti.logicalName, ti.tablePath, td)) );
             }
             dts.setIncludeShardKeyBounds(true); // shard keys for index case
-            for (TableIndex ix : td.getIndexes()) {
-                if (! ti.indexName.equals(ix.getName()))
-                    continue;
-                td_res = session.describeTable(ti.indexPath, dts).join();
-                if (! td_res.isSuccess())
-                    return CompletableFuture.completedFuture(Result.fail(td_res.getStatus()));
-                TableDescription td_ix = td_res.getValue();
-                return CompletableFuture.completedFuture( Result.success(
-                        new YdbTable(connector, ti.logicalName, ti.tablePath, td, ix, td_ix)) );
+            td_res = session.describeTable(ti.indexPath, dts).join();
+            if (! td_res.isSuccess()) {
+                LOG.warn("Failed to load index description for {}: {}", ti.indexPath, td_res.getStatus());
+                return CompletableFuture.completedFuture(Result.fail(td_res.getStatus()));
             }
+            for (TableIndex ix : td.getIndexes()) {
+                if (ti.indexName.equals(ix.getName())) {
+                    TableDescription td_ix = td_res.getValue();
+                    return CompletableFuture.completedFuture( Result.success(
+                            new YdbTable(connector, ti.logicalName, ti.tablePath, td, ix, td_ix)) );
+                }
+            }
+            LOG.warn("Missing index description in the table for {}", ti.indexPath);
             return CompletableFuture.completedFuture(
                     Result.fail(Status.of(StatusCode.SCHEME_ERROR)
                             .withIssues(Issue.of("Path not found", Issue.Severity.ERROR))));
@@ -76,23 +112,8 @@ public class YdbProvider extends YdbOptions implements TableProvider {
         return retval;
     }
 
-    @Override
-    public StructType inferSchema(CaseInsensitiveStringMap options) {
-        return getOrLoadTable(options).schema();
-    }
-
-    @Override
-    public Transform[] inferPartitioning(CaseInsensitiveStringMap options) {
-        return getOrLoadTable(options).partitioning();
-    }
-
-    @Override
-    public Table getTable(StructType schema, Transform[] partitioning, Map<String, String> properties) {
-        return getOrLoadTable(properties);
-    }
-
     /**
-     * Implementation class - made public to allow tests.
+     * Implementation details class - made public to allow tests.
      */
     public static final class TableIdentity {
         public final String tablePath;
@@ -132,13 +153,19 @@ public class YdbProvider extends YdbOptions implements TableProvider {
                 localIxPath = localPath;
                 String tabName =  parts[parts.length-3];
                 final StringBuilder sbLogical = new StringBuilder(), sbPath = new StringBuilder();
-                sbPath.append(database);
+                sbPath.append(database).append("/");
                 for (int ix=0; ix<parts.length-3; ++ix) {
-                    final String part = parts[ix];
-                    sbPath.append("/").append(part);
-                    if (sbLogical.length()>0)
+                    if (sbLogical.length()>0) {
+                        sbPath.append("/");
                         sbLogical.append("/");
+                    }
+                    final String part = parts[ix];
+                    sbPath.append(part);
                     sbLogical.append(part);
+                }
+                if (sbLogical.length()>0) {
+                    sbPath.append("/");
+                    sbLogical.append("/");
                 }
                 sbPath.append(tabName);
                 sbLogical.append("ix_").append(tabName).append("_").append(localIxName);
