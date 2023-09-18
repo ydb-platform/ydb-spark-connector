@@ -32,6 +32,7 @@ class YdbViaReadTable implements AutoCloseable {
             org.slf4j.LoggerFactory.getLogger(YdbViaReadTable.class);
 
     private final YdbScanOptions options;
+    private final YdbTypes types;
     private final YdbKeyRange keyRange;
     private final ArrayBlockingQueue<QueueItem> queue;
     private String tablePath;
@@ -46,6 +47,7 @@ class YdbViaReadTable implements AutoCloseable {
 
     public YdbViaReadTable(YdbScanOptions options, YdbKeyRange keyRange) {
         this.options = options;
+        this.types = options.getTypes();
         this.keyRange = keyRange;
         this.queue = new ArrayBlockingQueue<>(100);
         this.state = State.CREATED;
@@ -171,7 +173,7 @@ class YdbViaReadTable implements AutoCloseable {
         final int count = outIndexes.length;
         final ArrayList<Object> values = new ArrayList(count);
         for (int i=0; i<count; ++i) {
-            values.add(YdbTypes.convertFromYdb(current.getColumn(outIndexes[i])));
+            values.add(types.convertFromYdb(current.getColumn(outIndexes[i])));
         }
         return InternalRow.fromSeq(JavaConversions.asScalaBuffer(values));
     }
@@ -218,10 +220,10 @@ class YdbViaReadTable implements AutoCloseable {
 
     @SuppressWarnings("unchecked")
     private TupleValue makeRange(List<Object> values) {
-        final List<YdbFieldType> types = options.getKeyTypes();
+        final List<YdbFieldType> keyTypes = options.getKeyTypes();
         final List<Value<?>> l = new ArrayList<>(values.size());
         for (int i=0; i<values.size(); ++i) {
-            Value<?> v = YdbTypes.convertToYdb(values.get(i), types.get(i));
+            Value<?> v = types.convertToYdb(values.get(i), keyTypes.get(i));
             if (! v.getType().getKind().equals(Type.Kind.OPTIONAL))
                 v = v.makeOptional();
             l.add(v);

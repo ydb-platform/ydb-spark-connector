@@ -1,11 +1,13 @@
 package tech.ydb.spark.connector;
 
+import java.io.Serializable;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeParseException;
+import java.util.Map;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.Decimal;
@@ -24,35 +26,19 @@ import tech.ydb.table.values.Value;
  *
  * @author zinal
  */
-public class YdbTypes {
+public final class YdbTypes implements Serializable {
 
-    public static Object max(Object o1, Object o2) {
-        if (o1==null || o1==o2) {
-            return o2;
-        }
-        if (o2==null) {
-            return o1;
-        }
-        if ((o2 instanceof Comparable) && (o1 instanceof Comparable)) {
-            return ((Comparable)o2).compareTo(o1) > 0 ? o2 : o1;
-        }
-        return o2;
+    private final YdbTypeSettings typeSettings;
+
+    public YdbTypes(YdbTypeSettings typeSettings) {
+        this.typeSettings = typeSettings;
     }
 
-    public static Object min(Object o1, Object o2) {
-        if (o1==null || o1==o2) {
-            return o2;
-        }
-        if (o2==null) {
-            return o1;
-        }
-        if ((o2 instanceof Comparable) && (o1 instanceof Comparable)) {
-            return ((Comparable)o2).compareTo(o1) < 0 ? o2 : o1;
-        }
-        return o2;
+    public YdbTypes(Map<String,String> props) {
+        this(new YdbTypeSettings(props));
     }
 
-    public static boolean mapNullable(tech.ydb.table.values.Type yt) {
+    public boolean mapNullable(tech.ydb.table.values.Type yt) {
         switch (yt.getKind()) {
             case OPTIONAL:
                 return true;
@@ -61,7 +47,7 @@ public class YdbTypes {
         }
     }
 
-    public static DataType mapType(tech.ydb.table.values.Type yt) {
+    public DataType mapType(tech.ydb.table.values.Type yt) {
         if (yt==null)
             return null;
         switch (yt.getKind()) {
@@ -109,31 +95,45 @@ public class YdbTypes {
                 return DataTypes.StringType;
             case Json:
                 return DataTypes.StringType;
+            case JsonDocument:
+                return DataTypes.StringType;
             case Uuid:
                 return DataTypes.StringType;
             case Date:
+                if (typeSettings.isDateAsString())
+                    return DataTypes.StringType;
                 return DataTypes.DateType;
             case Datetime:
+                if (typeSettings.isDateAsString())
+                    return DataTypes.StringType;
                 return DataTypes.TimestampType;
             case Timestamp:
+                if (typeSettings.isDateAsString())
+                    return DataTypes.StringType;
                 return DataTypes.TimestampType;
             case Interval:
+                if (typeSettings.isDateAsString())
+                    return DataTypes.StringType;
                 return DataTypes.CalendarIntervalType;
             case TzDate:
+                if (typeSettings.isDateAsString())
+                    return DataTypes.StringType;
                 return DataTypes.DateType;
             case TzDatetime:
+                if (typeSettings.isDateAsString())
+                    return DataTypes.StringType;
                 return DataTypes.TimestampType;
             case TzTimestamp:
+                if (typeSettings.isDateAsString())
+                    return DataTypes.StringType;
                 return DataTypes.TimestampType;
-            case JsonDocument:
-                return DataTypes.StringType;
             case DyNumber:
                 return DataTypes.createDecimalType(38, 10);
         }
         return null;
     }
 
-    public static Object convertFromYdb(ValueReader vr) {
+    public Object convertFromYdb(ValueReader vr) {
         if (vr==null)
             return null;
         Type t = vr.getType();
@@ -150,9 +150,20 @@ public class YdbTypes {
                     case Bytes:
                         return vr.getBytes();
                     case Date:
+                        if (typeSettings.isDateAsString()) {
+                            return UTF8String.fromString(vr.getDate().toString());
+                        }
                         return (int) vr.getDate().toEpochDay();
                     case Datetime:
+                        if (typeSettings.isDateAsString()) {
+                            return UTF8String.fromString(vr.getDatetime().toString());
+                        }
                         return vr.getDatetime().toInstant(ZoneOffset.UTC).toEpochMilli() * 1000L;
+                    case Timestamp:
+                        if (typeSettings.isDateAsString()) {
+                            return UTF8String.fromString(vr.getTimestamp().toString());
+                        }
+                        return vr.getTimestamp().toEpochMilli() * 1000L;
                     case Double:
                         return vr.getDouble();
                     case Float:
@@ -173,8 +184,6 @@ public class YdbTypes {
                         return UTF8String.fromString(vr.getJsonDocument());
                     case Text:
                         return UTF8String.fromString(vr.getText());
-                    case Timestamp:
-                        return vr.getTimestamp().toEpochMilli() * 1000L;
                     case Uint16:
                         return vr.getUint16();
                     case Uint32:
@@ -193,7 +202,7 @@ public class YdbTypes {
         return null;
     }
 
-    public static Object convertFromYdb(Value<?> v) {
+    public Object convertFromYdb(Value<?> v) {
         if (v==null)
             return null;
         Type t = v.getType();
@@ -213,10 +222,21 @@ public class YdbTypes {
                     case Bytes:
                         return v.asData().getBytes();
                     case Date:
+                        if (typeSettings.isDateAsString()) {
+                            return UTF8String.fromString(v.asData().getDate().toString());
+                        }
                         return (int) v.asData().getDate().toEpochDay();
                     case Datetime:
+                        if (typeSettings.isDateAsString()) {
+                            return UTF8String.fromString(v.asData().getDatetime().toString());
+                        }
                         return v.asData().getDatetime()
                                 .toInstant(ZoneOffset.UTC).toEpochMilli() * 1000L;
+                    case Timestamp:
+                        if (typeSettings.isDateAsString()) {
+                            return UTF8String.fromString(v.asData().getTimestamp().toString());
+                        }
+                        return v.asData().getTimestamp().toEpochMilli() * 1000L;
                     case Double:
                         return v.asData().getDouble();
                     case Float:
@@ -237,8 +257,6 @@ public class YdbTypes {
                         return UTF8String.fromString(v.asData().getJsonDocument());
                     case Text:
                         return UTF8String.fromString(v.asData().getText());
-                    case Timestamp:
-                        return v.asData().getTimestamp().toEpochMilli() * 1000L;
                     case Uint16:
                         return v.asData().getUint16();
                     case Uint32:
@@ -255,7 +273,7 @@ public class YdbTypes {
         return null;
     }
 
-    public static Value<?> convertToYdb(Object v, YdbFieldType t) {
+    public Value<?> convertToYdb(Object v, YdbFieldType t) {
         switch (t) {
             case Bool:
                 if (v==null) {
@@ -493,9 +511,35 @@ public class YdbTypes {
         }
     }
 
-    private static UnsupportedOperationException badConversion(Object v, YdbFieldType t) {
+    private UnsupportedOperationException badConversion(Object v, YdbFieldType t) {
         throw new UnsupportedOperationException("Cannot convert value [" + v + "] of class " +
                 v.getClass().getName() + " to type " + t);
+    }
+
+    public static Object max(Object o1, Object o2) {
+        if (o1==null || o1==o2) {
+            return o2;
+        }
+        if (o2==null) {
+            return o1;
+        }
+        if ((o2 instanceof Comparable) && (o1 instanceof Comparable)) {
+            return ((Comparable)o2).compareTo(o1) > 0 ? o2 : o1;
+        }
+        return o2;
+    }
+
+    public static Object min(Object o1, Object o2) {
+        if (o1==null || o1==o2) {
+            return o2;
+        }
+        if (o2==null) {
+            return o1;
+        }
+        if ((o2 instanceof Comparable) && (o1 instanceof Comparable)) {
+            return ((Comparable)o2).compareTo(o1) < 0 ? o2 : o1;
+        }
+        return o2;
     }
 
 }

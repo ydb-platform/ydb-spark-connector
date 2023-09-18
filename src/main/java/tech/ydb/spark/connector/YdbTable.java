@@ -40,6 +40,7 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
     }
 
     private final YdbConnector connector;
+    private final YdbTypes types;
     private final String logicalName;
     private final String tablePath;
     private final List<TableColumn> columns;
@@ -52,12 +53,15 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
      * Create table provider for the real YDB table.
      *
      * @param connector YDB connector
+     * @param types YDB type convertor
      * @param logicalName Table logical name
      * @param actualPath Table path
      * @param td Table description object obtained from YDB
      */
-    YdbTable(YdbConnector connector, String logicalName, String tablePath, TableDescription td) {
+    YdbTable(YdbConnector connector, YdbTypes types,
+            String logicalName, String tablePath, TableDescription td) {
         this.connector = connector;
+        this.types = types;
         this.logicalName = logicalName;
         this.tablePath = tablePath;
         this.columns = td.getColumns();
@@ -71,7 +75,7 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
         }
         if (td.getKeyRanges()!=null) {
             for (KeyRange kr : td.getKeyRanges()) {
-                partitions.add(new YdbKeyRange(kr));
+                partitions.add(new YdbKeyRange(kr, types));
             }
         }
         LOG.debug("Loaded table {} with {} columns and {} partitions",
@@ -79,18 +83,33 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
     }
 
     /**
+     * Create table provider for the real YDB table.
+     *
+     * @param connector YDB connector
+     * @param logicalName Table logical name
+     * @param actualPath Table path
+     * @param td Table description object obtained from YDB
+     */
+    YdbTable(YdbConnector connector, String logicalName, String tablePath, TableDescription td) {
+        this(connector, connector.getDefaultTypes(), logicalName, tablePath, td);
+    }
+
+    /**
      * Create table provider for YDB index.
      *
      * @param connector YDB connector
+     * @param types YDB type convertor
      * @param logicalName Index table logical name
      * @param tablePath Table path for the actual table (not index)
      * @param td Table description object for the actual table
      * @param ix Index information entry
      * @param td_ix Table description object for the index table
      */
-    YdbTable(YdbConnector connector, String logicalName, String tablePath,
+    YdbTable(YdbConnector connector, YdbTypes types,
+            String logicalName, String tablePath,
             TableDescription td, TableIndex ix, TableDescription td_ix) {
         this.connector = connector;
+        this.types = types;
         this.logicalName = logicalName;
         this.tablePath = tablePath + "/" + ix.getName() + "/indexImplTable";
         this.columns = new ArrayList<>();
@@ -123,11 +142,26 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
         }
         if (td_ix.getKeyRanges()!=null) {
             for (KeyRange kr : td_ix.getKeyRanges()) {
-                partitions.add(new YdbKeyRange(kr));
+                partitions.add(new YdbKeyRange(kr, connector.getDefaultTypes()));
             }
         }
         LOG.debug("Loaded index {} with {} columns and {} partitions",
                 this.tablePath, this.columns.size(), this.partitions.size());
+    }
+
+    /**
+     * Create table provider for YDB index.
+     *
+     * @param connector YDB connector
+     * @param logicalName Index table logical name
+     * @param tablePath Table path for the actual table (not index)
+     * @param td Table description object for the actual table
+     * @param ix Index information entry
+     * @param td_ix Table description object for the index table
+     */
+    YdbTable(YdbConnector connector, String logicalName, String tablePath,
+            TableDescription td, TableIndex ix, TableDescription td_ix) {
+        this(connector, connector.getDefaultTypes(), logicalName, tablePath, td, ix, td_ix);
     }
 
     private static Map<String, TableColumn> buildColumnsMap(TableDescription td) {
@@ -191,6 +225,10 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
         return connector;
     }
 
+    final YdbTypes getTypes() {
+        return types;
+    }
+
     final String tablePath() {
         return tablePath;
     }
@@ -210,7 +248,7 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
     private StructField[] mapFields(List<TableColumn> columns) {
         final List<StructField> fields = new ArrayList<>();
         for (TableColumn tc : columns) {
-            final DataType dataType = YdbTypes.mapType(tc.getType());
+            final DataType dataType = types.mapType(tc.getType());
             if (dataType != null)
                 fields.add(mapField(tc, dataType));
         }
@@ -218,8 +256,7 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
     }
 
     private StructField mapField(TableColumn tc, DataType dataType) {
-        // TODO: mapping dictionary support (specifically for dates).
-        return new StructField(tc.getName(), dataType, YdbTypes.mapNullable(tc.getType()), Metadata.empty());
+        return new StructField(tc.getName(), dataType, types.mapNullable(tc.getType()), Metadata.empty());
     }
 
     @Override

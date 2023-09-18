@@ -55,6 +55,11 @@ public abstract class YdbOptions {
     public static final String YDB_LIST_INDEXES = "list.indexes";
 
     /**
+     * true to return dates and timestamps as strings, false otherwise. Default false.
+     */
+    public static final String YDB_DATE_AS_STRING = "date.as.string";
+
+    /**
      * YDB table name to be accessed, in YDB syntax ('/' as path separators).
      */
     public static final String YDB_TABLE = "table";

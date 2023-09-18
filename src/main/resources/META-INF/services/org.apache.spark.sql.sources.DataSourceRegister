@@ -1,1 +1,1 @@
-tech.ydb.spark.connector.YdbProvider
+tech.ydb.spark.connector.YdbTableProvider

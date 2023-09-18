@@ -28,8 +28,8 @@ public class YdbKeyRange implements Serializable {
         this.to = (to==null) ? NO_LIMIT : cleanup(to);
     }
 
-    public YdbKeyRange(KeyRange kr) {
-        this(convert(kr.getFrom()), convert(kr.getTo()));
+    public YdbKeyRange(KeyRange kr, YdbTypes types) {
+        this(convert(kr.getFrom(), types), convert(kr.getTo(), types));
     }
 
     public YdbKeyRange(List<Object> from, List<Object> to) {
@@ -89,7 +89,7 @@ public class YdbKeyRange implements Serializable {
         return false;
     }
 
-    public static Limit convert(Optional<KeyBound> v) {
+    public static Limit convert(Optional<KeyBound> v, YdbTypes types) {
         if (v.isPresent()) {
             KeyBound kb = v.get();
             Value<?> tx = kb.getValue();
@@ -100,7 +100,7 @@ public class YdbKeyRange implements Serializable {
             final int sz = t.size();
             List<Object> out = new ArrayList<>(sz);
             for (int i=0; i<sz; ++i) {
-                out.add(YdbTypes.convertFromYdb(t.get(i)));
+                out.add(types.convertFromYdb(t.get(i)));
             }
             return new Limit(out, kb.isInclusive());
         }

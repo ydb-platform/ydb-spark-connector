@@ -23,17 +23,17 @@ import tech.ydb.table.settings.DescribeTableSettings;
  * 
  * @author zinal
  */
-public class YdbProvider extends YdbOptions implements TableProvider, DataSourceRegister {
+public class YdbTableProvider extends YdbOptions implements TableProvider, DataSourceRegister {
 
     private static final org.slf4j.Logger LOG =
-            org.slf4j.LoggerFactory.getLogger(YdbProvider.class);
+            org.slf4j.LoggerFactory.getLogger(YdbTableProvider.class);
 
     private YdbTable table;
 
     /**
      * "Implementations must have a public, 0-arg constructor".
      */
-    public YdbProvider() {
+    public YdbTableProvider() {
     }
 
     @Override
@@ -62,8 +62,9 @@ public class YdbProvider extends YdbOptions implements TableProvider, DataSource
         if (inputTable==null || inputTable.length()==0) {
             throw new IllegalArgumentException("Missing table name property");
         }
-        // Grab the connector
+        // Grab the connector and type convertor.
         final YdbConnector connector = YdbRegistry.getOrCreate(props);
+        final YdbTypes types = new YdbTypes(props);
         // Adjust the input path and build the logical name
         final TableIdentity ti = new TableIdentity(inputTable, connector.getDatabase());
         // Return the pre-loaded table if one is available
@@ -87,7 +88,7 @@ public class YdbProvider extends YdbOptions implements TableProvider, DataSource
             TableDescription td = td_res.getValue();
             if (ti.indexName==null) {
                 return CompletableFuture.completedFuture( Result.success(
-                        new YdbTable(connector, ti.logicalName, ti.tablePath, td)) );
+                        new YdbTable(connector, types, ti.logicalName, ti.tablePath, td)) );
             }
             dts.setIncludeShardKeyBounds(true); // shard keys for index case
             td_res = session.describeTable(ti.indexPath, dts).join();
@@ -99,7 +100,7 @@ public class YdbProvider extends YdbOptions implements TableProvider, DataSource
                 if (ti.indexName.equals(ix.getName())) {
                     TableDescription td_ix = td_res.getValue();
                     return CompletableFuture.completedFuture( Result.success(
-                            new YdbTable(connector, ti.logicalName, ti.tablePath, td, ix, td_ix)) );
+                            new YdbTable(connector, types, ti.logicalName, ti.tablePath, td, ix, td_ix)) );
                 }
             }
             LOG.debug("Missing index description in the table for {}", ti.indexPath);

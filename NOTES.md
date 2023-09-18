@@ -99,10 +99,13 @@ spark.sql("SELECT city, COUNT(*) FROM ydb.pgimp1.public.fhrw WHERE unique_key<'2
 ./bin/spark-shell --conf spark.sql.catalog.ydb1=tech.ydb.spark.connector.YdbCatalog \
   --conf spark.sql.catalog.ydb1.url='grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1gfvslmokutuvt2g019/etnd6mguvlul8qm4psvn' \
   --conf spark.sql.catalog.ydb1.auth.mode=KEY \
+  --conf spark.sql.catalog.ydb1.date.as.string=true \
   --conf spark.sql.catalog.ydb1.auth.keyfile=/home/zinal/Keys/mzinal-dp1.json
 ```
 
 ```scala
+spark.sql("SELECT * FROM ydb1.test1_fhrw WHERE closed_date IS NOT NULL").show(10, false)
+
 val df2 = spark.table("ydb1.`ix/test2_fhrw/ix1`")
 df2.filter(df2("closed_date").gt(to_timestamp(lit("2010-02-01")))).show(10, false)
 

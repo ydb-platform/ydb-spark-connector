@@ -30,6 +30,7 @@ final class YdbConnector extends YdbOptions implements AutoCloseable {
     private final SchemeClient schemeClient;
     private final SessionRetryContext retryCtx;
     private final String database;
+    private final YdbTypes defaultTypes;
 
     public YdbConnector(String catalogName, Map<String, String> props) {
         this.catalogName = catalogName;
@@ -37,6 +38,7 @@ final class YdbConnector extends YdbOptions implements AutoCloseable {
         for (Map.Entry<String,String> me : props.entrySet()) {
             this.connectOptions.put(me.getKey().toLowerCase(), me.getValue());
         }
+        this.defaultTypes = new YdbTypes(this.connectOptions);
         final int poolSize;
         try {
             int ncores = Runtime.getRuntime().availableProcessors();
@@ -124,6 +126,10 @@ final class YdbConnector extends YdbOptions implements AutoCloseable {
 
     public String getDatabase() {
         return database;
+    }
+
+    public YdbTypes getDefaultTypes() {
+        return defaultTypes;
     }
 
     @Override
