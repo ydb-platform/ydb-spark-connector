@@ -22,7 +22,7 @@ The following Spark configuration parameters must be defined to use the Spark co
     * `KEY` - service account key file;
     * `ENV` - reading the authenticaton settings from the environment variables, as specified in the [documentation](https://ydb.tech/en/docs/reference/ydb-sdk/auth#env).
 * `spark.sql.catalog.<CatalogName>.auth.{login,password}` - username and password for the STATIC authentication mode;
-* `spark.sql.catalog.<CatalogName>.auth.keyfile` - [authorized key file for Yandex Cloud](https://cloud.yandex.ru/docs/iam/concepts/authorization/key) for the KEY authentication mode;
+* `spark.sql.catalog.<CatalogName>.auth.sakey.file` - [authorized key file for Yandex Cloud](https://cloud.yandex.ru/docs/iam/concepts/authorization/key) for the KEY authentication mode;
 * `spark.sql.catalog.<CatalogName>.auth.token` - explicit authentication token for the TOKEN authentication mode;
 * `spark.sql.catalog.<CatalogName>.pool.size` - connection pool size, which should be bigger than the maximum number of concurrent Spark tasks per executor.
 

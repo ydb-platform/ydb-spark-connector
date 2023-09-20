@@ -25,6 +25,16 @@ public abstract class YdbOptions {
     public static final String YDB_POOL_SIZE = "pool.size";
 
     /**
+     * CA certificates in the file.
+     */
+    public static final String YDB_CA_FILE = "ca.file";
+
+    /**
+     * CA certificates as the literal text.
+     */
+    public static final String YDB_CA_TEXT = "ca.file";
+
+    /**
      * Authentication mode. One of the values defined in @see YdbAuthMode
      */
     public static final String YDB_AUTH_MODE = "auth.mode";
@@ -42,7 +52,12 @@ public abstract class YdbOptions {
     /**
      * Service account key file for the KEY authentication mode.
      */
-    public static final String YDB_AUTH_KEY_FILE = "auth.keyfile";
+    public static final String YDB_AUTH_SAKEY_FILE = "auth.sakey.file";
+
+    /**
+     * Service account key as text for the KEY authentication mode.
+     */
+    public static final String YDB_AUTH_SAKEY_TEXT = "auth.sakey.text";
 
     /**
      * Token value for the TOKEN authentication mode.
@@ -69,7 +84,7 @@ public abstract class YdbOptions {
      */
     public static final List<String> YDB_CONNECTION_IDENTITY =
             Collections.unmodifiableList(Arrays.asList(YDB_URL,
-                    YDB_AUTH_MODE, YDB_AUTH_LOGIN, YDB_AUTH_KEY_FILE, YDB_AUTH_TOKEN));
+                    YDB_AUTH_MODE, YDB_AUTH_LOGIN, YDB_AUTH_SAKEY_FILE, YDB_AUTH_TOKEN));
 
     /**
      * Check whether existing connection's properties matches the provided referenced values.

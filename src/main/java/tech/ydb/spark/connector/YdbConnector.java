@@ -1,5 +1,8 @@
 package tech.ydb.spark.connector;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.Map;
@@ -51,6 +54,20 @@ final class YdbConnector extends YdbOptions implements AutoCloseable {
         }
         GrpcTransportBuilder builder = GrpcTransport
                 .forConnectionString(props.get(YDB_URL));
+        String caString = props.get(YDB_CA_FILE);
+        if (caString!=null) {
+            byte[] cert;
+            try {
+                cert = Files.readAllBytes(Paths.get(caString));
+            } catch(IOException ix) {
+                throw new RuntimeException("Failed to read CA file " + caString, ix);
+            }
+            builder = builder.withSecureConnection(cert);
+        } else {
+            caString = props.get(YDB_CA_TEXT);
+            caString = caString.replace("\\n", "\n");
+            builder = builder.withSecureConnection(caString.getBytes(StandardCharsets.UTF_8));
+        }
         final YdbAuthMode authMode;
         try {
             authMode = YdbAuthMode.fromString(props.get(YDB_AUTH_MODE));
@@ -70,10 +87,19 @@ final class YdbConnector extends YdbOptions implements AutoCloseable {
                     new StaticCredentials(props.get(YDB_AUTH_LOGIN), props.get(YDB_AUTH_PASSWORD)));
                 break;
             case KEY:
-                final String keyFile = props.get(YDB_AUTH_KEY_FILE);
-                builder = builder.withAuthProvider((opt) -> {
-                    return CloudAuthIdentity.serviceAccountIdentity(Paths.get(keyFile));
-                });
+                String keyFile = props.get(YDB_AUTH_SAKEY_FILE);
+                if (keyFile!=null) {
+                    final String v = keyFile;
+                    builder = builder.withAuthProvider((opt) -> {
+                        return CloudAuthIdentity.serviceAccountIdentity(Paths.get(v));
+                    });
+                } else {
+                    keyFile = props.get(YDB_AUTH_SAKEY_TEXT);
+                    final String v = keyFile;
+                    builder = builder.withAuthProvider((opt) -> {
+                        return CloudAuthIdentity.serviceAccountIdentity(v);
+                    });
+                }
                 break;
             case TOKEN:
                 final String authToken = props.get(YDB_AUTH_TOKEN);
