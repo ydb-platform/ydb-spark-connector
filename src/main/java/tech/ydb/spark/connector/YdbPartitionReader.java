@@ -16,7 +16,7 @@ public class YdbPartitionReader implements PartitionReader<InternalRow> {
 
     private final YdbScanOptions options;
     private final YdbTablePartition partition;
-    private YdbViaReadTable query;
+    private YdbScanViaReadTable query;
 
     public YdbPartitionReader(YdbScanOptions options, YdbTablePartition partition) {
         this.options = options;
@@ -28,7 +28,7 @@ public class YdbPartitionReader implements PartitionReader<InternalRow> {
         if (query == null) {
             LOG.debug("Preparing scan for table {} at partition {}",
                     options.getTablePath(), partition);
-            query = new YdbViaReadTable(options, partition.getRange());
+            query = new YdbScanViaReadTable(options, partition.getRange());
             query.prepare();
             LOG.debug("Scan prepared, ready to fetch...");
         }

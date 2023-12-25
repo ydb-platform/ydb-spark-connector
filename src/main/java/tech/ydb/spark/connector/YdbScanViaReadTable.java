@@ -26,13 +26,12 @@ import tech.ydb.table.values.Value;
  *
  * @author zinal
  */
-class YdbViaReadTable implements AutoCloseable {
+class YdbScanViaReadTable implements AutoCloseable {
 
     private static final org.slf4j.Logger LOG =
-            org.slf4j.LoggerFactory.getLogger(YdbViaReadTable.class);
+            org.slf4j.LoggerFactory.getLogger(YdbScanViaReadTable.class);
 
     private final YdbScanOptions options;
-    private final YdbTypes types;
     private final YdbKeyRange keyRange;
     private final ArrayBlockingQueue<QueueItem> queue;
     private String tablePath;
@@ -45,9 +44,8 @@ class YdbViaReadTable implements AutoCloseable {
     private volatile GrpcReadStream<ReadTablePart> stream;
     private ResultSetReader current;
 
-    public YdbViaReadTable(YdbScanOptions options, YdbKeyRange keyRange) {
+    public YdbScanViaReadTable(YdbScanOptions options, YdbKeyRange keyRange) {
         this.options = options;
-        this.types = options.getTypes();
         this.keyRange = keyRange;
         this.queue = new ArrayBlockingQueue<>(100);
         this.state = State.CREATED;
@@ -154,7 +152,8 @@ class YdbViaReadTable implements AutoCloseable {
                 return false;
             }
             current = qi.reader;
-            // Rebuild column indexes each block - API allows to change ordering.
+            // Rebuild column indexes each block, because API allows
+            // the server to change the column ordering.
             if (outIndexes.length != current.getColumnCount()) {
                 throw new RuntimeException("Expected columns count "
                         + outIndexes.length + ", but got " + current.getColumnCount());
@@ -173,7 +172,7 @@ class YdbViaReadTable implements AutoCloseable {
         final int count = outIndexes.length;
         final ArrayList<Object> values = new ArrayList(count);
         for (int i=0; i<count; ++i) {
-            values.add(types.convertFromYdb(current.getColumn(outIndexes[i])));
+            values.add(options.getTypes().convertFromYdb(current.getColumn(outIndexes[i])));
         }
         return InternalRow.fromSeq(JavaConversions.asScalaBuffer(values));
     }
@@ -223,7 +222,7 @@ class YdbViaReadTable implements AutoCloseable {
         final List<YdbFieldType> keyTypes = options.getKeyTypes();
         final List<Value<?>> l = new ArrayList<>(values.size());
         for (int i=0; i<values.size(); ++i) {
-            Value<?> v = types.convertToYdb(values.get(i), keyTypes.get(i));
+            Value<?> v = options.getTypes().convertToYdb(values.get(i), keyTypes.get(i));
             if (! v.getType().getKind().equals(Type.Kind.OPTIONAL))
                 v = v.makeOptional();
             l.add(v);
@@ -273,15 +272,17 @@ class YdbViaReadTable implements AutoCloseable {
     class Worker implements Runnable {
         @Override
         public void run() {
+            LOG.debug("Started background scan for table {}, range {}", tablePath, keyRange);
             try {
                 stream.start(part -> {
-                    LOG.debug("Started background scan for table {}, range {}", tablePath, keyRange);
                     while (true) {
                         try {
                             queue.add(new QueueItem(part.getResultSetReader()));
-                            return;
+                            return; // exit the "queue put" retry loop - and lambda too
                         } catch(IllegalStateException ise) {
-                            try { Thread.sleep(123L); } catch(InterruptedException ix) {}
+                            // The unlikely case of interrupt should not prevent us
+                            // from putting an item into the queue
+                            try { Thread.sleep(35L); } catch(InterruptedException ix) {}
                         }
                     }
                 }).join().expectSuccess();
