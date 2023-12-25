@@ -248,7 +248,7 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
     private StructField[] mapFields(List<TableColumn> columns) {
         final List<StructField> fields = new ArrayList<>();
         for (TableColumn tc : columns) {
-            final DataType dataType = types.mapType(tc.getType());
+            final DataType dataType = types.mapTypeSpark2Ydb(tc.getType());
             if (dataType != null)
                 fields.add(mapField(tc, dataType));
         }
@@ -257,6 +257,18 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
 
     private StructField mapField(TableColumn tc, DataType dataType) {
         return new StructField(tc.getName(), dataType, types.mapNullable(tc.getType()), Metadata.empty());
+    }
+
+    public Map<String, YdbFieldInfo> makeColumns() {
+        final Map<String, YdbFieldInfo> m = new HashMap<>();
+        for (TableColumn tc : columns) {
+            m.put(tc.getName(), new YdbFieldInfo(
+                    tc.getName(),
+                    YdbFieldType.fromSdkType(tc.getType()),
+                    tech.ydb.table.values.Type.Kind.OPTIONAL.equals(tc.getType().getKind())
+            ));
+        }
+        return m;
     }
 
     @Override

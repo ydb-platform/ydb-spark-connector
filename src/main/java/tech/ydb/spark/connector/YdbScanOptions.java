@@ -26,7 +26,7 @@ public class YdbScanOptions extends YdbTableOperationOptions implements Serializ
     private static final org.slf4j.Logger LOG =
             org.slf4j.LoggerFactory.getLogger(YdbScanOptions.class);
 
-    private final StructType schema;
+    private final StructType actualSchema;
     private final List<String> keyColumns;
     private final List<YdbFieldType> keyTypes;
     private final ArrayList<Object> rangeBegin;
@@ -37,7 +37,7 @@ public class YdbScanOptions extends YdbTableOperationOptions implements Serializ
 
     public YdbScanOptions(YdbTable table) {
         super(table);
-        this.schema = table.schema();
+        this.actualSchema = table.schema();
         this.keyColumns = new ArrayList<>(table.keyColumns()); // ensure serializable list
         this.keyTypes = table.keyTypes();
         this.rangeBegin = new ArrayList<>();
@@ -59,7 +59,7 @@ public class YdbScanOptions extends YdbTableOperationOptions implements Serializ
 
     public StructType readSchema() {
         if (requiredSchema==null)
-            return schema;
+            return actualSchema;
         return requiredSchema;
     }
 

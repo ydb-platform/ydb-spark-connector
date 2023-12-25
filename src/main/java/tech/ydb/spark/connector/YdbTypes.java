@@ -47,7 +47,7 @@ public final class YdbTypes implements Serializable {
         }
     }
 
-    public DataType mapType(tech.ydb.table.values.Type yt) {
+    public DataType mapTypeSpark2Ydb(tech.ydb.table.values.Type yt) {
         if (yt==null)
             return null;
         switch (yt.getKind()) {

@@ -1,8 +1,7 @@
 package tech.ydb.spark.connector;
 
 import java.io.Serializable;
-import java.util.HashMap;
-import java.util.Map;
+
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.connector.write.*;
 
@@ -13,10 +12,10 @@ import org.apache.spark.sql.connector.write.*;
  */
 public class YdbWrite implements Serializable, WriteBuilder, Write, BatchWrite, DataWriterFactory {
 
-    private final YdbUpsertOptions options;
+    private final YdbWriteOptions options;
 
     YdbWrite(YdbTable table, LogicalWriteInfo lwi) {
-        this.options = new YdbUpsertOptions(table, lwi.queryId(), lwi.options());
+        this.options = new YdbWriteOptions(table, lwi.schema(), lwi.queryId(), lwi.options());
     }
 
     @Override
@@ -51,7 +50,7 @@ public class YdbWrite implements Serializable, WriteBuilder, Write, BatchWrite, 
 
     @Override
     public DataWriter<InternalRow> createWriter(int partitionId, long taskId) {
-        return new YdbDataWriter(options);
+        return new YdbWriterBasic(options);
     }
 
 }

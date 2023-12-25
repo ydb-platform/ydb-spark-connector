@@ -18,6 +18,8 @@ public abstract class YdbTableOperationOptions implements Serializable {
     // the name and the path of the table to work with
     private final String tableName;
     private final String tablePath;
+    // table columns
+    private final Map<String, YdbFieldInfo> fields;
 
     public YdbTableOperationOptions(YdbTable table) {
         this.catalogName = table.getConnector().getCatalogName();
@@ -25,6 +27,7 @@ public abstract class YdbTableOperationOptions implements Serializable {
         this.types = table.getTypes();
         this.tableName = table.name();
         this.tablePath = table.tablePath();
+        this.fields = table.makeColumns();
     }
 
     public String getCatalogName() {
@@ -45,6 +48,10 @@ public abstract class YdbTableOperationOptions implements Serializable {
 
     public String getTablePath() {
         return tablePath;
+    }
+
+    public Map<String, YdbFieldInfo> getFields() {
+        return fields;
     }
 
 }
