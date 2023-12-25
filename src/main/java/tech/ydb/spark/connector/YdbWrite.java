@@ -1,14 +1,23 @@
 package tech.ydb.spark.connector;
 
 import java.io.Serializable;
+import java.util.HashMap;
+import java.util.Map;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.connector.write.*;
 
 /**
+ * YDB table writer: orchestration and partition writer factory.
  *
  * @author zinal
  */
 public class YdbWrite implements Serializable, WriteBuilder, Write, BatchWrite, DataWriterFactory {
+
+    private final YdbUpsertOptions options;
+
+    YdbWrite(YdbTable table, LogicalWriteInfo lwi) {
+        this.options = new YdbUpsertOptions(table, lwi.queryId(), lwi.options());
+    }
 
     @Override
     public Write build() {
@@ -26,20 +35,23 @@ public class YdbWrite implements Serializable, WriteBuilder, Write, BatchWrite, 
 
     @Override
     public DataWriterFactory createBatchWriterFactory(PhysicalWriteInfo info) {
+        // TODO: create the COW copy of the destination table
         return this;
     }
 
     @Override
     public void commit(WriterCommitMessage[] messages) {
+        // TODO: replace the original table with its copy
     }
 
     @Override
     public void abort(WriterCommitMessage[] messages) {
+        // TODO: remove the COW copy
     }
 
     @Override
     public DataWriter<InternalRow> createWriter(int partitionId, long taskId) {
-        return new YdbDataWriter();
+        return new YdbDataWriter(options);
     }
 
 }

@@ -21,16 +21,11 @@ import static tech.ydb.spark.connector.YdbTypes.max;
  *
  * @author zinal
  */
-public class YdbScanOptions implements Serializable {
+public class YdbScanOptions extends YdbTableOperationOptions implements Serializable {
 
     private static final org.slf4j.Logger LOG =
             org.slf4j.LoggerFactory.getLogger(YdbScanOptions.class);
 
-    private final String catalogName;
-    private final Map<String,String> connectOptions;
-    private final YdbTypes types;
-    private final String tablePath;
-    private final String tableName;
     private final StructType schema;
     private final List<String> keyColumns;
     private final List<YdbFieldType> keyTypes;
@@ -41,11 +36,7 @@ public class YdbScanOptions implements Serializable {
     private StructType requiredSchema;
 
     public YdbScanOptions(YdbTable table) {
-        this.catalogName = table.getConnector().getCatalogName();
-        this.connectOptions = table.getConnector().getConnectOptions();
-        this.types = table.getTypes();
-        this.tableName = table.name();
-        this.tablePath = table.tablePath();
+        super(table);
         this.schema = table.schema();
         this.keyColumns = new ArrayList<>(table.keyColumns()); // ensure serializable list
         this.keyTypes = table.keyTypes();
@@ -70,26 +61,6 @@ public class YdbScanOptions implements Serializable {
         if (requiredSchema==null)
             return schema;
         return requiredSchema;
-    }
-
-    public String getCatalogName() {
-        return catalogName;
-    }
-
-    public Map<String, String> getConnectOptions() {
-        return connectOptions;
-    }
-
-    public YdbTypes getTypes() {
-        return types;
-    }
-
-    public String getTableName() {
-        return tableName;
-    }
-
-    public String getTablePath() {
-        return tablePath;
     }
 
     public List<String> getKeyColumns() {

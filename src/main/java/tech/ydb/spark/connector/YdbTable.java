@@ -218,7 +218,7 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
 
     @Override
     public WriteBuilder newWriteBuilder(LogicalWriteInfo info) {
-        throw new UnsupportedOperationException("Not supported yet.");
+        return new YdbWriteBuilder(this, info);
     }
 
     final YdbConnector getConnector() {

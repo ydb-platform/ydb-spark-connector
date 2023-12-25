@@ -22,7 +22,7 @@ import tech.ydb.table.TableClient;
  *
  * @author zinal
  */
-final class YdbConnector extends YdbOptions implements AutoCloseable {
+public class YdbConnector extends YdbOptions implements AutoCloseable {
 
     private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(YdbConnector.class);
 
@@ -65,8 +65,11 @@ final class YdbConnector extends YdbOptions implements AutoCloseable {
             builder = builder.withSecureConnection(cert);
         } else {
             caString = props.get(YDB_CA_TEXT);
-            caString = caString.replace("\\n", "\n");
-            builder = builder.withSecureConnection(caString.getBytes(StandardCharsets.UTF_8));
+            if (caString!=null) {
+                caString = caString.replace("\\n", "\n");
+                byte[] cert = caString.getBytes(StandardCharsets.UTF_8);
+                builder = builder.withSecureConnection(cert);
+            }
         }
         final YdbAuthMode authMode;
         try {
@@ -111,7 +114,6 @@ final class YdbConnector extends YdbOptions implements AutoCloseable {
                 break;
         }
         GrpcTransport gt = builder.build();
-        this.database = gt.getDatabase();
         try {
             this.tableClient = TableClient.newClient(gt)
                     .sessionPoolSize(0, poolSize)
@@ -124,6 +126,7 @@ final class YdbConnector extends YdbOptions implements AutoCloseable {
             if (gt != null)
                 gt.close();
         }
+        this.database = this.transport.getDatabase();
     }
 
     public String getCatalogName() {

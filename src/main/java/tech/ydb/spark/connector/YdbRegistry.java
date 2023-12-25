@@ -8,43 +8,58 @@ import java.util.HashMap;
  *
  * @author zinal
  */
-final class YdbRegistry {
+public class YdbRegistry {
+
+    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(YdbRegistry.class);
 
     private YdbRegistry() {}
 
-    private static final Map<String, YdbConnector> items = new HashMap<>();
+    private static final Map<String, YdbConnector> ITEMS = new HashMap<>();
 
     public static YdbConnector get(String name) {
-        synchronized(items) {
-            return items.get(name);
+        YdbConnector yc;
+        synchronized(ITEMS) {
+            yc = ITEMS.get(name);
         }
+        LOG.debug("YdbRegistry.get(\"{}\") -> {}", name, yc);
+        return yc;
     }
 
     public static YdbConnector getOrCreate(String name, Map<String, String> props) {
-        synchronized(items) {
-            YdbConnector yc = items.get(name);
+        if (name == null) {
+            return getOrCreate(props);
+        }
+        YdbConnector yc;
+        boolean newval = false;
+        synchronized(ITEMS) {
+            yc = ITEMS.get(name);
             if (yc==null) {
                 yc = new YdbConnector(name, props);
-                items.put(name, yc);
+                ITEMS.put(name, yc);
+                newval = true;
             }
-            return yc;
         }
+        LOG.debug("YdbRegistry.getOrCreate(\"{}\") -> {}, {}", name, newval, yc);
+        return yc;
     }
 
     public static YdbConnector getOrCreate(Map<String, String> props) {
-        synchronized(items) {
-            for (YdbConnector yc : items.values()) {
-                if (YdbOptions.connectionMatches(yc.getConnectOptions(), props))
+        synchronized(ITEMS) {
+            for (YdbConnector yc : ITEMS.values()) {
+                if (YdbOptions.connectionMatches(yc.getConnectOptions(), props)) {
+                    LOG.debug("YdbRegistry.getOrCreate() -> false, {}", yc);
                     return yc;
+                }
             }
-            int index = items.size();
+            int index = ITEMS.size();
             String name;
             do {
                 index = index + 1;
                 name = "automatic$" + index;
-            } while (items.containsKey(name));
+            } while (ITEMS.containsKey(name));
             YdbConnector yc = new YdbConnector(name, props);
-            items.put(name, yc);
+            ITEMS.put(name, yc);
+            LOG.debug("YdbRegistry.getOrCreate() -> true, {}", yc);
             return yc;
         }
     }
