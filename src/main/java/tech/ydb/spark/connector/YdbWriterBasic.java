@@ -137,6 +137,9 @@ public class YdbWriterBasic implements DataWriter<InternalRow> {
         for (YdbFieldInfo yfi : statementFields) {
             m.put(yfi.getName(), YdbFieldType.toSdkType(yfi.getType(), yfi.isNullable()));
         }
+        if (m.isEmpty()) {
+            throw new IllegalArgumentException("Empty input field list specified for writing");
+        }
         return StructType.of(m);
     }
 
