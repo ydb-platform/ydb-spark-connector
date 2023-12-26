@@ -13,18 +13,18 @@ https://github.com/aamargajbhiye/big-data-projects/tree/master/Datasource%20spar
 Spark Shell example config:
 
 ```bash
-./bin/spark-shell --conf spark.sql.catalog.ydb=tech.ydb.spark.connector.YdbCatalog \
-  --conf spark.sql.catalog.ydb.url='grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1gfvslmokutuvt2g019/etnuogblap3e7dok6tf5' \
-  --conf spark.sql.catalog.ydb.auth.mode=KEY \
-  --conf spark.sql.catalog.ydb.auth.sakey.file=/home/demo/Magic/key-ydb-sa1.json
+./bin/spark-shell --conf spark.sql.catalog.ydb1=tech.ydb.spark.connector.YdbCatalog \
+  --conf spark.sql.catalog.ydb1.url='grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1gfvslmokutuvt2g019/etnuogblap3e7dok6tf5' \
+  --conf spark.sql.catalog.ydb1.auth.mode=KEY \
+  --conf spark.sql.catalog.ydb1.auth.sakey.file=/Users/mzinal/Magic/key-ydb-sa1.json
 ```
 
 
 
 ```scala
-spark.sql("SHOW NAMESPACES FROM ydb").show();
-spark.sql("SHOW NAMESPACES FROM ydb.pgimp1").show();
-spark.sql("SHOW TABLES FROM ydb").show();
+spark.sql("SHOW NAMESPACES FROM ydb1").show();
+spark.sql("SHOW NAMESPACES FROM ydb1.pgimp1").show();
+spark.sql("SHOW TABLES FROM ydb1").show();
 ```
 
 ```sql
@@ -86,13 +86,13 @@ UPSERT INTO toster(a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p) VALUES (
 ```
 
 ```scala
-spark.sql("SELECT * FROM ydb.toster").show();
+spark.sql("SELECT * FROM ydb1.toster").show();
 
-spark.sql("SELECT COUNT(*) FROM ydb.test0_fhrw").show();
-spark.sql("SELECT MIN(created_date) FROM ydb.test0_fhrw").show();
-spark.sql("SELECT borough, MIN(created_date), MAX(created_date) FROM ydb.test0_fhrw GROUP BY borough ORDER BY borough").show();
-spark.sql("SELECT city, COUNT(*) FROM ydb.pgimp1.public.fhrw WHERE unique_key<'2' GROUP BY city ORDER BY COUNT(*) DESC LIMIT 5").show(100, false);
-spark.sql("SELECT city, COUNT(*) FROM ydb.pgimp1.public.fhrw WHERE unique_key<'2' AND unique_key>='1' GROUP BY city ORDER BY COUNT(*) DESC LIMIT 5").show(100, false);
+spark.sql("SELECT COUNT(*) FROM ydb1.test0_fhrw").show();
+spark.sql("SELECT MIN(created_date) FROM ydb1.test0_fhrw").show();
+spark.sql("SELECT borough, MIN(created_date), MAX(created_date) FROM ydb1.test0_fhrw GROUP BY borough ORDER BY borough").show();
+spark.sql("SELECT city, COUNT(*) FROM ydb1.pgimp1.public.fhrw WHERE unique_key<'2' GROUP BY city ORDER BY COUNT(*) DESC LIMIT 5").show(100, false);
+spark.sql("SELECT city, COUNT(*) FROM ydb1.pgimp1.public.fhrw WHERE unique_key<'2' AND unique_key>='1' GROUP BY city ORDER BY COUNT(*) DESC LIMIT 5").show(100, false);
 ```
 
 ```bash
