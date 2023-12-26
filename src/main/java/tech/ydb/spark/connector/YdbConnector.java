@@ -98,10 +98,12 @@ public class YdbConnector extends YdbOptions implements AutoCloseable {
                     });
                 } else {
                     keyFile = props.get(YDB_AUTH_SAKEY_TEXT);
-                    final String v = keyFile;
-                    builder = builder.withAuthProvider((opt) -> {
-                        return CloudAuthIdentity.serviceAccountIdentity(v);
-                    });
+                    if (keyFile!=null) {
+                        final String v = keyFile;
+                        builder = builder.withAuthProvider((opt) -> {
+                            return CloudAuthIdentity.serviceAccountIdentity(v);
+                        });
+                    }
                 }
                 break;
             case TOKEN:

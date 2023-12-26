@@ -16,7 +16,7 @@ Spark Shell example config:
 ./bin/spark-shell --conf spark.sql.catalog.ydb=tech.ydb.spark.connector.YdbCatalog \
   --conf spark.sql.catalog.ydb.url='grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1gfvslmokutuvt2g019/etnuogblap3e7dok6tf5' \
   --conf spark.sql.catalog.ydb.auth.mode=KEY \
-  --conf spark.sql.catalog.ydb.auth.keyfile=/home/demo/Magic/key-ydb-sa1.json
+  --conf spark.sql.catalog.ydb.auth.sakey.file=/home/demo/Magic/key-ydb-sa1.json
 ```
 
 
@@ -100,7 +100,7 @@ spark.sql("SELECT city, COUNT(*) FROM ydb.pgimp1.public.fhrw WHERE unique_key<'2
   --conf spark.sql.catalog.ydb1.url='grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1gfvslmokutuvt2g019/etnd6mguvlul8qm4psvn' \
   --conf spark.sql.catalog.ydb1.auth.mode=KEY \
   --conf spark.sql.catalog.ydb1.date.as.string=true \
-  --conf spark.sql.catalog.ydb1.auth.keyfile=/home/zinal/Keys/mzinal-dp1.json
+  --conf spark.sql.catalog.ydb1.auth.sakey.file=/home/zinal/Keys/mzinal-dp1.json
 ```
 
 ```scala
@@ -112,8 +112,39 @@ df2.filter(df2("closed_date").gt(to_timestamp(lit("2010-02-01")))).show(10, fals
 val df2 = (spark.read.format("ydb")
     .option("url", ydb_url)
     .option("auth.mode", "KEY")
-    .option("auth.keyfile", "/home/zinal/Keys/mzinal-dp1.json")
+    .option("auth.sakey.file", "/home/zinal/Keys/mzinal-dp1.json")
     .option("table", "test2_fhrw/ix1/indexImplTable")
     .load)
 df2.filter(df2("closed_date").gt(to_timestamp(lit("2010-02-02")))).show(10, false)
+```
+
+```scala
+
+import org.apache.spark.sql.types._
+
+val YDB_URL = "grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1gfvslmokutuvt2g019/etnuogblap3e7dok6tf5"
+val YDB_KEYFILE = "/Users/mzinal/Magic/key-ydb-sa1.json"
+
+val df0 = (spark.read.format("ydb").option("url", YDB_URL)
+    .option("auth.mode", "KEY").option("auth.sakey.file", YDB_KEYFILE)
+    .option("table", "test0_fhrw")
+    .load)
+df0.show(10, false)
+
+val NUM_PART = 10
+val ROWS_PER_PART = 1000
+
+val df1 = 1.to(NUM_PART).toDF("id_part").repartition(NUM_PART)
+val df2 = df1.as[Int].mapPartitions(c => 1.to(ROWS_PER_PART).toIterator)
+val df3 = df2.
+  withColumn("spark_partition_id",spark_partition_id()).
+  withColumn("a",col("value")+20).
+  withColumn("b",col("value")+30).
+  withColumn("c",col("value")+33)
+val df4 = df3.select("a", "b", "c")
+
+df4.write.format("ydb").
+  option("url", YDB_URL).option("auth.mode", "KEY").option("auth.sakey.file", YDB_KEYFILE).
+  option("table", "mytable").save
+
 ```
