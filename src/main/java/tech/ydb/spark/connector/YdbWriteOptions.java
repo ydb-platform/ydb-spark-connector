@@ -3,6 +3,7 @@ package tech.ydb.spark.connector;
 import java.io.Serializable;
 import java.util.HashMap;
 import java.util.Map;
+
 import org.apache.spark.sql.types.StructType;
 
 /**

@@ -4,7 +4,6 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
-
 import scala.collection.JavaConversions;
 
 import org.apache.spark.sql.catalyst.InternalRow;

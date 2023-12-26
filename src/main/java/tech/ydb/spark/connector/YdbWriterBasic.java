@@ -6,17 +6,17 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import scala.collection.JavaConverters;
 
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.connector.write.DataWriter;
 import org.apache.spark.sql.connector.write.WriterCommitMessage;
 import org.apache.spark.sql.types.StructField;
-import scala.collection.JavaConverters;
+
 import tech.ydb.core.Result;
 import tech.ydb.table.query.DataQueryResult;
 import tech.ydb.table.query.Params;
 import tech.ydb.table.transaction.TxControl;
-
 import tech.ydb.table.values.StructValue;
 import tech.ydb.table.values.StructType;
 import tech.ydb.table.values.Type;
