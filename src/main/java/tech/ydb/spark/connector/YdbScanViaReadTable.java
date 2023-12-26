@@ -26,7 +26,7 @@ import tech.ydb.table.values.Value;
  *
  * @author zinal
  */
-class YdbScanViaReadTable implements AutoCloseable {
+public class YdbScanViaReadTable implements AutoCloseable {
 
     private static final org.slf4j.Logger LOG =
             org.slf4j.LoggerFactory.getLogger(YdbScanViaReadTable.class);

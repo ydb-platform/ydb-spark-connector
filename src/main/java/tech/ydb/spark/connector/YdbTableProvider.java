@@ -20,6 +20,8 @@ import tech.ydb.table.settings.DescribeTableSettings;
 
 /**
  * YDB table provider.
+ * Registered under the "ydb" name via the following file:
+ *   META-INF/services/org.apache.spark.sql.sources.DataSourceRegister
  * 
  * @author zinal
  */
