@@ -143,7 +143,7 @@ val df3 = df2.
   withColumn("c",col("value")+33)
 val df4 = df3.select("a", "b", "c")
 
-df4.write.format("ydb").
+df4.write.mode("append").format("ydb").
   option("url", YDB_URL).option("auth.mode", "KEY").option("auth.sakey.file", YDB_KEYFILE).
   option("table", "mytable").save
 

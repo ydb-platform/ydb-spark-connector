@@ -36,6 +36,7 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
     static {
         final Set<TableCapability> c = new HashSet<>();
         c.add(TableCapability.BATCH_READ);
+        c.add(TableCapability.BATCH_WRITE);
         CAPABILITIES = Collections.unmodifiableSet(c);
     }
 
