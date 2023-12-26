@@ -125,26 +125,37 @@ import org.apache.spark.sql.types._
 val YDB_URL = "grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1gfvslmokutuvt2g019/etnuogblap3e7dok6tf5"
 val YDB_KEYFILE = "/Users/mzinal/Magic/key-ydb-sa1.json"
 
-val df0 = (spark.read.format("ydb").option("url", YDB_URL)
-    .option("auth.mode", "KEY").option("auth.sakey.file", YDB_KEYFILE)
-    .option("table", "test0_fhrw")
-    .load)
-df0.show(10, false)
-
-val NUM_PART = 10
-val ROWS_PER_PART = 1000
+val NUM_PART = 1000
+val ROWS_PER_PART = 10000
 
 val df1 = 1.to(NUM_PART).toDF("id_part").repartition(NUM_PART)
 val df2 = df1.as[Int].mapPartitions(c => 1.to(ROWS_PER_PART).toIterator)
 val df3 = df2.
   withColumn("spark_partition_id",spark_partition_id()).
-  withColumn("a",col("value")+20).
-  withColumn("b",col("value")+30).
-  withColumn("c",col("value")+33)
+  withColumn("a",(spark_partition_id() * ROWS_PER_PART) + col("value")).
+  withColumn("b",col("a")+30).
+  withColumn("c",col("a")+33)
 val df4 = df3.select("a", "b", "c")
 
 df4.write.mode("append").format("ydb").
   option("url", YDB_URL).option("auth.mode", "KEY").option("auth.sakey.file", YDB_KEYFILE).
   option("table", "mytable").save
 
+val df0 = (spark.read.format("ydb").option("url", YDB_URL)
+    .option("auth.mode", "KEY").option("auth.sakey.file", YDB_KEYFILE)
+    .option("table", "test0_fhrw")
+    .load)
+df0.show(10, false)
+
+```
+
+Log4j properties for debug:
+
+```JavaProperties
+logger.ydb0.name = tech.ydb.spark
+logger.ydb0.level = debug
+logger.ydb1.name = tech.ydb
+logger.ydb1.level = info
+logger.ydb2.name = tech.ydb.core.impl.discovery
+logger.ydb2.level = info
 ```

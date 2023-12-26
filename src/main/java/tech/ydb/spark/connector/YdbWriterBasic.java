@@ -29,6 +29,8 @@ import tech.ydb.table.values.Value;
  */
 public class YdbWriterBasic implements DataWriter<InternalRow> {
 
+    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(YdbWriterBasic.class);
+
     public final static int MAX_ROWS = 500;
 
     private final YdbTypes types;
@@ -54,6 +56,10 @@ public class YdbWriterBasic implements DataWriter<InternalRow> {
                 options.getCatalogName(), options.getConnectOptions());
         this.currentInput = new ArrayList<>();
         this.currentResult = null;
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("YQL statement: {}", this.sqlUpsert);
+            LOG.debug("Input structure: {}", this.inputType);
+        }
     }
 
     @Override
@@ -73,32 +79,60 @@ public class YdbWriterBasic implements DataWriter<InternalRow> {
                 if (conv.getType().getKind() != Type.Kind.OPTIONAL)
                     conv = conv.makeOptional();
             }
-            currentRow.put(sqlUpsert, conv);
+            currentRow.put(yfi.getName(), conv);
         }
-        currentInput.add(StructValue.of(currentRow));
+        Value<?> row = StructValue.of(currentRow);
+        currentInput.add(row);
+        // LOG.debug("Converted input row: {}", row);
         if (currentInput.size() >= MAX_ROWS) {
             startNewStatement(currentInput);
             currentInput.clear();
         }
     }
 
+    private void startNewStatement(List<Value<?>> input) {
+        if (currentResult!=null) {
+            currentResult.join().getStatus().expectSuccess();
+        }
+        Params params = Params.of("$input", listType.newValue(input));
+        currentResult = connector.getRetryCtx().supplyResult(session -> session.executeDataQuery(
+                            sqlUpsert, TxControl.serializableRw().setCommitTx(true), params));
+    }
+
     @Override
     public WriterCommitMessage commit() throws IOException {
+        // Process the currently prepared set of rows
+        if (! currentInput.isEmpty()) {
+            startNewStatement(currentInput);
+            currentInput.clear();
+        }
+        // Wait for the statement to be executed, and check the results
         if (currentResult!=null) {
             currentResult.join().getStatus().expectSuccess();
             currentResult = null;
         }
+        // All rows have been written successfully
         return new YdbWriteCommit();
     }
 
     @Override
     public void abort() throws IOException {
-        // TODO
+        currentInput.clear();
+        if (currentResult!=null) {
+            currentResult.cancel(true);
+            currentResult.join();
+            currentResult = null;
+        }
     }
 
     @Override
     public void close() throws IOException {
-        // TODO
+        currentInput.clear();
+        if (currentResult!=null) {
+            currentResult.cancel(true);
+            currentResult.join();
+            currentResult = null;
+        }
     }
 
     private static List<YdbFieldInfo> makeStatementFields(YdbWriteOptions options,
@@ -141,15 +175,6 @@ public class YdbWriterBasic implements DataWriter<InternalRow> {
             throw new IllegalArgumentException("Empty input field list specified for writing");
         }
         return StructType.of(m);
-    }
-
-    private void startNewStatement(List<Value<?>> input) {
-        if (currentResult!=null) {
-            currentResult.join().getStatus().expectSuccess();
-        }
-        Params params = Params.of("$input", listType.newValue(input));
-        currentResult = connector.getRetryCtx().supplyResult(session -> session.executeDataQuery(
-                            sqlUpsert, TxControl.serializableRw().setCommitTx(true), params));
     }
 
 }
