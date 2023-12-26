@@ -257,7 +257,7 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
     private StructField[] mapFields(List<TableColumn> columns) {
         final List<StructField> fields = new ArrayList<>();
         for (TableColumn tc : columns) {
-            final DataType dataType = types.mapTypeSpark2Ydb(tc.getType());
+            final DataType dataType = types.mapTypeYdb2Spark(tc.getType());
             if (dataType != null)
                 fields.add(mapField(tc, dataType));
         }

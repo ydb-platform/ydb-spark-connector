@@ -29,6 +29,9 @@ import tech.ydb.table.values.Value;
  */
 public final class YdbTypes implements Serializable {
 
+    public static final DataType SPARK_DECIMAL = DataTypes.createDecimalType(38, 10);
+    public static final DataType SPARK_UINT64 = DataTypes.createDecimalType(22, 0);
+
     private final YdbTypeSettings typeSettings;
 
     public YdbTypes(YdbTypeSettings typeSettings) {
@@ -48,7 +51,7 @@ public final class YdbTypes implements Serializable {
         }
     }
 
-    public DataType mapTypeSpark2Ydb(tech.ydb.table.values.Type yt) {
+    public DataType mapTypeYdb2Spark(tech.ydb.table.values.Type yt) {
         if (yt==null)
             return null;
         switch (yt.getKind()) {
@@ -60,7 +63,7 @@ public final class YdbTypes implements Serializable {
             case PRIMITIVE:
                 break;
             case DECIMAL:
-                return DataTypes.createDecimalType(38, 10);
+                return SPARK_DECIMAL;
             default:
                 return null;
         }
@@ -83,7 +86,7 @@ public final class YdbTypes implements Serializable {
             case Int64:
                 return DataTypes.LongType;
             case Uint64:
-                return DataTypes.LongType;
+                return SPARK_UINT64;
             case Float:
                 return DataTypes.FloatType;
             case Double:
@@ -189,8 +192,10 @@ public final class YdbTypes implements Serializable {
                         return vr.getUint16();
                     case Uint32:
                         return vr.getUint32();
-                    case Uint64:
-                        return vr.getUint64();
+                    case Uint64: {
+                        long v = vr.getUint64();
+                        return Decimal.apply(new BigDecimal(Long.toUnsignedString(v)));
+                    }
                     case Uuid:
                         return vr.getUuid();
                     case Yson:
@@ -263,7 +268,7 @@ public final class YdbTypes implements Serializable {
                     case Uint32:
                         return v.asData().getUint32();
                     case Uint64:
-                        return new BigInteger(v.asData().toString());
+                        return Decimal.apply(new BigDecimal(v.asData().toString()));
                     case Yson:
                         return v.asData().getYson();
                 }
