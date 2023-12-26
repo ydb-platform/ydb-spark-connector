@@ -2,6 +2,7 @@ package tech.ydb.spark.connector;
 
 import java.io.Serializable;
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -262,7 +263,7 @@ public final class YdbTypes implements Serializable {
                     case Uint32:
                         return v.asData().getUint32();
                     case Uint64:
-                        return v.asData().getUint64();
+                        return new BigInteger(v.asData().toString());
                     case Yson:
                         return v.asData().getYson();
                 }
@@ -482,6 +483,10 @@ public final class YdbTypes implements Serializable {
                 }
                 if (v instanceof BigDecimal) {
                     return PrimitiveValue.newUint64(((BigDecimal)v).longValue());
+                }
+                if (v instanceof BigInteger) {
+                    long temp = Long.parseUnsignedLong(v.toString());
+                    return PrimitiveValue.newUint64(temp);
                 }
                 if (v instanceof Number) {
                     return PrimitiveValue.newUint64(((Number)v).longValue());

@@ -37,7 +37,7 @@ public class YdbScan implements Scan, SupportsReportPartitioning {
 
     @Override
     public Batch toBatch() {
-        return new YdbBatch(options);
+        return new YdbScanBatch(options);
     }
 
     @Override

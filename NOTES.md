@@ -159,3 +159,13 @@ logger.ydb1.level = info
 logger.ydb2.name = tech.ydb.core.impl.discovery
 logger.ydb2.level = info
 ```
+
+Spark job master debugging:
+
+```bash
+./bin/spark-shell --conf spark.sql.catalog.ydb1=tech.ydb.spark.connector.YdbCatalog \
+  --conf spark.sql.catalog.ydb1.url='grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1gfvslmokutuvt2g019/etnuogblap3e7dok6tf5' \
+  --conf spark.sql.catalog.ydb1.auth.mode=KEY \
+  --conf spark.sql.catalog.ydb1.auth.sakey.file=/Users/mzinal/Magic/key-ydb-sa1.json \
+  --conf spark.driver.extraJavaOptions=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5007
+```

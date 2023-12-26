@@ -76,7 +76,15 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
         }
         if (td.getKeyRanges()!=null) {
             for (KeyRange kr : td.getKeyRanges()) {
-                partitions.add(new YdbKeyRange(kr, types));
+                YdbKeyRange ykr = new YdbKeyRange(kr, types);
+                if (ykr.isUnrestricted() && !partitions.isEmpty()) {
+                    LOG.warn("Unrestricted partition for table {}, ignoring partition metadata",
+                            this.tablePath);
+                    partitions.clear();
+                    break;
+                } else {
+                    partitions.add(ykr);
+                }
             }
         }
         LOG.debug("Loaded table {} with {} columns and {} partitions",

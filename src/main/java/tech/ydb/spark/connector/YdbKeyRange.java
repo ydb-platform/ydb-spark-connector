@@ -89,6 +89,10 @@ public class YdbKeyRange implements Serializable {
         return false;
     }
 
+    public boolean isUnrestricted() {
+        return from.isUnrestricted() && to.isUnrestricted();
+    }
+
     public static Limit convert(Optional<KeyBound> v, YdbTypes types) {
         if (v.isPresent()) {
             KeyBound kb = v.get();
@@ -180,7 +184,7 @@ public class YdbKeyRange implements Serializable {
         }
         if (pos==v.value.size())
             return v;
-        if (pos<=1)
+        if (pos<1)
             return NO_LIMIT;
         return new Limit(new ArrayList<>(v.value.subList(0, pos)), v.inclusive);
     }

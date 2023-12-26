@@ -12,14 +12,14 @@ import org.apache.spark.sql.connector.read.PartitionReaderFactory;
  *
  * @author zinal
  */
-public class YdbBatch implements Batch {
+public class YdbScanBatch implements Batch {
 
     private static final org.slf4j.Logger LOG =
-            org.slf4j.LoggerFactory.getLogger(YdbBatch.class);
+            org.slf4j.LoggerFactory.getLogger(YdbScanBatch.class);
 
     private final YdbScanOptions options;
 
-    public YdbBatch(YdbScanOptions options) {
+    public YdbScanBatch(YdbScanOptions options) {
         this.options = options;
     }
 
@@ -32,6 +32,7 @@ public class YdbBatch implements Batch {
             partitions.add(YdbKeyRange.UNRESTRICTED);
             LOG.warn("Missing partitioning information for table {}", options.getTablePath());
         }
+        LOG.debug("Input table partitions: {}", partitions);
         // Predicates restriction
         YdbKeyRange predicates = new YdbKeyRange(
                 new YdbKeyRange.Limit(options.getRangeBegin(), true),
