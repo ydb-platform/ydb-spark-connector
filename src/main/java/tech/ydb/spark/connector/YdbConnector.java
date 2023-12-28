@@ -34,6 +34,7 @@ public class YdbConnector extends YdbOptions implements AutoCloseable {
     private final SessionRetryContext retryCtx;
     private final String database;
     private final YdbTypes defaultTypes;
+    private final YdbIngestMethod defaultIngestMethod;
 
     public YdbConnector(String catalogName, Map<String, String> props) {
         this.catalogName = catalogName;
@@ -42,6 +43,9 @@ public class YdbConnector extends YdbOptions implements AutoCloseable {
             this.connectOptions.put(me.getKey().toLowerCase(), me.getValue());
         }
         this.defaultTypes = new YdbTypes(this.connectOptions);
+        this.defaultIngestMethod = YdbIngestMethod.valueOf(
+                this.connectOptions.getOrDefault(YdbOptions.YDB_METHOD,
+                        YdbIngestMethod.UPSERT.name()).toUpperCase());
         final int poolSize;
         try {
             int ncores = Runtime.getRuntime().availableProcessors();
@@ -161,6 +165,10 @@ public class YdbConnector extends YdbOptions implements AutoCloseable {
 
     public YdbTypes getDefaultTypes() {
         return defaultTypes;
+    }
+
+    public YdbIngestMethod getDefaultIngestMethod() {
+        return defaultIngestMethod;
     }
 
     @Override

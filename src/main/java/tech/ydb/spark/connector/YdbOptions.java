@@ -80,6 +80,11 @@ public abstract class YdbOptions {
     public static final String YDB_TABLE = "table";
 
     /**
+     * YDB data ingestion method: upsert/replace/bulk
+     */
+    public static final String YDB_METHOD = "method";
+
+    /**
      * Connection identity properties used to define the connection singletons.
      */
     public static final List<String> YDB_CONNECTION_IDENTITY =
