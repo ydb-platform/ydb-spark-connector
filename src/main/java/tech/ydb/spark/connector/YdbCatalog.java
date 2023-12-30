@@ -89,17 +89,23 @@ public class YdbCatalog extends YdbOptions
     public static <T> T checkStatus(Result<T> res, Identifier id)
             throws NoSuchTableException {
         if (!res.isSuccess()) {
-            final Status status = res.getStatus();
-            if (StatusCode.SCHEME_ERROR.equals(status.getCode())) {
-                for (Issue i : status.getIssues()) {
-                    if (i != null && i.getMessage().endsWith("Path not found")) {
-                        throw new NoSuchTableException(id);
-                    }
-                }
-            }
-            status.expectSuccess("ydb metadata query failed on " + id);
+            checkStatus(res.getStatus(), id);
         }
         return res.getValue();
+    }
+
+    public static void checkStatus(Status status, Identifier id)
+            throws NoSuchTableException {
+        if (status.isSuccess())
+            return;
+        if (StatusCode.SCHEME_ERROR.equals(status.getCode())) {
+            for (Issue i : status.getIssues()) {
+                if (i != null && i.getMessage().endsWith("Path not found")) {
+                    throw new NoSuchTableException(id);
+                }
+            }
+        }
+        status.expectSuccess("ydb metadata query failed on " + id);
     }
 
     @Override
@@ -211,13 +217,44 @@ public class YdbCatalog extends YdbOptions
 
     @Override
     public boolean dropTable(Identifier ident) {
-        throw new UnsupportedOperationException("Not supported yet.");
+        if (ident.name().startsWith("ix/")) {
+            throw new UnsupportedOperationException("Cannot drop index table " + ident);
+        }
+        final String tablePath = mergePath(ident);
+        Result<TableDescription> res = getRetryCtx().supplyResult(session -> {
+            final DescribeTableSettings dts = new DescribeTableSettings();
+            dts.setIncludeShardKeyBounds(false);
+            return session.describeTable(tablePath, dts);
+        }).join();
+        try {
+            checkStatus(res, ident);
+        } catch(NoSuchTableException nste) {
+            return false;
+        }
+        Status status = connector.getRetryCtx().supplyStatus(
+                session -> session.dropTable(tablePath)).join();
+        if (! status.isSuccess()) {
+            status.expectSuccess("Failed to drop table " + ident);
+        }
+        return true;
     }
 
     @Override
     public void renameTable(Identifier oldIdent, Identifier newIdent)
             throws NoSuchTableException, TableAlreadyExistsException {
-        throw new UnsupportedOperationException("Not supported yet.");
+        if (oldIdent.name().startsWith("ix/")) {
+            throw new UnsupportedOperationException("Cannot rename index table " + oldIdent);
+        }
+        if (newIdent.name().startsWith("ix/")) {
+            throw new UnsupportedOperationException("Cannot rename table to index " + newIdent);
+        }
+        final String oldPath = mergePath(oldIdent);
+        final String newPath = mergePath(newIdent);
+        Status status = getRetryCtx().supplyStatus(
+                session -> session.renameTable(oldPath, newPath, false)).join();
+        if ( ! status.isSuccess()) {
+            status.expectSuccess("Failed to rename table [" + oldIdent + "] to [" + newIdent + "]");
+        }
     }
 
     @Override
