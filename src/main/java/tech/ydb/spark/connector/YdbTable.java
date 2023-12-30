@@ -37,6 +37,7 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
         final Set<TableCapability> c = new HashSet<>();
         c.add(TableCapability.BATCH_READ);
         c.add(TableCapability.BATCH_WRITE);
+        c.add(TableCapability.ACCEPT_ANY_SCHEMA); // allow YDB to check the schema
         CAPABILITIES = Collections.unmodifiableSet(c);
     }
 
