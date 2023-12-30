@@ -13,10 +13,11 @@ import org.apache.spark.sql.connector.write.DataWriter;
 import org.apache.spark.sql.connector.write.WriterCommitMessage;
 import org.apache.spark.sql.types.StructField;
 
-import tech.ydb.core.Result;
-import tech.ydb.table.query.DataQueryResult;
+import tech.ydb.core.Status;
 import tech.ydb.table.query.Params;
+import tech.ydb.table.settings.BulkUpsertSettings;
 import tech.ydb.table.transaction.TxControl;
+import tech.ydb.table.values.ListValue;
 import tech.ydb.table.values.StructValue;
 import tech.ydb.table.values.StructType;
 import tech.ydb.table.values.Type;
@@ -31,46 +32,58 @@ public class YdbWriterBasic implements DataWriter<InternalRow> {
 
     private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(YdbWriterBasic.class);
 
-    public final static int MAX_ROWS = 500;
-
     private final YdbTypes types;
     private final List<StructField> sparkFields;
     private final List<YdbFieldInfo> statementFields;
-    private final String sqlUpsert;
+    private final String sqlStatement;
+    private final String tablePath;
     private final tech.ydb.table.values.StructType inputType;
     private final tech.ydb.table.values.ListType listType;
+    private final YdbIngestMethod ingestMethod;
+    private final int maxBulkRows;
 
     private final YdbConnector connector;
     private final List<Value<?>> currentInput;
-    private CompletableFuture<Result<DataQueryResult>> currentResult;
+    private CompletableFuture<Status> currentStatus;
 
     public YdbWriterBasic(YdbWriteOptions options) {
         this.types = options.getTypes();
         this.sparkFields = new ArrayList<>(JavaConverters.asJavaCollection(
                 options.getInputType().toList()));
         this.statementFields = makeStatementFields(options, this.sparkFields);
-        this.sqlUpsert = makeSqlUpsert(options, this.statementFields);
+        this.sqlStatement = makeSql(options, this.statementFields);
+        this.tablePath = options.getTablePath();
         this.inputType = makeInputType(this.statementFields);
         this.listType = tech.ydb.table.values.ListType.of(this.inputType);
+        this.ingestMethod = options.getIngestMethod();
+        this.maxBulkRows = options.getMaxBulkRows();
         this.connector = YdbRegistry.getOrCreate(
                 options.getCatalogName(), options.getConnectOptions());
         this.currentInput = new ArrayList<>();
-        this.currentResult = null;
+        this.currentStatus = null;
         if (LOG.isDebugEnabled()) {
-            LOG.debug("YQL statement: {}", this.sqlUpsert);
+            LOG.debug("YQL statement: {}", this.sqlStatement);
             LOG.debug("Input structure: {}", this.inputType);
         }
     }
 
     @Override
     public void write(InternalRow record) throws IOException {
+        currentInput.add(StructValue.of(convertRow(record)));
+        if (currentInput.size() >= maxBulkRows) {
+            startNewStatement(currentInput);
+            currentInput.clear();
+        }
+    }
+
+    private Map<String, Value<?>> convertRow(InternalRow record) throws IOException {
         final int numFields = record.numFields();
         if (numFields != sparkFields.size()) {
             throw new IOException("Incorrect input record field count, expected "
                     + Integer.toString(sparkFields.size()) + ", actual "
                     + Integer.toString(record.numFields()));
         }
-        final Map<String, Value<?>> currentRow = new HashMap<>();
+        Map<String, Value<?>> currentRow = new HashMap<>();
         for (int i = 0; i < numFields; ++i) {
             YdbFieldInfo yfi = statementFields.get(i);
             final Object value = record.get(i, sparkFields.get(i).dataType());
@@ -81,22 +94,30 @@ public class YdbWriterBasic implements DataWriter<InternalRow> {
             }
             currentRow.put(yfi.getName(), conv);
         }
-        Value<?> row = StructValue.of(currentRow);
-        currentInput.add(row);
-        // LOG.debug("Converted input row: {}", row);
-        if (currentInput.size() >= MAX_ROWS) {
-            startNewStatement(currentInput);
-            currentInput.clear();
-        }
+        // LOG.debug("Converted input row: {}", currentRow);
+        return currentRow;
     }
 
     private void startNewStatement(List<Value<?>> input) {
-        if (currentResult!=null) {
-            currentResult.join().getStatus().expectSuccess();
+        if (currentStatus!=null) {
+            currentStatus.join().expectSuccess();
+            currentStatus = null;
         }
-        Params params = Params.of("$input", listType.newValue(input));
-        currentResult = connector.getRetryCtx().supplyResult(session -> session.executeDataQuery(
-                            sqlUpsert, TxControl.serializableRw().setCommitTx(true), params));
+        // The list is being copied here.
+        // DO NOT move this call into the async methods below.
+        ListValue value = listType.newValue(input);
+        if (YdbIngestMethod.BULK.equals(ingestMethod)) {
+            currentStatus = connector.getRetryCtx().supplyStatus(
+                    session -> session.executeBulkUpsert(
+                            tablePath, value, new BulkUpsertSettings()));
+        } else {
+            currentStatus = connector.getRetryCtx().supplyStatus(
+                    session -> CompletableFuture.completedFuture(
+                            session.executeDataQuery(sqlStatement,
+                                    TxControl.serializableRw().setCommitTx(true),
+                                    Params.of("$input", value))
+                                    .join().getStatus()));
+        }
     }
 
     @Override
@@ -107,9 +128,9 @@ public class YdbWriterBasic implements DataWriter<InternalRow> {
             currentInput.clear();
         }
         // Wait for the statement to be executed, and check the results
-        if (currentResult!=null) {
-            currentResult.join().getStatus().expectSuccess();
-            currentResult = null;
+        if (currentStatus!=null) {
+            currentStatus.join().expectSuccess();
+            currentStatus = null;
         }
         // All rows have been written successfully
         return new YdbWriteCommit();
@@ -118,20 +139,20 @@ public class YdbWriterBasic implements DataWriter<InternalRow> {
     @Override
     public void abort() throws IOException {
         currentInput.clear();
-        if (currentResult!=null) {
-            currentResult.cancel(true);
-            currentResult.join();
-            currentResult = null;
+        if (currentStatus!=null) {
+            currentStatus.cancel(true);
+            currentStatus.join();
+            currentStatus = null;
         }
     }
 
     @Override
     public void close() throws IOException {
         currentInput.clear();
-        if (currentResult!=null) {
-            currentResult.cancel(true);
-            currentResult.join();
-            currentResult = null;
+        if (currentStatus!=null) {
+            currentStatus.cancel(true);
+            currentStatus.join();
+            currentStatus = null;
         }
     }
 
@@ -148,7 +169,7 @@ public class YdbWriterBasic implements DataWriter<InternalRow> {
         return out;
     }
 
-    private static String makeSqlUpsert(YdbWriteOptions options, List<YdbFieldInfo> fields) {
+    private static String makeSql(YdbWriteOptions options, List<YdbFieldInfo> fields) {
         final StringBuilder sb = new StringBuilder();
         sb.append("DECLARE $input AS List<Struct<");
         boolean comma = false;
@@ -161,7 +182,16 @@ public class YdbWriterBasic implements DataWriter<InternalRow> {
                 sb.append("?");
         }
         sb.append(">>;\n");
-        sb.append("UPSERT INTO `").append(options.getTablePath()).append("`");
+        switch (options.getIngestMethod()) {
+            case BULK: /* unused sql statement, so use UPSERT to generate it */
+            case UPSERT:
+                sb.append("UPSERT INTO ");
+                break;
+            case REPLACE:
+                sb.append("REPLACE INTO ");
+                break;
+        }
+        sb.append("`").append(options.getTablePath()).append("`");
         sb.append(" SELECT * FROM AS_TABLE($input);");
         return sb.toString();
     }

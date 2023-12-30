@@ -77,12 +77,17 @@ public abstract class YdbOptions {
     /**
      * YDB table name to be accessed, in YDB syntax ('/' as path separators).
      */
-    public static final String YDB_TABLE = "table";
+    public static final String YDB_TABLE = "dbtable";
 
     /**
      * YDB data ingestion method: upsert/replace/bulk
      */
     public static final String YDB_METHOD = "method";
+
+    /**
+     * YDB max batch rows for upsert/replace/bulk
+     */
+    public static final String YDB_BATCHSIZE = "batchsize";
 
     /**
      * Connection identity properties used to define the connection singletons.

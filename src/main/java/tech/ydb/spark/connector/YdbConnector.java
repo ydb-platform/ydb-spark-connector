@@ -43,9 +43,8 @@ public class YdbConnector extends YdbOptions implements AutoCloseable {
             this.connectOptions.put(me.getKey().toLowerCase(), me.getValue());
         }
         this.defaultTypes = new YdbTypes(this.connectOptions);
-        this.defaultIngestMethod = YdbIngestMethod.valueOf(
-                this.connectOptions.getOrDefault(YdbOptions.YDB_METHOD,
-                        YdbIngestMethod.UPSERT.name()).toUpperCase());
+        this.defaultIngestMethod = YdbIngestMethod.fromString(
+                this.connectOptions.get(YdbOptions.YDB_METHOD));
         final int poolSize;
         try {
             int ncores = Runtime.getRuntime().availableProcessors();

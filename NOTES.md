@@ -113,7 +113,7 @@ val df2 = (spark.read.format("ydb")
     .option("url", ydb_url)
     .option("auth.mode", "KEY")
     .option("auth.sakey.file", "/home/zinal/Keys/mzinal-dp1.json")
-    .option("table", "test2_fhrw/ix1/indexImplTable")
+    .option("dbtable", "test2_fhrw/ix1/indexImplTable")
     .load)
 df2.filter(df2("closed_date").gt(to_timestamp(lit("2010-02-02")))).show(10, false)
 ```
@@ -123,6 +123,8 @@ df2.filter(df2("closed_date").gt(to_timestamp(lit("2010-02-02")))).show(10, fals
 import org.apache.spark.sql.types._
 
 val YDB_URL = "grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1gfvslmokutuvt2g019/etnuogblap3e7dok6tf5"
+val YDB_KEYFILE = "/home/zinal/Keys/ydb-sa1-key1.json"
+
 val YDB_KEYFILE = "/Users/mzinal/Magic/key-ydb-sa1.json"
 
 val NUM_PART = 1000
@@ -134,16 +136,16 @@ val df3 = df2.
   withColumn("spark_partition_id",spark_partition_id()).
   withColumn("a",(spark_partition_id() * ROWS_PER_PART) + col("value")).
   withColumn("b",col("a")+30).
-  withColumn("c",col("a")+33)
+  withColumn("c",col("a")+54321)
 val df4 = df3.select("a", "b", "c")
 
 df4.write.mode("append").format("ydb").
   option("url", YDB_URL).option("auth.mode", "KEY").option("auth.sakey.file", YDB_KEYFILE).
-  option("table", "mytable").save
+  option("method", "upsert").option("batchsize", "1000").option("dbtable", "mytable").save
 
 val df0 = (spark.read.format("ydb").option("url", YDB_URL)
     .option("auth.mode", "KEY").option("auth.sakey.file", YDB_KEYFILE)
-    .option("table", "test0_fhrw")
+    .option("dbtable", "test0_fhrw")
     .load)
 df0.show(10, false)
 
