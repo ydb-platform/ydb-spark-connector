@@ -269,12 +269,10 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
         return new StructField(tc.getName(), dataType, types.mapNullable(tc.getType()), Metadata.empty());
     }
 
-    public Map<String, YdbFieldInfo> makeColumns() {
-        final Map<String, YdbFieldInfo> m = new HashMap<>();
+    public List<YdbFieldInfo> makeColumns() {
+        final List<YdbFieldInfo> m = new ArrayList<>();
         for (TableColumn tc : columns) {
-            m.put(tc.getName(), new YdbFieldInfo(
-                    tc.getName(),
-                    YdbFieldType.fromSdkType(tc.getType()),
+            m.add(new YdbFieldInfo(tc.getName(), YdbFieldType.fromSdkType(tc.getType()),
                     tech.ydb.table.values.Type.Kind.OPTIONAL.equals(tc.getType().getKind())
             ));
         }

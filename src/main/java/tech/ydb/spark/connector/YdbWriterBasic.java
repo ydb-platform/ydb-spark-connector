@@ -33,7 +33,7 @@ public class YdbWriterBasic implements DataWriter<InternalRow> {
     private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(YdbWriterBasic.class);
 
     private final YdbTypes types;
-    private final List<StructField> sparkFields;
+    private final List<StructField> inputFields;
     private final List<YdbFieldInfo> statementFields;
     private final String sqlStatement;
     private final String tablePath;
@@ -48,9 +48,9 @@ public class YdbWriterBasic implements DataWriter<InternalRow> {
 
     public YdbWriterBasic(YdbWriteOptions options) {
         this.types = options.getTypes();
-        this.sparkFields = new ArrayList<>(JavaConverters.asJavaCollection(
+        this.inputFields = new ArrayList<>(JavaConverters.asJavaCollection(
                 options.getInputType().toList()));
-        this.statementFields = makeStatementFields(options, this.sparkFields);
+        this.statementFields = makeStatementFields(options, this.inputFields);
         this.sqlStatement = makeSql(options, this.statementFields);
         this.tablePath = options.getTablePath();
         this.inputType = makeInputType(this.statementFields);
@@ -78,15 +78,15 @@ public class YdbWriterBasic implements DataWriter<InternalRow> {
 
     private Map<String, Value<?>> convertRow(InternalRow record) throws IOException {
         final int numFields = record.numFields();
-        if (numFields != sparkFields.size()) {
+        if (numFields != inputFields.size()) {
             throw new IOException("Incorrect input record field count, expected "
-                    + Integer.toString(sparkFields.size()) + ", actual "
+                    + Integer.toString(inputFields.size()) + ", actual "
                     + Integer.toString(record.numFields()));
         }
         Map<String, Value<?>> currentRow = new HashMap<>();
         for (int i = 0; i < numFields; ++i) {
             YdbFieldInfo yfi = statementFields.get(i);
-            final Object value = record.get(i, sparkFields.get(i).dataType());
+            final Object value = record.get(i, inputFields.get(i).dataType());
             Value<?> conv = types.convertToYdb(value, yfi.getType());
             if (yfi.isNullable()) {
                 if (conv.getType().getKind() != Type.Kind.OPTIONAL)
@@ -157,13 +157,20 @@ public class YdbWriterBasic implements DataWriter<InternalRow> {
     }
 
     private static List<YdbFieldInfo> makeStatementFields(YdbWriteOptions options,
-            List<StructField> sparkFields) {
-        final List<YdbFieldInfo> out = new ArrayList<>(sparkFields.size());
-        for (StructField sf : sparkFields) {
-            final String name = sf.name();
-            YdbFieldInfo fieldInfo = options.getFields().get(name);
-            if (fieldInfo!=null) {
-                out.add(fieldInfo);
+            List<StructField> inputFields) {
+        final List<YdbFieldInfo> out = new ArrayList<>(inputFields.size());
+        if (options.isMapByNames()) {
+            for (StructField sf : inputFields) {
+                final String name = sf.name();
+                YdbFieldInfo yfi = options.getFieldsMap().get(name);
+                if (yfi!=null) {
+                    out.add(yfi);
+                }
+            }
+        } else {
+            for (int pos = 0; pos < inputFields.size(); ++pos) {
+                YdbFieldInfo yfi = options.getFieldsList().get(pos);
+                out.add(yfi);
             }
         }
         return out;
@@ -197,12 +204,12 @@ public class YdbWriterBasic implements DataWriter<InternalRow> {
     }
 
     private static StructType makeInputType(List<YdbFieldInfo> statementFields) {
+        if (statementFields.isEmpty()) {
+            throw new IllegalArgumentException("Empty input field list specified for writing");
+        }
         final Map<String,Type> m = new HashMap<>();
         for (YdbFieldInfo yfi : statementFields) {
             m.put(yfi.getName(), YdbFieldType.toSdkType(yfi.getType(), yfi.isNullable()));
-        }
-        if (m.isEmpty()) {
-            throw new IllegalArgumentException("Empty input field list specified for writing");
         }
         return StructType.of(m);
     }

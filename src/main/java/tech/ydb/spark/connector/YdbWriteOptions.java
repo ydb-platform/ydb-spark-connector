@@ -15,16 +15,20 @@ public class YdbWriteOptions extends YdbTableOperationOptions implements Seriali
 
     private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(YdbWriteOptions.class);
 
+    private final StructType tableType;
     private final StructType inputType;
+    private final boolean mapByNames;
     private final String queryId;
     private final YdbIngestMethod ingestMethod;
     private final Map<String,String> options;
     private final int maxBulkRows;
 
-    public YdbWriteOptions(YdbTable table, StructType inputType,
+    public YdbWriteOptions(YdbTable table, boolean mapByNames, StructType inputType,
             String queryId, Map<String,String> options) {
         super(table);
+        this.tableType = table.schema();
         this.inputType = inputType;
+        this.mapByNames = mapByNames;
         this.queryId = queryId;
         this.options = new HashMap<>();
         if (options != null) {
@@ -61,8 +65,16 @@ public class YdbWriteOptions extends YdbTableOperationOptions implements Seriali
         return options;
     }
 
+    public StructType getTableType() {
+        return tableType;
+    }
+
     public StructType getInputType() {
         return inputType;
+    }
+
+    public boolean isMapByNames() {
+        return mapByNames;
     }
 
     public int getMaxBulkRows() {

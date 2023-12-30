@@ -4,6 +4,7 @@ import java.io.Serializable;
 
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.connector.write.*;
+import org.apache.spark.sql.types.StructType;
 
 /**
  * YDB table writer: orchestration and partition writer factory.
@@ -14,8 +15,9 @@ public class YdbWrite implements Serializable, WriteBuilder, Write, BatchWrite, 
 
     private final YdbWriteOptions options;
 
-    YdbWrite(YdbTable table, LogicalWriteInfo lwi) {
-        this.options = new YdbWriteOptions(table, lwi.schema(), lwi.queryId(), lwi.options());
+    YdbWrite(YdbTable table, LogicalWriteInfo lwi, boolean mapByNames) {
+        this.options = new YdbWriteOptions(table, mapByNames,
+                lwi.schema(), lwi.queryId(), lwi.options());
     }
 
     @Override
