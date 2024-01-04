@@ -22,6 +22,7 @@ import tech.ydb.table.description.KeyRange;
 import tech.ydb.table.description.TableColumn;
 import tech.ydb.table.description.TableDescription;
 import tech.ydb.table.description.TableIndex;
+import tech.ydb.table.settings.PartitioningSettings;
 
 /**
  * YDB table metadata representation for Spark.
@@ -95,6 +96,29 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
         this.properties.put(YdbOptions.TABLE_PATH, tablePath);
         this.properties.put(YdbOptions.PRIMARY_KEY,
                 this.keyColumns.stream().collect(Collectors.joining(",")));
+        PartitioningSettings ps = td.getPartitioningSettings();
+        if (ps != null) {
+            Boolean bv = ps.getPartitioningBySize();
+            if (bv != null) {
+                this.properties.put(YdbOptions.AP_BY_SIZE.toLowerCase(), bv ? "ENABLED" : "DISABLED");
+            }
+            bv = ps.getPartitioningByLoad();
+            if (bv != null) {
+                this.properties.put(YdbOptions.AP_BY_LOAD.toLowerCase(), bv ? "ENABLED" : "DISABLED");
+            }
+            Long lv = ps.getPartitionSizeMb();
+            if (lv != null) {
+                this.properties.put(YdbOptions.AP_PART_SIZE_MB.toLowerCase(), lv.toString());
+            }
+            lv = ps.getMinPartitionsCount();
+            if (lv != null) {
+                this.properties.put(YdbOptions.AP_MIN_PARTS.toLowerCase(), lv.toString());
+            }
+            lv = ps.getMaxPartitionsCount();
+            if (lv != null) {
+                this.properties.put(YdbOptions.AP_MAX_PARTS.toLowerCase(), lv.toString());
+            }
+        }
         LOG.debug("Loaded table {} with {} columns and {} partitions",
                 this.tablePath, this.columns.size(), this.partitions.size());
     }
