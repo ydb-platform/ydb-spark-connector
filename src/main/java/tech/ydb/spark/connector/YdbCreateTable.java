@@ -22,40 +22,30 @@ import tech.ydb.table.settings.PartitioningSettings;
  *
  * @author zinal
  */
-class YdbCreateTable implements Runnable {
-
-    private final SessionRetryContext retryCtx;
+class YdbCreateTable {
 
     private final String tablePath;
     private final List<YdbFieldInfo> fields;
     private final List<String> primaryKey;
     private final Map<String,String> properties;
 
-    public YdbCreateTable(SessionRetryContext retryCtx, String tablePath,
-            List<YdbFieldInfo> fields, List<String> primaryKey, Map<String,String> properties) {
-        this.retryCtx = retryCtx;
+    public YdbCreateTable(String tablePath, List<YdbFieldInfo> fields,
+            List<String> primaryKey, Map<String,String> properties) {
         this.tablePath = tablePath;
         this.fields = fields;
         this.primaryKey = primaryKey;
         this.properties = properties;
     }
 
-    public YdbCreateTable(SessionRetryContext retryCtx, String tablePath,
-            List<YdbFieldInfo> fields, Map<String,String> properties) {
-        this.retryCtx = retryCtx;
+    public YdbCreateTable(String tablePath, List<YdbFieldInfo> fields,
+            Map<String,String> properties) {
         this.tablePath = tablePath;
         this.fields = fields;
         this.primaryKey = makePrimaryKey(fields, properties);
         this.properties = properties;
     }
 
-    @Override
-    public void run() {
-        retryCtx.supplyStatus(session -> createTable(session)).join()
-                .expectSuccess("failed to create table [" + tablePath + "]");
-    }
-
-    private CompletableFuture<Status> createTable(Session session) {
+    public CompletableFuture<Status> createTable(Session session) {
         TableDescription.Builder tdb = TableDescription.newBuilder();
         for (YdbFieldInfo yfi : fields) {
             if (yfi.isNullable()) {
@@ -74,8 +64,8 @@ class YdbCreateTable implements Runnable {
             minPartitions = 1L;
         }
         long maxPartitions = getLongOption("AUTO_PARTITIONING_MAX_PARTITIONS_COUNT", 50L);
-        if (maxPartitions < minPartitions + 50L) {
-            maxPartitions = minPartitions + 50L + (minPartitions / 100L);
+        if (maxPartitions < minPartitions + 49L) {
+            maxPartitions = minPartitions + 49L + (minPartitions / 100L);
         }
         ps.setMinPartitionsCount(minPartitions);
         ps.setMaxPartitionsCount(maxPartitions);
@@ -135,10 +125,11 @@ class YdbCreateTable implements Runnable {
         return defval;
     }
 
-    public static List<YdbFieldInfo> convert(StructType st) {
+    public static List<YdbFieldInfo> convert(YdbTypes types, StructType st) {
         final List<YdbFieldInfo> fields = new ArrayList<>(st.size());
         for (StructField sf : JavaConverters.asJavaCollection(st)) {
-            fields.add(new YdbFieldInfo(sf.name(), YdbFieldType.Bytes, sf.nullable()));
+            fields.add(new YdbFieldInfo(sf.name(), 
+                    types.mapTypeSpark2Ydb(sf.dataType()), sf.nullable()));
         }
         return fields;
     }

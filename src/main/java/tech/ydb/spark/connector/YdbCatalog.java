@@ -212,8 +212,11 @@ public class YdbCatalog extends YdbOptions
         }
         String tablePath = mergePath(ident);
         // Actual table creation logic is moved to a separate class.
-        new YdbCreateTable(getRetryCtx(), tablePath,
-                YdbCreateTable.convert(schema), YdbCreateTable.makeProperties(properties)).run();
+        final YdbCreateTable action = new YdbCreateTable(tablePath,
+                YdbCreateTable.convert(getConnector().getDefaultTypes(), schema),
+                YdbCreateTable.makeProperties(properties));
+        getRetryCtx().supplyStatus(session -> action.createTable(session)).join()
+                .expectSuccess("Failed to create table " + ident);
         // Load the description for the table created.
         Result<TableDescription> res = getRetryCtx().supplyResult(session -> {
             final DescribeTableSettings dts = new DescribeTableSettings();
