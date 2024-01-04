@@ -18,38 +18,38 @@ public class YdbOptionsTest {
         existing = new HashMap<>();
         referenced = new HashMap<>();
 
-        existing.put(YdbOptions.YDB_URL, "url1");
-        existing.put(YdbOptions.YDB_AUTH_MODE, "META");
-        referenced.put(YdbOptions.YDB_URL, "url1");
-        referenced.put(YdbOptions.YDB_AUTH_MODE, "META");
+        existing.put(YdbOptions.URL, "url1");
+        existing.put(YdbOptions.AUTH_MODE, "META");
+        referenced.put(YdbOptions.URL, "url1");
+        referenced.put(YdbOptions.AUTH_MODE, "META");
         Assert.assertEquals(true, YdbOptions.connectionMatches(existing, referenced));
 
-        referenced.put(YdbOptions.YDB_URL, "url2");
+        referenced.put(YdbOptions.URL, "url2");
         Assert.assertEquals(false, YdbOptions.connectionMatches(existing, referenced));
 
-        referenced.put(YdbOptions.YDB_URL, "url1");
+        referenced.put(YdbOptions.URL, "url1");
         Assert.assertEquals(true, YdbOptions.connectionMatches(existing, referenced));
 
-        referenced.put(YdbOptions.YDB_AUTH_MODE, "ENV");
+        referenced.put(YdbOptions.AUTH_MODE, "ENV");
         Assert.assertEquals(false, YdbOptions.connectionMatches(existing, referenced));
 
-        referenced.put(YdbOptions.YDB_AUTH_MODE, "META");
+        referenced.put(YdbOptions.AUTH_MODE, "META");
         Assert.assertEquals(true, YdbOptions.connectionMatches(existing, referenced));
 
-        referenced.put(YdbOptions.YDB_AUTH_MODE, "STATIC");
-        referenced.put(YdbOptions.YDB_AUTH_LOGIN, "ivanoff");
-        referenced.put(YdbOptions.YDB_AUTH_PASSWORD, "password1");
+        referenced.put(YdbOptions.AUTH_MODE, "STATIC");
+        referenced.put(YdbOptions.AUTH_LOGIN, "ivanoff");
+        referenced.put(YdbOptions.AUTH_PASSWORD, "password1");
         Assert.assertEquals(false, YdbOptions.connectionMatches(existing, referenced));
 
-        existing.put(YdbOptions.YDB_AUTH_MODE, "STATIC");
-        existing.put(YdbOptions.YDB_AUTH_LOGIN, "ivanoff");
-        existing.put(YdbOptions.YDB_AUTH_PASSWORD, "password1");
+        existing.put(YdbOptions.AUTH_MODE, "STATIC");
+        existing.put(YdbOptions.AUTH_LOGIN, "ivanoff");
+        existing.put(YdbOptions.AUTH_PASSWORD, "password1");
         Assert.assertEquals(true, YdbOptions.connectionMatches(existing, referenced));
 
-        existing.put(YdbOptions.YDB_AUTH_PASSWORD, "password2");
+        existing.put(YdbOptions.AUTH_PASSWORD, "password2");
         Assert.assertEquals(true, YdbOptions.connectionMatches(existing, referenced));
 
-        referenced.put(YdbOptions.YDB_AUTH_LOGIN, "petroff");
+        referenced.put(YdbOptions.AUTH_LOGIN, "petroff");
         Assert.assertEquals(false, YdbOptions.connectionMatches(existing, referenced));
     }
 

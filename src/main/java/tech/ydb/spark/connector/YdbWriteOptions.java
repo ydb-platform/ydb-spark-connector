@@ -36,18 +36,18 @@ public class YdbWriteOptions extends YdbTableOperationOptions implements Seriali
                 this.options.put(me.getKey().toLowerCase(), me.getValue());
             }
         }
-        if (this.options.containsKey(YdbOptions.YDB_METHOD)) {
+        if (this.options.containsKey(YdbOptions.INGEST_METHOD)) {
             this.ingestMethod = YdbIngestMethod.fromString(
-                    this.options.get(YdbOptions.YDB_METHOD));
+                    this.options.get(YdbOptions.INGEST_METHOD));
         } else {
             this.ingestMethod = table.getConnector().getDefaultIngestMethod();
         }
         int n;
         try {
-            n = Integer.parseInt(this.options.getOrDefault(YdbOptions.YDB_BATCHSIZE, "500"));
+            n = Integer.parseInt(this.options.getOrDefault(YdbOptions.BATCH_SIZE, "500"));
         } catch(NumberFormatException nfe) {
             LOG.warn("Illegal input value for option [{}], default of 500 is used instead",
-                    YdbOptions.YDB_BATCHSIZE, nfe);
+                    YdbOptions.BATCH_SIZE, nfe);
             n = 500;
         }
         this.maxBulkRows = n;

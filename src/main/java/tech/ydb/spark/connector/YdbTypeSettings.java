@@ -21,7 +21,7 @@ public class YdbTypeSettings implements Serializable {
         if (options==null)
             options = Collections.emptyMap();
         this.dateAsString = Boolean.parseBoolean(
-                options.getOrDefault(YdbOptions.YDB_DATE_AS_STRING, "false"));
+                options.getOrDefault(YdbOptions.DATE_AS_STRING, "false"));
     }
 
     public boolean isDateAsString() {

@@ -44,20 +44,20 @@ public class YdbConnector extends YdbOptions implements AutoCloseable {
         }
         this.defaultTypes = new YdbTypes(this.connectOptions);
         this.defaultIngestMethod = YdbIngestMethod.fromString(
-                this.connectOptions.get(YdbOptions.YDB_METHOD));
+                this.connectOptions.get(YdbOptions.INGEST_METHOD));
         final int poolSize;
         try {
             int ncores = Runtime.getRuntime().availableProcessors();
             if (ncores < 2)
                 ncores = 2;
             String defaultCores = String.valueOf(4 * ncores);
-            poolSize = Integer.parseInt(props.getOrDefault(YDB_POOL_SIZE, defaultCores));
+            poolSize = Integer.parseInt(props.getOrDefault(POOL_SIZE, defaultCores));
         } catch(NumberFormatException nfe) {
-            throw new IllegalArgumentException("Incorrect value for property " + YDB_POOL_SIZE, nfe);
+            throw new IllegalArgumentException("Incorrect value for property " + POOL_SIZE, nfe);
         }
         GrpcTransportBuilder builder = GrpcTransport
-                .forConnectionString(props.get(YDB_URL));
-        String caString = props.get(YDB_CA_FILE);
+                .forConnectionString(props.get(URL));
+        String caString = props.get(CA_FILE);
         if (caString!=null) {
             byte[] cert;
             try {
@@ -67,7 +67,7 @@ public class YdbConnector extends YdbOptions implements AutoCloseable {
             }
             builder = builder.withSecureConnection(cert);
         } else {
-            caString = props.get(YDB_CA_TEXT);
+            caString = props.get(CA_TEXT);
             if (caString!=null) {
                 caString = caString.replace("\\n", "\n");
                 byte[] cert = caString.getBytes(StandardCharsets.UTF_8);
@@ -76,9 +76,9 @@ public class YdbConnector extends YdbOptions implements AutoCloseable {
         }
         final YdbAuthMode authMode;
         try {
-            authMode = YdbAuthMode.fromString(props.get(YDB_AUTH_MODE));
+            authMode = YdbAuthMode.fromString(props.get(AUTH_MODE));
         } catch(IllegalArgumentException iae) {
-            throw new IllegalArgumentException("Incorrect value for property " + YDB_AUTH_MODE, iae);
+            throw new IllegalArgumentException("Incorrect value for property " + AUTH_MODE, iae);
         }
         switch (authMode) {
             case ENV:
@@ -90,17 +90,17 @@ public class YdbConnector extends YdbOptions implements AutoCloseable {
                 break;
             case STATIC:
                 builder = builder.withAuthProvider(
-                    new StaticCredentials(props.get(YDB_AUTH_LOGIN), props.get(YDB_AUTH_PASSWORD)));
+                    new StaticCredentials(props.get(AUTH_LOGIN), props.get(AUTH_PASSWORD)));
                 break;
             case KEY:
-                String keyFile = props.get(YDB_AUTH_SAKEY_FILE);
+                String keyFile = props.get(AUTH_SAKEY_FILE);
                 if (keyFile!=null) {
                     final String v = keyFile;
                     builder = builder.withAuthProvider((opt) -> {
                         return CloudAuthIdentity.serviceAccountIdentity(Paths.get(v));
                     });
                 } else {
-                    keyFile = props.get(YDB_AUTH_SAKEY_TEXT);
+                    keyFile = props.get(AUTH_SAKEY_TEXT);
                     if (keyFile!=null) {
                         final String v = keyFile;
                         builder = builder.withAuthProvider((opt) -> {
@@ -110,7 +110,7 @@ public class YdbConnector extends YdbOptions implements AutoCloseable {
                 }
                 break;
             case TOKEN:
-                final String authToken = props.get(YDB_AUTH_TOKEN);
+                final String authToken = props.get(AUTH_TOKEN);
                 builder = builder.withAuthProvider((opt) -> {
                     return CloudAuthIdentity.iamTokenIdentity(authToken);
                 });

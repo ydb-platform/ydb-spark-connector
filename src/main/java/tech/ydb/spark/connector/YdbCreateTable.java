@@ -57,19 +57,19 @@ class YdbCreateTable {
         tdb.setPrimaryKeys(primaryKey);
 
         final PartitioningSettings ps = new PartitioningSettings();
-        ps.setPartitioningBySize(getBooleanOption("AUTO_PARTITIONING_BY_SIZE", true));
-        ps.setPartitioningByLoad(getBooleanOption("AUTO_PARTITIONING_BY_LOAD", true));
-        long minPartitions = getLongOption("AUTO_PARTITIONING_MIN_PARTITIONS_COUNT", 1L);
+        ps.setPartitioningBySize(getBooleanOption(YdbOptions.AP_BY_SIZE, true));
+        ps.setPartitioningByLoad(getBooleanOption(YdbOptions.AP_BY_LOAD, true));
+        long minPartitions = getLongOption(YdbOptions.AP_MIN_PARTS, 1L);
         if (minPartitions < 1) {
             minPartitions = 1L;
         }
-        long maxPartitions = getLongOption("AUTO_PARTITIONING_MAX_PARTITIONS_COUNT", 50L);
+        long maxPartitions = getLongOption(YdbOptions.AP_MAX_PARTS, 50L);
         if (maxPartitions < minPartitions + 49L) {
             maxPartitions = minPartitions + 49L + (minPartitions / 100L);
         }
         ps.setMinPartitionsCount(minPartitions);
         ps.setMaxPartitionsCount(maxPartitions);
-        long minSizeMb = getLongOption("AUTO_PARTITIONING_PARTITION_SIZE_MB", 2000L);
+        long minSizeMb = getLongOption(YdbOptions.AP_PART_SIZE_MB, 2000L);
         if (minSizeMb < 1L) {
             minSizeMb = 10L;
         }

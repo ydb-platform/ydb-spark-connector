@@ -60,7 +60,7 @@ public class YdbTableProvider extends YdbOptions implements TableProvider, DataS
 
     private YdbTable getOrLoadTable(Map<String, String> props) {
         // Check that table path is provided
-        final String inputTable = props.get(YDB_TABLE);
+        final String inputTable = props.get(DBTABLE);
         if (inputTable==null || inputTable.length()==0) {
             throw new IllegalArgumentException("Missing table name property");
         }

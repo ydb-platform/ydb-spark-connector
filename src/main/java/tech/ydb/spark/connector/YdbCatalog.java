@@ -49,7 +49,7 @@ public class YdbCatalog extends YdbOptions
     public void initialize(String name, CaseInsensitiveStringMap options) {
         this.catalogName = name;
         this.connector = YdbRegistry.getOrCreate(name, options);
-        this.listIndexes = options.getBoolean(YDB_LIST_INDEXES, false);
+        this.listIndexes = options.getBoolean(LIST_INDEXES, false);
     }
 
     @Override
