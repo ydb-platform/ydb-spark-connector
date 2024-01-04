@@ -205,13 +205,31 @@ public class YdbCatalog extends YdbOptions
 
     @Override
     public Table createTable(Identifier ident, StructType schema, Transform[] partitions, 
-            Map<String, String> properties)
-            throws TableAlreadyExistsException, NoSuchNamespaceException {
-        throw new UnsupportedOperationException("Not supported yet.");
+            Map<String, String> properties) throws TableAlreadyExistsException, NoSuchNamespaceException {
+        if (ident.name().startsWith("ix/")) {
+            throw new UnsupportedOperationException("Direct index table creation is not possible,"
+                    + "identifier " + ident);
+        }
+        String tablePath = mergePath(ident);
+        // Actual table creation logic is moved to a separate class.
+        new YdbCreateTable(getRetryCtx(), tablePath,
+                YdbCreateTable.convert(schema), YdbCreateTable.makeProperties(properties)).run();
+        // Load the description for the table created.
+        Result<TableDescription> res = getRetryCtx().supplyResult(session -> {
+            final DescribeTableSettings dts = new DescribeTableSettings();
+            dts.setIncludeShardKeyBounds(true);
+            return session.describeTable(tablePath, dts);
+        }).join();
+        res.getStatus().expectSuccess();
+        return new YdbTable(getConnector(), mergeLocal(ident), tablePath, res.getValue());
     }
 
     @Override
     public Table alterTable(Identifier ident, TableChange... changes) throws NoSuchTableException {
+        if (ident.name().startsWith("ix/")) {
+            throw new UnsupportedOperationException("Index table alteration is not possible,"
+                    + "identifier " + ident);
+        }
         throw new UnsupportedOperationException("Not supported yet.");
     }
 
@@ -295,7 +313,7 @@ public class YdbCatalog extends YdbOptions
                 .describePath(mergePath(namespace)).join();
         DescribePathResult dpr = checkStatus(res, namespace);
         m.put(ENTRY_TYPE, dpr.getSelf().getType().name());
-        m.put(ENTRY_TYPE, dpr.getSelf().getOwner());
+        m.put(ENTRY_OWNER, dpr.getSelf().getOwner());
         return m;
     }
 

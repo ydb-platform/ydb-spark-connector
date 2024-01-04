@@ -139,6 +139,53 @@ public final class YdbTypes implements Serializable {
         return null;
     }
 
+    public YdbFieldType mapTypeSpark2Ydb(org.apache.spark.sql.types.DataType type) {
+        if (type instanceof org.apache.spark.sql.types.DecimalType) {
+            org.apache.spark.sql.types.DecimalType x = (org.apache.spark.sql.types.DecimalType)type;
+            if ( x.scale() == 0 ) {
+                if (x.precision() <= 21)
+                    return YdbFieldType.Int64;
+            }
+            if (x.scale()==38 && x.precision()==10)
+                return YdbFieldType.DyNumber;
+            return YdbFieldType.Decimal;
+        }
+        if (DataTypes.BooleanType.sameType(type)) {
+            return YdbFieldType.Bool;
+        }
+        if (DataTypes.ByteType.sameType(type)) {
+            return YdbFieldType.Int8;
+        }
+        if (DataTypes.ShortType.sameType(type)) {
+            return YdbFieldType.Int16;
+        }
+        if (DataTypes.IntegerType.sameType(type)) {
+            return YdbFieldType.Int32;
+        }
+        if (DataTypes.LongType.sameType(type)) {
+            return YdbFieldType.Int64;
+        }
+        if (DataTypes.FloatType.sameType(type)) {
+            return YdbFieldType.Float;
+        }
+        if (DataTypes.DoubleType.sameType(type)) {
+            return YdbFieldType.Double;
+        }
+        if (DataTypes.BinaryType.sameType(type)) {
+            return YdbFieldType.Bytes;
+        }
+        if (DataTypes.StringType.sameType(type)) {
+            return YdbFieldType.Text;
+        }
+        if (DataTypes.DateType.sameType(type)) {
+            return YdbFieldType.Date;
+        }
+        if (DataTypes.TimestampType.sameType(type)) {
+            return YdbFieldType.Timestamp;
+        }
+        return null;
+    }
+
     public Object convertFromYdb(ValueReader vr) {
         if (vr==null)
             return null;
