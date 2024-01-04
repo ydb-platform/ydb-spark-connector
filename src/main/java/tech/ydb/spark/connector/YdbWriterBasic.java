@@ -198,9 +198,22 @@ public class YdbWriterBasic implements DataWriter<InternalRow> {
                 sb.append("REPLACE INTO ");
                 break;
         }
-        sb.append("`").append(options.getTablePath()).append("`");
+        sb.append("`").append(escape(options.getTablePath())).append("`");
         sb.append(" SELECT * FROM AS_TABLE($input);");
         return sb.toString();
+    }
+
+    public static String escape(String id) {
+        if (id.contains("`")) {
+            id = id.replace("`", "\\`");
+        }
+        if (id.contains("\n")) {
+            id = id.replace("\n", "\\n");
+        }
+        if (id.contains("\r")) {
+            id = id.replace("\r", "\\r");
+        }
+        return id;
     }
 
     private static StructType makeInputType(List<YdbFieldInfo> statementFields) {
