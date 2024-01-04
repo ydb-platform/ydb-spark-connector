@@ -90,6 +90,24 @@ public abstract class YdbOptions {
     public static final String BATCH_SIZE = "batchsize";
 
     /**
+     * YDB table's primary key, as a comma-delimited list of column names.
+     */
+    public static final String PRIMARY_KEY = "primary_key";
+
+    /**
+     * YDB table type:
+     *   - row-organized (table),
+     *   - secondary index (index),
+     *   - column-organized (columnshard).
+     */
+    public static final String TABLE_TYPE = "table_type";
+
+    /**
+     * YDB table path.
+     */
+    public static final String TABLE_PATH = "table_path";
+
+    /**
      * Partitioning setting - AUTO_PARTITIONING_BY_SIZE.
      */
     public static final String AP_BY_SIZE = "AUTO_PARTITIONING_BY_SIZE";
