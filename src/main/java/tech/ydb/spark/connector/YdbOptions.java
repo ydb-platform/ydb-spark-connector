@@ -140,6 +140,13 @@ public abstract class YdbOptions {
                     AUTH_MODE, AUTH_LOGIN, AUTH_SAKEY_FILE, AUTH_TOKEN));
 
     /**
+     * Updatable table properties.
+     */
+    public static final List<String> TABLE_UPDATABLE =
+            Collections.unmodifiableList(Arrays.asList(AP_BY_SIZE, AP_BY_LOAD,
+                    AP_MIN_PARTS, AP_MAX_PARTS, AP_PART_SIZE_MB));
+
+    /**
      * Check whether existing connection's properties matches the provided referenced values.
      * Only important values are checked.
      * 
