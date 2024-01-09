@@ -11,6 +11,7 @@ import org.apache.spark.sql.connector.catalog.TableChange;
 
 import tech.ydb.core.Status;
 import tech.ydb.table.Session;
+import tech.ydb.table.description.TableColumn;
 import tech.ydb.table.description.TableDescription;
 import tech.ydb.table.settings.AlterTableSettings;
 import tech.ydb.table.settings.DescribeTableSettings;
@@ -37,7 +38,9 @@ class YdbAlterTable extends YdbPropertyHelper {
         this.td = connector.getRetryCtx().supplyResult(session -> {
             return session.describeTable(tablePath, new DescribeTableSettings());
         }).join().getValue();
-        this.td.getColumns().stream().map(tc -> this.knownNames.add(tc.getName()));
+        for (TableColumn tc : this.td.getColumns()) {
+            this.knownNames.add(tc.getName());
+        }
     }
 
     void prepare(TableChange.AddColumn change) {
