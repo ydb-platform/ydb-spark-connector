@@ -80,8 +80,12 @@ class YdbCreateTable extends YdbPropertyHelper {
     static List<YdbFieldInfo> convert(YdbTypes types, StructType st) {
         final List<YdbFieldInfo> fields = new ArrayList<>(st.size());
         for (StructField sf : JavaConverters.asJavaCollection(st)) {
-            fields.add(new YdbFieldInfo(sf.name(), 
-                    types.mapTypeSpark2Ydb(sf.dataType()), sf.nullable()));
+            YdbFieldType yft = types.mapTypeSpark2Ydb(sf.dataType());
+            if (yft==null) {
+                throw new IllegalArgumentException("Unsupported type for table column: "
+                        + sf.dataType());
+            }
+            fields.add(new YdbFieldInfo(sf.name(), yft, sf.nullable()));
         }
         return fields;
     }
