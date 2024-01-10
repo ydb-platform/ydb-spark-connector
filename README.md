@@ -1,6 +1,6 @@
 # Experimental YDB connector for Apache Spark
 
-[!IMPORTANT]
+> [!IMPORTANT]
 > YDB Connector for Spark is at the early phase of development, and is currently not recommended for production workloads.
 
 [YDB](https://ydb.tech) connector for [Apache Spark](https://spark.apache.org) can be used to integrate YDB data into Spark jobs. It supports reading and writing YDB tables, allowing for fast data access and ingestion.
@@ -11,13 +11,13 @@ For write operations, the connector uses the `UPSERT ... SELECT ...` statement t
 
 The connector has passed the basic tests with Apache Spark 3.3, 3.4 and 3.5, working on top of YDB 23.3.
 
-## Limitations and future work
+## Known limitations and future work
 
 1. The connector does not currently support consistent reading and transactional writes. Both features are planned to be implemented using the YDB's snapshots and its `CopyTables` and `RenameTables` APIs.
-1. The connector may require significant memory to read large tables with the default settings. 4 GB or more memory per core is highly recommended.
+1. The connector may require significant memory on the Spark executor side to read large tables with the default settings. 4 GB or more memory per core is highly recommended.
 1. Access to YDB columnar tables is not supported yet.
-1. Predicate pushdown is limited to primary key, secondary index key (when accessing indexes), or prefix. This is specially imported for work with YDB columnar tables.
-1. Reading and writing YDB's tables using the PostgreSQL types is not supported yet.
+1. Predicate pushdown is limited to primary key, secondary index key (when accessing indexes), or their prefixes. It is specially important to better support pushdowns with YDB columnar tables.
+1. Reading and writing YDB tables containing columns of PostgreSQL-compatible types is not supported yet.
 1. Handling of YDB's UInt64 data type is inefficient (conversion from and to the corresponding Spark type is performed through text representation).
 
 ## Connector setup
@@ -26,7 +26,12 @@ The connector is deployed as a "fat" jar archive containing the code for its dep
 
 Spark jobs using the connector should have the connector jar defined as a dependency, either explicitly (by putting it into the `--jars` argument of `spark-submit`) or implicitly (by putting into the system jars folder of the Spark installation).
 
-YDB Spark Connector can be used either by configuring the data source options directly, or by defining one or more Spark "catalogs", with each catalog pointing to some YDB database. Catalog names, when defined, allow to access YDB tables in a way similar to tables defined in the Spark's Hive catalog. Each YDB-supported Spark catalog looks like a "database" from the Spark point of view.
+The connector can be used in one of two available styles:
+
+* by defining one or more Spark "catalogs", with each catalog pointing to some YDB database,
+* by configuring the data source options directly in the Spark job code for accessing the single table.
+
+YDB Spark catalog names, when defined, allow to access YDB tables in a way very similar to tables defined in the Spark's Hive catalog. Each YDB-supported Spark catalog looks like a "database" from the Spark point of view.
 
 When configuring the "catalog" style access to YDB database from the Spark job, the configuration properties should be defined as described below:
 
@@ -68,6 +73,7 @@ val df1 = (spark.read.format("ydb")
 ```
 
 ```Python
+TODO
 ```
 
 ## Configuration reference
@@ -90,7 +96,18 @@ The following Spark configuration properties are supported by the YDB connector 
 * `auth.token` - explicit authentication token for the TOKEN authentication mode;
 * `pool.size` - connection pool size, which should be bigger than the maximum number of concurrent Spark tasks per executor;
 * `ca.file` - the file with PEM-encoded CA (Certificate Authority) certificates;
-* `ca.text` - CA certificates defined as a literal property value;
+* `ca.text` - CA certificates bundle defined as a literal property value;
+* `list.indexes` - true, if the indexes should be listed in the catalog along with regular YDB tables (default false);
+* `date.as.string` - true to return dates and timestamps as strings, false otherwise (default false);
+* `dbtable` - YDB table name to be read or written (for direct-style access), with YDB's `/` delimiters;
+* `method` - YDB data ingestion method to be used, possible values (default `upsert`):
+
+    * `upsert` - use the `UPSERT ... SELECT ...` batch YQL statements;
+    * `replace` - use the `REPLACE ... SELECT ...` batch YQL statements;
+    * `bulk` - use the BulkUpsert YDB API for data ingestion.
+
+* `batchsize` - max batch rows to be ingested in a single portion, default 500. Use with care, typically should not exceed 1000;
+* `primary_key` - list of comma-separated column names to define the YDB table's primary key (only supported for `CREATE TABLE` operations).
 
 ## Using the SQL statements with YDB catalog defined
 
