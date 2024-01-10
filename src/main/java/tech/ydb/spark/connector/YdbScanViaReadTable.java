@@ -33,7 +33,7 @@ public class YdbScanViaReadTable implements AutoCloseable {
     private final YdbScanOptions options;
     private final YdbKeyRange keyRange;
     private final ArrayBlockingQueue<QueueItem> queue;
-    private String tablePath;
+    private final String tablePath;
     private List<String> outColumns;
     private int[] outIndexes;
     private Thread worker;
@@ -46,7 +46,8 @@ public class YdbScanViaReadTable implements AutoCloseable {
     public YdbScanViaReadTable(YdbScanOptions options, YdbKeyRange keyRange) {
         this.options = options;
         this.keyRange = keyRange;
-        this.queue = new ArrayBlockingQueue<>(100);
+        this.queue = new ArrayBlockingQueue<>(options.getScanQueueDepth());
+        this.tablePath = options.getTablePath();
         this.state = State.CREATED;
     }
 
@@ -84,10 +85,9 @@ public class YdbScanViaReadTable implements AutoCloseable {
 
         // Create or acquire the connector object.
         YdbConnector c = YdbRegistry.getOrCreate(options.getCatalogName(), options.getConnectOptions());
-        // The full table path is needed.
-        tablePath = options.getTablePath();
-        // TODO: add setting for the maximum session creation duration.
-        session = c.getTableClient().createSession(Duration.ofSeconds(30)).join().getValue();
+        // Obtain the session (will be a long running one).
+        session = c.getTableClient().createSession(
+                Duration.ofSeconds(options.getScanSessionSeconds())).join().getValue();
         try {
             // Opening the stream - which can be canceled.
             stream = session.executeReadTable(tablePath, rtsb.build());
@@ -148,6 +148,7 @@ public class YdbScanViaReadTable implements AutoCloseable {
             if (qi==null || qi.reader==null) {
                 current = null;
                 setState(State.FINISHED);
+                LOG.debug("No more blocks in queue for table {}", tablePath);
                 return false;
             }
             current = qi.reader;
@@ -164,6 +165,8 @@ public class YdbScanViaReadTable implements AutoCloseable {
                             + "] in the result set");
                 }
             }
+            LOG.debug("Fetched the block of {} rows from the queue for table {}",
+                    current.getRowCount(), tablePath);
         }
     }
 
@@ -274,9 +277,12 @@ public class YdbScanViaReadTable implements AutoCloseable {
             LOG.debug("Started background scan for table {}, range {}", tablePath, keyRange);
             try {
                 stream.start(part -> {
+                    final ResultSetReader rsr = part.getResultSetReader();
                     while (true) {
                         try {
-                            queue.add(new QueueItem(part.getResultSetReader()));
+                            queue.add(new QueueItem(rsr));
+                            LOG.debug("Added portion of {} rows for table {} to the queue.", 
+                                    rsr.getRowCount(), tablePath);
                             return; // exit the "queue put" retry loop - and lambda too
                         } catch(IllegalStateException ise) {
                             // The unlikely case of interrupt should not prevent us

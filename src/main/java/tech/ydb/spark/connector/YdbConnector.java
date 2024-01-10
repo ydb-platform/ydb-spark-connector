@@ -169,6 +169,36 @@ public class YdbConnector extends YdbOptions implements AutoCloseable {
         return defaultIngestMethod;
     }
 
+    public int getScanQueueDepth() {
+        int scanQueueDepth;
+        try {
+            scanQueueDepth = Integer.parseInt(connectOptions.getOrDefault(SCAN_QUEUE_DEPTH, "10"));
+        } catch(NumberFormatException nfe) {
+            LOG.warn("Illegal value of {} property, reverting to default of 10.", SCAN_QUEUE_DEPTH, nfe);
+            scanQueueDepth = 10;
+        }
+        if (scanQueueDepth < 2) {
+            LOG.warn("Value of {} property too low, reverting to minimum of 2.", SCAN_QUEUE_DEPTH);
+            scanQueueDepth = 2;
+        }
+        return scanQueueDepth;
+    }
+
+    public int getScanSessionSeconds() {
+        int scanSessionSeconds;
+        try {
+            scanSessionSeconds = Integer.parseInt(connectOptions.getOrDefault(SCAN_SESSION_SECONDS, "30"));
+        } catch(NumberFormatException nfe) {
+            LOG.warn("Illegal value of {} property, reverting to default of 30.", SCAN_SESSION_SECONDS, nfe);
+            scanSessionSeconds = 30;
+        }
+        if (scanSessionSeconds < 1) {
+            LOG.warn("Value of {} property too low, reverting to minimum of 1.", SCAN_SESSION_SECONDS);
+            scanSessionSeconds = 1;
+        }
+        return scanSessionSeconds;
+    }
+
     @Override
     public void close() {
         if (tableClient != null) {

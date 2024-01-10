@@ -31,6 +31,8 @@ public class YdbScanOptions extends YdbTableOperationOptions implements Serializ
     private final ArrayList<Object> rangeBegin;
     private final ArrayList<Object> rangeEnd;
     private final List<YdbKeyRange> partitions;
+    private final int scanQueueDepth;
+    private final int scanSessionSeconds;
     private int rowLimit;
     private StructType requiredSchema;
 
@@ -42,6 +44,8 @@ public class YdbScanOptions extends YdbTableOperationOptions implements Serializ
         this.rangeBegin = new ArrayList<>();
         this.rangeEnd = new ArrayList<>();
         this.partitions = table.partitions();
+        this.scanQueueDepth = table.getConnector().getScanQueueDepth();
+        this.scanSessionSeconds = table.getConnector().getScanSessionSeconds();
         this.rowLimit = -1;
     }
 
@@ -80,6 +84,14 @@ public class YdbScanOptions extends YdbTableOperationOptions implements Serializ
 
     public List<YdbKeyRange> getPartitions() {
         return partitions;
+    }
+
+    public int getScanQueueDepth() {
+        return scanQueueDepth;
+    }
+
+    public int getScanSessionSeconds() {
+        return scanSessionSeconds;
     }
 
     public int getRowLimit() {

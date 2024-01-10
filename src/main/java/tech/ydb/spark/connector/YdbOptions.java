@@ -25,6 +25,16 @@ public abstract class YdbOptions {
     public static final String POOL_SIZE = "pool.size";
 
     /**
+     * Scan queue depth for each executor. Default 10, minimum 2.
+     */
+    public static final String SCAN_QUEUE_DEPTH = "scan.queue.depth";
+
+    /**
+     * Scan session timeout in seconds. Default 30, minimum 1.
+     */
+    public static final String SCAN_SESSION_SECONDS = "scan.session.seconds";
+
+    /**
      * CA certificates in the file.
      */
     public static final String CA_FILE = "ca.file";

@@ -25,6 +25,11 @@ Spark Shell example config:
   --conf spark.sql.catalog.ydb1.auth.sakey.file=/home/zinal/Keys/ydb-sa1-key1.json \
   --conf spark.driver.extraJavaOptions=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5007
 
+cd /home/zinal/Software/spark-3.3.3-bin-hadoop3
+./bin/spark-sql --conf spark.sql.catalog.ydb1=tech.ydb.spark.connector.YdbCatalog \
+  --conf spark.sql.catalog.ydb1.url='grpc://localhost:2136?database=/Root/test' \
+  --conf spark.sql.catalog.ydb1.auth.mode=NONE
+
 ```
 
 
