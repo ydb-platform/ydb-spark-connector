@@ -5,10 +5,13 @@ import org.apache.spark.sql.connector.read.InputPartition;
 /**
  * YDB scan partition is defined by the key range.
  *
+ * TODO: improve with HasPartitionKey
+ *
  * @author zinal
  */
 public class YdbTablePartition implements InputPartition {
-    // TODO: improve with HasPartitionKey
+
+    private static final long serialVersionUID = 1L;
 
     private final YdbKeyRange range;
 

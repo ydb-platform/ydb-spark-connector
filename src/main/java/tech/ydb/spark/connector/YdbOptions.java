@@ -8,7 +8,7 @@ import java.util.Objects;
 
 /**
  * YDB connection configuration options.
- * 
+ *
  * @author zinal
  */
 public abstract class YdbOptions {
@@ -105,10 +105,8 @@ public abstract class YdbOptions {
     public static final String PRIMARY_KEY = "primary_key";
 
     /**
-     * YDB table type:
-     *   - row-organized (table),
-     *   - secondary index (index),
-     *   - column-organized (columnshard).
+     * YDB table type: - row-organized (table), - secondary index (index), - column-organized
+     * (columnshard).
      */
     public static final String TABLE_TYPE = "table_type";
 
@@ -145,21 +143,21 @@ public abstract class YdbOptions {
     /**
      * Connection identity properties used to define the connection singletons.
      */
-    public static final List<String> CONN_IDENTITY =
-            Collections.unmodifiableList(Arrays.asList(URL,
+    public static final List<String> CONN_IDENTITY
+            = Collections.unmodifiableList(Arrays.asList(URL,
                     AUTH_MODE, AUTH_LOGIN, AUTH_SAKEY_FILE, AUTH_TOKEN));
 
     /**
      * Updatable table properties.
      */
-    public static final List<String> TABLE_UPDATABLE =
-            Collections.unmodifiableList(Arrays.asList(AP_BY_SIZE, AP_BY_LOAD,
+    public static final List<String> TABLE_UPDATABLE
+            = Collections.unmodifiableList(Arrays.asList(AP_BY_SIZE, AP_BY_LOAD,
                     AP_MIN_PARTS, AP_MAX_PARTS, AP_PART_SIZE_MB));
 
     /**
-     * Check whether existing connection's properties matches the provided referenced values.
-     * Only important values are checked.
-     * 
+     * Check whether existing connection's properties matches the provided referenced values. Only
+     * important values are checked.
+     *
      * @param existing properties for the existing connection
      * @param referenced properties for the connection to be found or created
      * @return true, if properties connectionMatches, false otherwise
@@ -168,8 +166,9 @@ public abstract class YdbOptions {
         for (String propName : CONN_IDENTITY) {
             String v1 = existing.get(propName);
             String v2 = referenced.get(propName);
-            if ( ! Objects.equals(v1, v2) )
+            if (!Objects.equals(v1, v2)) {
                 return false;
+            }
         }
         return true;
     }

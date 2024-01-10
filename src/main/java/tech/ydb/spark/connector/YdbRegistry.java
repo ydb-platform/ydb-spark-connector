@@ -1,7 +1,7 @@
 package tech.ydb.spark.connector;
 
-import java.util.Map;
 import java.util.HashMap;
+import java.util.Map;
 
 /**
  * YDB Connector registry helps to getOrCreate and retrieve the connector instances.
@@ -11,14 +11,14 @@ import java.util.HashMap;
 public class YdbRegistry {
 
     private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(YdbRegistry.class);
-
-    private YdbRegistry() {}
-
     private static final Map<String, YdbConnector> ITEMS = new HashMap<>();
+
+    private YdbRegistry() {
+    }
 
     public static YdbConnector get(String name) {
         YdbConnector yc;
-        synchronized(ITEMS) {
+        synchronized (ITEMS) {
             yc = ITEMS.get(name);
         }
         LOG.debug("YdbRegistry.get(\"{}\") -> {}", name, yc);
@@ -31,9 +31,9 @@ public class YdbRegistry {
         }
         YdbConnector yc;
         boolean newval = false;
-        synchronized(ITEMS) {
+        synchronized (ITEMS) {
             yc = ITEMS.get(name);
-            if (yc==null) {
+            if (yc == null) {
                 yc = new YdbConnector(name, props);
                 ITEMS.put(name, yc);
                 newval = true;
@@ -44,7 +44,7 @@ public class YdbRegistry {
     }
 
     public static YdbConnector getOrCreate(Map<String, String> props) {
-        synchronized(ITEMS) {
+        synchronized (ITEMS) {
             for (YdbConnector yc : ITEMS.values()) {
                 if (YdbOptions.connectionMatches(yc.getConnectOptions(), props)) {
                     LOG.debug("YdbRegistry.getOrCreate() -> false, {}", yc);

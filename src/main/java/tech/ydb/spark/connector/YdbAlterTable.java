@@ -19,7 +19,7 @@ import tech.ydb.table.settings.PartitioningSettings;
 
 /**
  * Alter Table implementation.
- * 
+ *
  * @author zinal
  */
 class YdbAlterTable extends YdbPropertyHelper {
@@ -74,7 +74,7 @@ class YdbAlterTable extends YdbPropertyHelper {
                     + Arrays.toString(change.fieldNames()));
         }
         final String fieldName = change.fieldNames()[0];
-        if (! knownNames.contains(fieldName)) {
+        if (!knownNames.contains(fieldName)) {
             throw new UnsupportedOperationException("Attempt to drop the non-existing column: "
                     + fieldName);
         }
@@ -82,7 +82,7 @@ class YdbAlterTable extends YdbPropertyHelper {
             throw new UnsupportedOperationException("Attempt to add and drop the same column: "
                     + fieldName);
         }
-        if (! removeColumns.add(fieldName)) {
+        if (!removeColumns.add(fieldName)) {
             throw new UnsupportedOperationException("Duplicate column drop operation: "
                     + fieldName);
         }
@@ -90,7 +90,7 @@ class YdbAlterTable extends YdbPropertyHelper {
 
     void prepare(TableChange.SetProperty change) {
         String property = change.property();
-        if (! YdbOptions.TABLE_UPDATABLE.contains(property.toUpperCase())) {
+        if (!YdbOptions.TABLE_UPDATABLE.contains(property.toUpperCase())) {
             throw new UnsupportedOperationException("Unsupported property for table alteration: "
                     + property);
         }
@@ -99,7 +99,7 @@ class YdbAlterTable extends YdbPropertyHelper {
 
     void prepare(TableChange.RemoveProperty change) {
         String property = change.property();
-        if (! YdbOptions.TABLE_UPDATABLE.contains(property.toUpperCase())) {
+        if (!YdbOptions.TABLE_UPDATABLE.contains(property.toUpperCase())) {
             throw new UnsupportedOperationException("Unsupported property for table alteration: "
                     + property);
         }
@@ -108,31 +108,31 @@ class YdbAlterTable extends YdbPropertyHelper {
 
     private void applyProperty(String name, String value, PartitioningSettings ps) {
         if (YdbOptions.AP_BY_LOAD.equalsIgnoreCase(name)) {
-            if (value==null || value.length()==0) {
+            if (value == null || value.length() == 0) {
                 ps.clearPartitioningByLoad();
             } else {
                 ps.setPartitioningByLoad(parseBoolean(YdbOptions.AP_BY_LOAD, value));
             }
         } else if (YdbOptions.AP_BY_SIZE.equalsIgnoreCase(name)) {
-            if (value==null || value.length()==0) {
+            if (value == null || value.length() == 0) {
                 ps.clearPartitioningBySize();
             } else {
                 ps.setPartitioningBySize(parseBoolean(YdbOptions.AP_BY_SIZE, value));
             }
         } else if (YdbOptions.AP_PART_SIZE_MB.equalsIgnoreCase(name)) {
-            if (value==null || value.length()==0) {
+            if (value == null || value.length() == 0) {
                 ps.clearPartitionSize();
             } else {
                 ps.setPartitionSize(parseLong(YdbOptions.AP_PART_SIZE_MB, value));
             }
         } else if (YdbOptions.AP_MIN_PARTS.equalsIgnoreCase(name)) {
-            if (value==null || value.length()==0) {
+            if (value == null || value.length() == 0) {
                 ps.clearMinPartitionsCount();
             } else {
                 ps.setMinPartitionsCount(parseLong(YdbOptions.AP_MIN_PARTS, value));
             }
         } else if (YdbOptions.AP_MAX_PARTS.equalsIgnoreCase(name)) {
-            if (value==null || value.length()==0) {
+            if (value == null || value.length() == 0) {
                 ps.clearMaxPartitionsCount();
             } else {
                 ps.setMaxPartitionsCount(parseLong(YdbOptions.AP_MAX_PARTS, value));
@@ -150,9 +150,9 @@ class YdbAlterTable extends YdbPropertyHelper {
         for (String name : removeColumns) {
             settings.dropColumn(name);
         }
-        if (! properties.isEmpty()) {
+        if (!properties.isEmpty()) {
             final PartitioningSettings ps = td.getPartitioningSettings();
-            for (Map.Entry<String,String> me : properties.entrySet()) {
+            for (Map.Entry<String, String> me : properties.entrySet()) {
                 applyProperty(me.getKey(), me.getValue(), ps);
             }
             settings.setPartitioningSettings(ps);

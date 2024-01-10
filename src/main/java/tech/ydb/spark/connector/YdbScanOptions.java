@@ -8,12 +8,12 @@ import org.apache.spark.sql.connector.expressions.Expression;
 import org.apache.spark.sql.connector.expressions.FieldReference;
 import org.apache.spark.sql.connector.expressions.LiteralValue;
 import org.apache.spark.sql.connector.expressions.NamedReference;
+import org.apache.spark.sql.connector.expressions.filter.And;
 import org.apache.spark.sql.connector.expressions.filter.Predicate;
 import org.apache.spark.sql.types.StructType;
-import org.apache.spark.sql.connector.expressions.filter.And;
 
-import static tech.ydb.spark.connector.YdbTypes.min;
 import static tech.ydb.spark.connector.YdbTypes.max;
+import static tech.ydb.spark.connector.YdbTypes.min;
 
 /**
  * All settings for the scan operations, shared between the partition readers.
@@ -22,8 +22,10 @@ import static tech.ydb.spark.connector.YdbTypes.max;
  */
 public class YdbScanOptions extends YdbTableOperationOptions implements Serializable {
 
-    private static final org.slf4j.Logger LOG =
-            org.slf4j.LoggerFactory.getLogger(YdbScanOptions.class);
+    private static final long serialVersionUID = 1L;
+
+    private static final org.slf4j.Logger LOG
+            = org.slf4j.LoggerFactory.getLogger(YdbScanOptions.class);
 
     private final StructType actualSchema;
     private final List<String> keyColumns;
@@ -50,8 +52,9 @@ public class YdbScanOptions extends YdbTableOperationOptions implements Serializ
     }
 
     public void setupPredicates(Predicate[] predicates) {
-        if (predicates==null || predicates.length==0)
+        if (predicates == null || predicates.length == 0) {
             return;
+        }
         List<Predicate> flat = flattenPredicates(predicates);
         detectRangeSimple(flat);
     }
@@ -61,8 +64,9 @@ public class YdbScanOptions extends YdbTableOperationOptions implements Serializ
     }
 
     public StructType readSchema() {
-        if (requiredSchema==null)
+        if (requiredSchema == null) {
             return actualSchema;
+        }
         return requiredSchema;
     }
 
@@ -104,6 +108,7 @@ public class YdbScanOptions extends YdbTableOperationOptions implements Serializ
 
     /**
      * Put all predicates connected with AND directly into the list of predicates, recursively.
+     *
      * @param filters Input filters
      * @return Flattened predicates
      */
@@ -117,6 +122,7 @@ public class YdbScanOptions extends YdbTableOperationOptions implements Serializ
 
     /**
      * Put all filters connected with AND directly into the list of filters, recursively.
+     *
      * @param f Input filter to be processed
      * @param retval The resulting list of flattened filters
      */
@@ -131,13 +137,13 @@ public class YdbScanOptions extends YdbTableOperationOptions implements Serializ
     }
 
     /**
-     * Very basic filter-to-range conversion logic.
-     * Currently covers N equality conditions + 1 optional following range condition.
-     * Does NOT handle complex cases like N-dimensional ranges.
+     * Very basic filter-to-range conversion logic. Currently covers N equality conditions + 1
+     * optional following range condition. Does NOT handle complex cases like N-dimensional ranges.
+     *
      * @param predicates input list of filters
      */
     private void detectRangeSimple(List<Predicate> predicates) {
-        if (predicates==null || predicates.isEmpty()) {
+        if (predicates == null || predicates.isEmpty()) {
             return;
         }
         LOG.debug("Calculating scan ranges for predicates {}", predicates);
@@ -147,7 +153,7 @@ public class YdbScanOptions extends YdbTableOperationOptions implements Serializ
             rangeBegin.add(null);
             rangeEnd.add(null);
         }
-        for (int pos = 0; pos<keyColumns.size(); ++pos) {
+        for (int pos = 0; pos < keyColumns.size(); ++pos) {
             final String keyColumn = keyColumns.get(pos);
             boolean hasEquality = false;
             for (Predicate p : predicates) {
@@ -201,10 +207,10 @@ public class YdbScanOptions extends YdbTableOperationOptions implements Serializ
                     if (lyzer.success && !lyzer.revert) {
                         String lvalue = lyzer.value.toString();
                         if (lvalue.length() > 0) {
-                            int lastCharPos = lvalue.length()-1;
+                            int lastCharPos = lvalue.length() - 1;
                             String rvalue = new StringBuilder()
                                     .append(lvalue, 0, lastCharPos)
-                                    .append((char)(1 + lvalue.charAt(lastCharPos)))
+                                    .append((char) (1 + lvalue.charAt(lastCharPos)))
                                     .toString();
                             rangeBegin.set(pos, max(rangeBegin.get(pos), lvalue));
                             rangeEnd.set(pos, min(rangeEnd.get(pos), rvalue));
@@ -212,24 +218,27 @@ public class YdbScanOptions extends YdbTableOperationOptions implements Serializ
                     }
                 }
             } // for (Predicate p : ...)
-            if (! hasEquality)
+            if (!hasEquality) {
                 break;
+            }
         }
 
         // Drop trailing nulls
-        while (! rangeBegin.isEmpty()) {
+        while (!rangeBegin.isEmpty()) {
             int pos = rangeBegin.size() - 1;
-            if ( rangeBegin.get(pos) == null )
+            if (rangeBegin.get(pos) == null) {
                 rangeBegin.remove(pos);
-            else
+            } else {
                 break;
+            }
         }
-        while (! rangeEnd.isEmpty()) {
+        while (!rangeEnd.isEmpty()) {
             int pos = rangeEnd.size() - 1;
-            if ( rangeEnd.get(pos) == null )
+            if (rangeEnd.get(pos) == null) {
                 rangeEnd.remove(pos);
-            else
+            } else {
                 break;
+            }
         }
         LOG.debug("Calculated scan ranges {} -> {}", rangeBegin, rangeEnd);
     }
@@ -238,6 +247,7 @@ public class YdbScanOptions extends YdbTableOperationOptions implements Serializ
      * Too small to be called "Analyzer"
      */
     static final class Lyzer {
+
         final boolean success;
         final boolean revert;
         final Object value;
@@ -262,7 +272,7 @@ public class YdbScanOptions extends YdbTableOperationOptions implements Serializ
                     if (nr.fieldNames().length > 0) {
                         String fieldName = nr.fieldNames()[nr.fieldNames().length - 1];
                         if (keyColumn.equals(fieldName)) {
-                            LiteralValue lv = (LiteralValue) right;
+                            LiteralValue<?> lv = (LiteralValue<?>) right;
                             localValue = lv.value();
                             localSuccess = true;
                         }

@@ -6,10 +6,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
-import scala.collection.JavaConverters;
-
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
+import scala.collection.JavaConverters;
 
 import tech.ydb.core.Status;
 import tech.ydb.table.Session;
@@ -26,9 +25,9 @@ class YdbCreateTable extends YdbPropertyHelper {
     private final String tablePath;
     private final List<YdbFieldInfo> fields;
     private final List<String> primaryKey;
- 
+
     YdbCreateTable(String tablePath, List<YdbFieldInfo> fields,
-            List<String> primaryKey, Map<String,String> properties) {
+            List<String> primaryKey, Map<String, String> properties) {
         super(properties);
         this.tablePath = tablePath;
         this.fields = fields;
@@ -36,7 +35,7 @@ class YdbCreateTable extends YdbPropertyHelper {
     }
 
     YdbCreateTable(String tablePath, List<YdbFieldInfo> fields,
-            Map<String,String> properties) {
+            Map<String, String> properties) {
         super(properties);
         this.tablePath = tablePath;
         this.fields = fields;
@@ -81,7 +80,7 @@ class YdbCreateTable extends YdbPropertyHelper {
         final List<YdbFieldInfo> fields = new ArrayList<>(st.size());
         for (StructField sf : JavaConverters.asJavaCollection(st)) {
             YdbFieldType yft = types.mapTypeSpark2Ydb(sf.dataType());
-            if (yft==null) {
+            if (yft == null) {
                 throw new IllegalArgumentException("Unsupported type for table column: "
                         + sf.dataType());
             }
@@ -90,9 +89,9 @@ class YdbCreateTable extends YdbPropertyHelper {
         return fields;
     }
 
-    static List<String> makePrimaryKey(List<YdbFieldInfo> fields, Map<String,String> properties) {
+    static List<String> makePrimaryKey(List<YdbFieldInfo> fields, Map<String, String> properties) {
         String value = properties.get(YdbOptions.PRIMARY_KEY);
-        if (value==null) {
+        if (value == null) {
             value = fields.get(0).getName();
         }
         return Arrays.asList(value.split("[,]"));

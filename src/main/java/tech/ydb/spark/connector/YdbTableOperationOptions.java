@@ -1,6 +1,7 @@
 package tech.ydb.spark.connector;
 
 import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -12,21 +13,23 @@ import java.util.Map;
  */
 public abstract class YdbTableOperationOptions implements Serializable {
 
+    private static final long serialVersionUID = 1L;
+
     // catalog name and connection options to obtain the YdbConnector instance
     private final String catalogName;
-    private final Map<String,String> connectOptions;
+    private final HashMap<String, String> connectOptions;
     // type mapping settings
     private final YdbTypes types;
     // the name and the path of the table to work with
     private final String tableName;
     private final String tablePath;
     // table columns
-    private final List<YdbFieldInfo> fieldsList;
-    private final Map<String, YdbFieldInfo> fieldsMap;
+    private final ArrayList<YdbFieldInfo> fieldsList;
+    private final HashMap<String, YdbFieldInfo> fieldsMap;
 
     public YdbTableOperationOptions(YdbTable table) {
         this.catalogName = table.getConnector().getCatalogName();
-        this.connectOptions = table.getConnector().getConnectOptions();
+        this.connectOptions = new HashMap<>(table.getConnector().getConnectOptions());
         this.types = table.getTypes();
         this.tableName = table.name();
         this.tablePath = table.tablePath();

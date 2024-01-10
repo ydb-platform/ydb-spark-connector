@@ -11,6 +11,8 @@ import java.util.Map;
  */
 public class YdbTypeSettings implements Serializable {
 
+    private static final long serialVersionUID = 1L;
+
     private boolean dateAsString;
 
     public YdbTypeSettings() {
@@ -18,8 +20,9 @@ public class YdbTypeSettings implements Serializable {
     }
 
     public YdbTypeSettings(Map<String, String> options) {
-        if (options==null)
+        if (options == null) {
             options = Collections.emptyMap();
+        }
         this.dateAsString = Boolean.parseBoolean(
                 options.getOrDefault(YdbOptions.DATE_AS_STRING, "false"));
     }

@@ -21,7 +21,6 @@ public enum YdbAuthMode {
     /**
      * Authentication through a pre-obtained short living connection token
      */
-
     TOKEN,
 
     /**
@@ -40,17 +39,18 @@ public enum YdbAuthMode {
     STATIC;
 
     public static YdbAuthMode fromString(String v) {
-        if (v==null) {
+        if (v == null) {
             v = "";
         } else {
             v = v.trim();
         }
-        if (v.length()==0) {
+        if (v.length() == 0) {
             return ENV; // default mode is ENV now
         }
         for (YdbAuthMode x : values()) {
-            if (v.equalsIgnoreCase(x.name()))
+            if (v.equalsIgnoreCase(x.name())) {
                 return x;
+            }
         }
         throw new IllegalArgumentException(v);
     }

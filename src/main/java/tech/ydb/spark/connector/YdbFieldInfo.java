@@ -9,6 +9,8 @@ import java.io.Serializable;
  */
 public class YdbFieldInfo implements Serializable {
 
+    private static final long serialVersionUID = 1L;
+
     private final String name;
     private final YdbFieldType type;
     private final boolean nullable;

@@ -12,8 +12,8 @@ import tech.ydb.auth.iam.CloudAuthIdentity;
 import tech.ydb.core.auth.StaticCredentials;
 import tech.ydb.core.grpc.GrpcTransport;
 import tech.ydb.core.grpc.GrpcTransportBuilder;
-import tech.ydb.table.SessionRetryContext;
 import tech.ydb.scheme.SchemeClient;
+import tech.ydb.table.SessionRetryContext;
 import tech.ydb.table.TableClient;
 
 /**
@@ -27,7 +27,7 @@ public class YdbConnector extends YdbOptions implements AutoCloseable {
     private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(YdbConnector.class);
 
     private final String catalogName;
-    private final Map<String,String> connectOptions;
+    private final Map<String, String> connectOptions;
     private final GrpcTransport transport;
     private final TableClient tableClient;
     private final SchemeClient schemeClient;
@@ -39,7 +39,7 @@ public class YdbConnector extends YdbOptions implements AutoCloseable {
     public YdbConnector(String catalogName, Map<String, String> props) {
         this.catalogName = catalogName;
         this.connectOptions = new HashMap<>();
-        for (Map.Entry<String,String> me : props.entrySet()) {
+        for (Map.Entry<String, String> me : props.entrySet()) {
             this.connectOptions.put(me.getKey().toLowerCase(), me.getValue());
         }
         this.defaultTypes = new YdbTypes(this.connectOptions);
@@ -48,26 +48,27 @@ public class YdbConnector extends YdbOptions implements AutoCloseable {
         final int poolSize;
         try {
             int ncores = Runtime.getRuntime().availableProcessors();
-            if (ncores < 2)
+            if (ncores < 2) {
                 ncores = 2;
+            }
             String defaultCores = String.valueOf(4 * ncores);
             poolSize = Integer.parseInt(props.getOrDefault(POOL_SIZE, defaultCores));
-        } catch(NumberFormatException nfe) {
+        } catch (NumberFormatException nfe) {
             throw new IllegalArgumentException("Incorrect value for property " + POOL_SIZE, nfe);
         }
         GrpcTransportBuilder builder = GrpcTransport.forConnectionString(props.get(URL));
         String caString = props.get(CA_FILE);
-        if (caString!=null) {
+        if (caString != null) {
             byte[] cert;
             try {
                 cert = Files.readAllBytes(Paths.get(caString));
-            } catch(IOException ix) {
+            } catch (IOException ix) {
                 throw new RuntimeException("Failed to read CA file " + caString, ix);
             }
             builder = builder.withSecureConnection(cert);
         } else {
             caString = props.get(CA_TEXT);
-            if (caString!=null) {
+            if (caString != null) {
                 caString = caString.replace("\\n", "\n");
                 byte[] cert = caString.getBytes(StandardCharsets.UTF_8);
                 builder = builder.withSecureConnection(cert);
@@ -76,7 +77,7 @@ public class YdbConnector extends YdbOptions implements AutoCloseable {
         final YdbAuthMode authMode;
         try {
             authMode = YdbAuthMode.fromString(props.get(AUTH_MODE));
-        } catch(IllegalArgumentException iae) {
+        } catch (IllegalArgumentException iae) {
             throw new IllegalArgumentException("Incorrect value for property " + AUTH_MODE, iae);
         }
         switch (authMode) {
@@ -89,18 +90,18 @@ public class YdbConnector extends YdbOptions implements AutoCloseable {
                 break;
             case STATIC:
                 builder = builder.withAuthProvider(
-                    new StaticCredentials(props.get(AUTH_LOGIN), props.get(AUTH_PASSWORD)));
+                        new StaticCredentials(props.get(AUTH_LOGIN), props.get(AUTH_PASSWORD)));
                 break;
             case KEY:
                 String keyFile = props.get(AUTH_SAKEY_FILE);
-                if (keyFile!=null) {
+                if (keyFile != null) {
                     final String v = keyFile;
                     builder = builder.withAuthProvider((opt) -> {
                         return CloudAuthIdentity.serviceAccountIdentity(Paths.get(v));
                     });
                 } else {
                     keyFile = props.get(AUTH_SAKEY_TEXT);
-                    if (keyFile!=null) {
+                    if (keyFile != null) {
                         final String v = keyFile;
                         builder = builder.withAuthProvider((opt) -> {
                             return CloudAuthIdentity.serviceAccountIdentity(v);
@@ -116,6 +117,8 @@ public class YdbConnector extends YdbOptions implements AutoCloseable {
                 break;
             case NONE:
                 break;
+            default: // unreached
+                throw new UnsupportedOperationException();
         }
         GrpcTransport gt = builder.build();
         try {
@@ -127,8 +130,9 @@ public class YdbConnector extends YdbOptions implements AutoCloseable {
             this.transport = gt;
             gt = null; // to avoid closing below
         } finally {
-            if (gt != null)
+            if (gt != null) {
                 gt.close();
+            }
         }
         this.database = this.transport.getDatabase();
     }
@@ -173,7 +177,7 @@ public class YdbConnector extends YdbOptions implements AutoCloseable {
         int scanQueueDepth;
         try {
             scanQueueDepth = Integer.parseInt(connectOptions.getOrDefault(SCAN_QUEUE_DEPTH, "10"));
-        } catch(NumberFormatException nfe) {
+        } catch (NumberFormatException nfe) {
             LOG.warn("Illegal value of {} property, reverting to default of 10.", SCAN_QUEUE_DEPTH, nfe);
             scanQueueDepth = 10;
         }
@@ -188,7 +192,7 @@ public class YdbConnector extends YdbOptions implements AutoCloseable {
         int scanSessionSeconds;
         try {
             scanSessionSeconds = Integer.parseInt(connectOptions.getOrDefault(SCAN_SESSION_SECONDS, "30"));
-        } catch(NumberFormatException nfe) {
+        } catch (NumberFormatException nfe) {
             LOG.warn("Illegal value of {} property, reverting to default of 30.", SCAN_SESSION_SECONDS, nfe);
             scanSessionSeconds = 30;
         }
@@ -204,21 +208,21 @@ public class YdbConnector extends YdbOptions implements AutoCloseable {
         if (tableClient != null) {
             try {
                 tableClient.close();
-            } catch(Exception ex) {
+            } catch (Exception ex) {
                 LOG.warn("TableClient closing threw an exception", ex);
             }
         }
         if (schemeClient != null) {
             try {
                 schemeClient.close();
-            } catch(Exception ex) {
+            } catch (Exception ex) {
                 LOG.warn("SchemeClient closing threw an exception", ex);
             }
         }
         if (transport != null) {
             try {
                 transport.close();
-            } catch(Exception ex) {
+            } catch (Exception ex) {
                 LOG.warn("GrpcTransport closing threw an exception", ex);
             }
         }

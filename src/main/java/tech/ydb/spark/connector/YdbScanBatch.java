@@ -41,7 +41,7 @@ public class YdbScanBatch implements Batch {
         );
         InputPartition[] out = partitions.stream()
                 .map(kr -> kr.intersect(predicates))
-                .filter(kr -> ! kr.isEmpty())
+                .filter(kr -> !kr.isEmpty())
                 .map(kr -> new YdbTablePartition(kr))
                 .toArray(InputPartition[]::new);
         if (LOG.isDebugEnabled()) {

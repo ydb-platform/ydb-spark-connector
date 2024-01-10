@@ -12,6 +12,8 @@ import org.apache.spark.sql.connector.read.PartitionReaderFactory;
  */
 public class YdbPartitionReaderFactory implements PartitionReaderFactory {
 
+    private static final long serialVersionUID = 1L;
+
     private final YdbScanOptions options;
 
     public YdbPartitionReaderFactory(YdbScanOptions options) {

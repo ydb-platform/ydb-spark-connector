@@ -6,20 +6,20 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import scala.collection.JavaConverters;
 
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.connector.write.DataWriter;
 import org.apache.spark.sql.connector.write.WriterCommitMessage;
 import org.apache.spark.sql.types.StructField;
+import scala.collection.JavaConverters;
 
 import tech.ydb.core.Status;
 import tech.ydb.table.query.Params;
 import tech.ydb.table.settings.BulkUpsertSettings;
 import tech.ydb.table.transaction.TxControl;
 import tech.ydb.table.values.ListValue;
-import tech.ydb.table.values.StructValue;
 import tech.ydb.table.values.StructType;
+import tech.ydb.table.values.StructValue;
 import tech.ydb.table.values.Type;
 import tech.ydb.table.values.Value;
 
@@ -89,8 +89,9 @@ public class YdbWriterBasic implements DataWriter<InternalRow> {
             final Object value = record.get(i, inputFields.get(i).dataType());
             Value<?> conv = types.convertToYdb(value, yfi.getType());
             if (yfi.isNullable()) {
-                if (conv.getType().getKind() != Type.Kind.OPTIONAL)
+                if (conv.getType().getKind() != Type.Kind.OPTIONAL) {
                     conv = conv.makeOptional();
+                }
             }
             currentRow.put(yfi.getName(), conv);
         }
@@ -100,7 +101,7 @@ public class YdbWriterBasic implements DataWriter<InternalRow> {
 
     private void startNewStatement(List<Value<?>> input) {
         LOG.debug("Sending a batch of {} rows into table {}", input.size(), tablePath);
-        if (currentStatus!=null) {
+        if (currentStatus != null) {
             currentStatus.join().expectSuccess();
             currentStatus = null;
             LOG.debug("Previous async batch completed for table {}", tablePath);
@@ -116,8 +117,8 @@ public class YdbWriterBasic implements DataWriter<InternalRow> {
         } else {
             currentStatus = connector.getRetryCtx().supplyStatus(
                     session -> session.executeDataQuery(sqlStatement,
-                                    TxControl.serializableRw().setCommitTx(true),
-                                    Params.of("$input", value))
+                            TxControl.serializableRw().setCommitTx(true),
+                            Params.of("$input", value))
                             .thenApply(result -> result.getStatus()));
             LOG.debug("Async upsert transaction started on table {}", tablePath);
         }
@@ -126,12 +127,12 @@ public class YdbWriterBasic implements DataWriter<InternalRow> {
     @Override
     public WriterCommitMessage commit() throws IOException {
         // Process the currently prepared set of rows
-        if (! currentInput.isEmpty()) {
+        if (!currentInput.isEmpty()) {
             startNewStatement(currentInput);
             currentInput.clear();
         }
         // Wait for the statement to be executed, and check the results
-        if (currentStatus!=null) {
+        if (currentStatus != null) {
             currentStatus.join().expectSuccess();
             currentStatus = null;
             LOG.debug("Final async batch completed for table {}", tablePath);
@@ -144,7 +145,7 @@ public class YdbWriterBasic implements DataWriter<InternalRow> {
     @Override
     public void abort() throws IOException {
         currentInput.clear();
-        if (currentStatus!=null) {
+        if (currentStatus != null) {
             currentStatus.cancel(true);
             currentStatus.join();
             currentStatus = null;
@@ -154,7 +155,7 @@ public class YdbWriterBasic implements DataWriter<InternalRow> {
     @Override
     public void close() throws IOException {
         currentInput.clear();
-        if (currentStatus!=null) {
+        if (currentStatus != null) {
             currentStatus.cancel(true);
             currentStatus.join();
             currentStatus = null;
@@ -168,7 +169,7 @@ public class YdbWriterBasic implements DataWriter<InternalRow> {
             for (StructField sf : inputFields) {
                 final String name = sf.name();
                 YdbFieldInfo yfi = options.getFieldsMap().get(name);
-                if (yfi!=null) {
+                if (yfi != null) {
                     out.add(yfi);
                 }
             }
@@ -186,22 +187,30 @@ public class YdbWriterBasic implements DataWriter<InternalRow> {
         sb.append("DECLARE $input AS List<Struct<");
         boolean comma = false;
         for (YdbFieldInfo f : fields) {
-            if (comma) sb.append(", "); else comma = true;
+            if (comma) {
+                sb.append(", ");
+            } else {
+                comma = true;
+            }
             sb.append("`").append(f.getName()).append("`");
             sb.append(": ");
-            sb.append(f.getType().sqlName);
-            if (f.isNullable())
+            sb.append(f.getType().getSqlName());
+            if (f.isNullable()) {
                 sb.append("?");
+            }
         }
         sb.append(">>;\n");
         switch (options.getIngestMethod()) {
-            case BULK: /* unused sql statement, so use UPSERT to generate it */
+            case BULK:
+            /* unused sql statement, so use UPSERT to generate it */
             case UPSERT:
                 sb.append("UPSERT INTO ");
                 break;
             case REPLACE:
                 sb.append("REPLACE INTO ");
                 break;
+            default: // unreached
+                throw new UnsupportedOperationException();
         }
         sb.append("`").append(escape(options.getTablePath())).append("`");
         sb.append(" SELECT * FROM AS_TABLE($input);");
@@ -225,7 +234,7 @@ public class YdbWriterBasic implements DataWriter<InternalRow> {
         if (statementFields.isEmpty()) {
             throw new IllegalArgumentException("Empty input field list specified for writing");
         }
-        final Map<String,Type> m = new HashMap<>();
+        final Map<String, Type> m = new HashMap<>();
         for (YdbFieldInfo yfi : statementFields) {
             m.put(yfi.getName(), YdbFieldType.toSdkType(yfi.getType(), yfi.isNullable()));
         }

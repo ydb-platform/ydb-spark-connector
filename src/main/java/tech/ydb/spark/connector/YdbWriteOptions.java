@@ -13,6 +13,8 @@ import org.apache.spark.sql.types.StructType;
  */
 public class YdbWriteOptions extends YdbTableOperationOptions implements Serializable {
 
+    private static final long serialVersionUID = 1L;
+
     private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(YdbWriteOptions.class);
 
     private final StructType tableType;
@@ -20,11 +22,11 @@ public class YdbWriteOptions extends YdbTableOperationOptions implements Seriali
     private final boolean mapByNames;
     private final String queryId;
     private final YdbIngestMethod ingestMethod;
-    private final Map<String,String> options;
+    private final Map<String, String> options;
     private final int maxBulkRows;
 
     public YdbWriteOptions(YdbTable table, boolean mapByNames, StructType inputType,
-            String queryId, Map<String,String> options) {
+            String queryId, Map<String, String> options) {
         super(table);
         this.tableType = table.schema();
         this.inputType = inputType;
@@ -32,7 +34,7 @@ public class YdbWriteOptions extends YdbTableOperationOptions implements Seriali
         this.queryId = queryId;
         this.options = new HashMap<>();
         if (options != null) {
-            for (Map.Entry<String,String> me : options.entrySet()) {
+            for (Map.Entry<String, String> me : options.entrySet()) {
                 this.options.put(me.getKey().toLowerCase(), me.getValue());
             }
         }
@@ -45,7 +47,7 @@ public class YdbWriteOptions extends YdbTableOperationOptions implements Seriali
         int n;
         try {
             n = Integer.parseInt(this.options.getOrDefault(YdbOptions.BATCH_SIZE, "500"));
-        } catch(NumberFormatException nfe) {
+        } catch (NumberFormatException nfe) {
             LOG.warn("Illegal input value for option [{}], default of 500 is used instead",
                     YdbOptions.BATCH_SIZE, nfe);
             n = 500;

@@ -3,8 +3,14 @@ package tech.ydb.spark.connector;
 import java.io.Serializable;
 
 import org.apache.spark.sql.catalyst.InternalRow;
-import org.apache.spark.sql.connector.write.*;
-import org.apache.spark.sql.types.StructType;
+import org.apache.spark.sql.connector.write.BatchWrite;
+import org.apache.spark.sql.connector.write.DataWriter;
+import org.apache.spark.sql.connector.write.DataWriterFactory;
+import org.apache.spark.sql.connector.write.LogicalWriteInfo;
+import org.apache.spark.sql.connector.write.PhysicalWriteInfo;
+import org.apache.spark.sql.connector.write.Write;
+import org.apache.spark.sql.connector.write.WriteBuilder;
+import org.apache.spark.sql.connector.write.WriterCommitMessage;
 
 /**
  * YDB table writer: orchestration and partition writer factory.
@@ -12,6 +18,8 @@ import org.apache.spark.sql.types.StructType;
  * @author zinal
  */
 public class YdbWrite implements Serializable, WriteBuilder, Write, BatchWrite, DataWriterFactory {
+
+    private static final long serialVersionUID = 1L;
 
     private final YdbWriteOptions options;
 

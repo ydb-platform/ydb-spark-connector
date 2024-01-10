@@ -1,12 +1,12 @@
 package tech.ydb.spark.connector;
 
-import tech.ydb.table.values.Type;
-import tech.ydb.table.values.PrimitiveType;
 import tech.ydb.table.values.DecimalType;
+import tech.ydb.table.values.PrimitiveType;
+import tech.ydb.table.values.Type;
 
 /**
- * Supported YDB data types for the columns.
- * Had to duplicate the type definitions here to simplify the type processing logic.
+ * Supported YDB data types for the columns. Had to duplicate the type definitions here to simplify
+ * the type processing logic.
  *
  * @author zinal
  */
@@ -38,10 +38,14 @@ public enum YdbFieldType {
     DyNumber("DyNumber"),
     Decimal("Decimal(22,9)");
 
-    public final String sqlName;
+    private final String sqlName;
 
     YdbFieldType(String sqlName) {
         this.sqlName = sqlName;
+    }
+
+    public String getSqlName() {
+        return sqlName;
     }
 
     public Type toSdkType() {
@@ -57,12 +61,15 @@ public enum YdbFieldType {
             case OPTIONAL:
                 t = t.unwrapOptional();
                 break;
+            default: {
+                /* noop */
+            }
         }
         switch (t.getKind()) {
             case DECIMAL:
                 return Decimal;
             case PRIMITIVE:
-                switch (((PrimitiveType)t)) {
+                switch (((PrimitiveType) t)) {
                     case Bool:
                         return Bool;
                     case Int8:
@@ -113,7 +120,14 @@ public enum YdbFieldType {
                         return JsonDocument;
                     case DyNumber:
                         return DyNumber;
+                    default: {
+                        /* noop */
+                    }
                 }
+                break;
+            default: {
+                /* noop */
+            }
         }
         throw new IllegalArgumentException(t.toString());
     }
@@ -121,33 +135,86 @@ public enum YdbFieldType {
     public static Type toSdkType(YdbFieldType ft, boolean optional) {
         Type t;
         switch (ft) {
-            case Bool: t = PrimitiveType.Bool; break;
-            case Int8: t = PrimitiveType.Int8; break;
-            case Uint8: t = PrimitiveType.Uint8; break;
-            case Int16: t = PrimitiveType.Int16; break;
-            case Uint16: t = PrimitiveType.Uint16; break;
-            case Int32: t = PrimitiveType.Int32; break;
-            case Uint32: t = PrimitiveType.Uint32; break;
-            case Int64: t = PrimitiveType.Int64; break;
-            case Uint64: t = PrimitiveType.Uint64; break;
-            case Float: t = PrimitiveType.Float; break;
-            case Double: t = PrimitiveType.Double; break;
-            case Bytes: t = PrimitiveType.Bytes; break;
-            case Text: t =  PrimitiveType.Text; break;
-            case Yson: t = PrimitiveType.Yson; break;
-            case Json: t = PrimitiveType.Json; break;
-            case JsonDocument: t = PrimitiveType.JsonDocument; break;
-            case Uuid: t = PrimitiveType.Uuid; break;
-            case Date: t = PrimitiveType.Date; break;
-            case Datetime: t = PrimitiveType.Datetime; break;
-            case Timestamp: t = PrimitiveType.Timestamp; break;
-            case Interval: t = PrimitiveType.Interval; break;
-            case TzDate: t = PrimitiveType.TzDate; break;
-            case TzDatetime: t = PrimitiveType.TzDatetime; break;
-            case TzTimestamp: t = PrimitiveType.TzTimestamp; break;
-            case DyNumber: t = PrimitiveType.DyNumber; break;
-            case Decimal: t = DecimalType.getDefault(); break;
-            default: throw new IllegalArgumentException("Illegal input type " + ft);
+            case Bool:
+                t = PrimitiveType.Bool;
+                break;
+            case Int8:
+                t = PrimitiveType.Int8;
+                break;
+            case Uint8:
+                t = PrimitiveType.Uint8;
+                break;
+            case Int16:
+                t = PrimitiveType.Int16;
+                break;
+            case Uint16:
+                t = PrimitiveType.Uint16;
+                break;
+            case Int32:
+                t = PrimitiveType.Int32;
+                break;
+            case Uint32:
+                t = PrimitiveType.Uint32;
+                break;
+            case Int64:
+                t = PrimitiveType.Int64;
+                break;
+            case Uint64:
+                t = PrimitiveType.Uint64;
+                break;
+            case Float:
+                t = PrimitiveType.Float;
+                break;
+            case Double:
+                t = PrimitiveType.Double;
+                break;
+            case Bytes:
+                t = PrimitiveType.Bytes;
+                break;
+            case Text:
+                t = PrimitiveType.Text;
+                break;
+            case Yson:
+                t = PrimitiveType.Yson;
+                break;
+            case Json:
+                t = PrimitiveType.Json;
+                break;
+            case JsonDocument:
+                t = PrimitiveType.JsonDocument;
+                break;
+            case Uuid:
+                t = PrimitiveType.Uuid;
+                break;
+            case Date:
+                t = PrimitiveType.Date;
+                break;
+            case Datetime:
+                t = PrimitiveType.Datetime;
+                break;
+            case Timestamp:
+                t = PrimitiveType.Timestamp;
+                break;
+            case Interval:
+                t = PrimitiveType.Interval;
+                break;
+            case TzDate:
+                t = PrimitiveType.TzDate;
+                break;
+            case TzDatetime:
+                t = PrimitiveType.TzDatetime;
+                break;
+            case TzTimestamp:
+                t = PrimitiveType.TzTimestamp;
+                break;
+            case DyNumber:
+                t = PrimitiveType.DyNumber;
+                break;
+            case Decimal:
+                t = DecimalType.getDefault();
+                break;
+            default:
+                throw new IllegalArgumentException("Illegal input type " + ft);
         }
         return optional ? t.makeOptional() : t;
     }

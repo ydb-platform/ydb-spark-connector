@@ -9,13 +9,19 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import org.apache.spark.sql.connector.catalog.*;
+import org.apache.spark.sql.connector.catalog.SupportsRead;
+import org.apache.spark.sql.connector.catalog.SupportsWrite;
+import org.apache.spark.sql.connector.catalog.Table;
+import org.apache.spark.sql.connector.catalog.TableCapability;
 import org.apache.spark.sql.connector.expressions.Expressions;
 import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.connector.read.ScanBuilder;
 import org.apache.spark.sql.connector.write.LogicalWriteInfo;
 import org.apache.spark.sql.connector.write.WriteBuilder;
-import org.apache.spark.sql.types.*;
+import org.apache.spark.sql.types.DataType;
+import org.apache.spark.sql.types.Metadata;
+import org.apache.spark.sql.types.StructField;
+import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 import tech.ydb.table.description.KeyRange;
@@ -31,10 +37,11 @@ import tech.ydb.table.settings.PartitioningSettings;
  */
 public class YdbTable implements Table, SupportsRead, SupportsWrite {
 
-    private static final org.slf4j.Logger LOG =
-            org.slf4j.LoggerFactory.getLogger(YdbTable.class);
+    private static final org.slf4j.Logger LOG
+            = org.slf4j.LoggerFactory.getLogger(YdbTable.class);
 
     static final Set<TableCapability> CAPABILITIES;
+
     static {
         final Set<TableCapability> c = new HashSet<>();
         c.add(TableCapability.BATCH_READ);
@@ -51,7 +58,7 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
     private final List<String> keyColumns;
     private final List<YdbFieldType> keyTypes;
     private final List<YdbKeyRange> partitions;
-    private final Map<String,String> properties;
+    private final Map<String, String> properties;
     private StructType schema;
 
     /**
@@ -74,12 +81,12 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
         this.keyTypes = new ArrayList<>();
         this.partitions = new ArrayList<>();
         this.properties = new HashMap<>();
-        Map<String,TableColumn> cm = buildColumnsMap(td);
+        Map<String, TableColumn> cm = buildColumnsMap(td);
         for (String cname : td.getPrimaryKeys()) {
             TableColumn tc = cm.get(cname);
             this.keyTypes.add(YdbFieldType.fromSdkType(tc.getType()));
         }
-        if (td.getKeyRanges()!=null) {
+        if (td.getKeyRanges() != null) {
             for (KeyRange kr : td.getKeyRanges()) {
                 YdbKeyRange ykr = new YdbKeyRange(kr, types);
                 if (ykr.isUnrestricted() && !partitions.isEmpty()) {
@@ -142,13 +149,13 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
      * @param types YDB type convertor
      * @param logicalName Index table logical name
      * @param tablePath Table path for the actual table (not index)
-     * @param td Table description object for the actual table
+     * @param tdMain Table description object for the actual table
      * @param ix Index information entry
-     * @param td_ix Table description object for the index table
+     * @param tdIx Table description object for the index table
      */
     YdbTable(YdbConnector connector, YdbTypes types,
             String logicalName, String tablePath,
-            TableDescription td, TableIndex ix, TableDescription td_ix) {
+            TableDescription tdMain, TableIndex ix, TableDescription tdIx) {
         this.connector = connector;
         this.types = types;
         this.logicalName = logicalName;
@@ -159,7 +166,7 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
         this.partitions = new ArrayList<>();
         this.properties = new HashMap<>();
         HashSet<String> known = new HashSet<>();
-        Map<String,TableColumn> cm = buildColumnsMap(td);
+        Map<String, TableColumn> cm = buildColumnsMap(tdMain);
         // Add index key columns
         for (String cname : ix.getColumns()) {
             TableColumn tc = cm.get(cname);
@@ -168,7 +175,7 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
             known.add(cname);
         }
         // Add index extra columns
-        if (ix.getDataColumns()!=null) {
+        if (ix.getDataColumns() != null) {
             for (String cname : ix.getDataColumns()) {
                 TableColumn tc = cm.get(cname);
                 this.columns.add(tc);
@@ -176,14 +183,14 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
             }
         }
         // Add main table's PK columns, as they are in the index too.
-        for (String cname : td.getPrimaryKeys()) {
+        for (String cname : tdMain.getPrimaryKeys()) {
             if (known.add(cname)) {
                 TableColumn tc = cm.get(cname);
                 this.columns.add(tc);
             }
         }
-        if (td_ix.getKeyRanges()!=null) {
-            for (KeyRange kr : td_ix.getKeyRanges()) {
+        if (tdIx.getKeyRanges() != null) {
+            for (KeyRange kr : tdIx.getKeyRanges()) {
                 partitions.add(new YdbKeyRange(kr, connector.getDefaultTypes()));
             }
         }
@@ -201,17 +208,17 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
      * @param connector YDB connector
      * @param logicalName Index table logical name
      * @param tablePath Table path for the actual table (not index)
-     * @param td Table description object for the actual table
+     * @param tdMain Table description object for the actual table
      * @param ix Index information entry
-     * @param td_ix Table description object for the index table
+     * @param tdIx Table description object for the index table
      */
     YdbTable(YdbConnector connector, String logicalName, String tablePath,
-            TableDescription td, TableIndex ix, TableDescription td_ix) {
-        this(connector, connector.getDefaultTypes(), logicalName, tablePath, td, ix, td_ix);
+            TableDescription tdMain, TableIndex ix, TableDescription tdIx) {
+        this(connector, connector.getDefaultTypes(), logicalName, tablePath, tdMain, ix, tdIx);
     }
 
     private static Map<String, TableColumn> buildColumnsMap(TableDescription td) {
-        Map<String,TableColumn> m = new HashMap<>();
+        Map<String, TableColumn> m = new HashMap<>();
         for (TableColumn tc : td.getColumns()) {
             m.put(tc.getName(), tc);
         }
@@ -225,7 +232,7 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
 
     @Override
     public StructType schema() {
-        if (schema==null) {
+        if (schema == null) {
             schema = new StructType(mapFields(columns));
         }
         return schema;
@@ -243,7 +250,7 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
 
     @Override
     public Transform[] partitioning() {
-        return new Transform[] {
+        return new Transform[]{
             Expressions.bucket(partitions.size(), keyColumns.toArray(new String[]{}))
         };
     }
@@ -286,8 +293,9 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
         final List<StructField> fields = new ArrayList<>();
         for (TableColumn tc : columns) {
             final DataType dataType = types.mapTypeYdb2Spark(tc.getType());
-            if (dataType != null)
+            if (dataType != null) {
                 fields.add(mapField(tc, dataType));
+            }
         }
         return fields.toArray(new StructField[0]);
     }
@@ -296,8 +304,8 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
         return new StructField(tc.getName(), dataType, types.mapNullable(tc.getType()), Metadata.empty());
     }
 
-    public List<YdbFieldInfo> makeColumns() {
-        final List<YdbFieldInfo> m = new ArrayList<>();
+    public ArrayList<YdbFieldInfo> makeColumns() {
+        final ArrayList<YdbFieldInfo> m = new ArrayList<>();
         for (TableColumn tc : columns) {
             m.add(new YdbFieldInfo(tc.getName(), YdbFieldType.fromSdkType(tc.getType()),
                     tech.ydb.table.values.Type.Kind.OPTIONAL.equals(tc.getType().getKind())

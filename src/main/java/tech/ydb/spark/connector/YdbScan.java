@@ -8,7 +8,7 @@ import org.apache.spark.sql.connector.read.partitioning.UnknownPartitioning;
 import org.apache.spark.sql.types.StructType;
 
 /**
- *  Scan is the factory for the Batch.
+ * Scan is the factory for the Batch.
  *
  * @author zinal
  */
@@ -43,8 +43,9 @@ public class YdbScan implements Scan, SupportsReportPartitioning {
     @Override
     public Partitioning outputPartitioning() {
         // TODO: KeyGroupedPartitioning (requires HasPartitionKey for partitions)
-        if (options.getPartitions() == null || options.getPartitions().isEmpty())
+        if (options.getPartitions() == null || options.getPartitions().isEmpty()) {
             return new UnknownPartitioning(1);
+        }
         return new UnknownPartitioning(options.getPartitions().size());
     }
 }

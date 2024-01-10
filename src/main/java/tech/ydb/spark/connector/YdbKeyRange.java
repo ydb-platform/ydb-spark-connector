@@ -21,12 +21,17 @@ import tech.ydb.table.values.Value;
  */
 public class YdbKeyRange implements Serializable {
 
+    private static final long serialVersionUID = 1L;
+
+    public static final Limit NO_LIMIT = new Limit(new ArrayList<>(), true);
+    public static final YdbKeyRange UNRESTRICTED = new YdbKeyRange(NO_LIMIT, NO_LIMIT);
+
     private final Limit from;
     private final Limit to;
 
     public YdbKeyRange(Limit from, Limit to) {
-        this.from = (from==null) ? NO_LIMIT : cleanup(from);
-        this.to = (to==null) ? NO_LIMIT : cleanup(to);
+        this.from = (from == null) ? NO_LIMIT : cleanup(from);
+        this.to = (to == null) ? NO_LIMIT : cleanup(to);
     }
 
     public YdbKeyRange(KeyRange kr, YdbTypes types) {
@@ -50,22 +55,27 @@ public class YdbKeyRange implements Serializable {
     }
 
     /**
-     * Empty range means left is greater than right.
-     * Missing values on left means MIN, on right - MAX.
+     * Empty range means left is greater than right. Missing values on left means MIN, on right -
+     * MAX.
+     *
      * @return true for empty range, false otherwise
      */
     public boolean isEmpty() {
-        final Iterator<?> i1 = from.value.iterator(), i2 = to.value.iterator();
+        final Iterator<?> i1 = from.value.iterator();
+        final Iterator<?> i2 = to.value.iterator();
         while (i1.hasNext() && i2.hasNext()) {
             final Object o1 = i1.next();
             final Object o2 = i2.next();
-            if (o1==o2)
+            if (o1 == o2) {
                 continue;
-            if (o1==null)
+            }
+            if (o1 == null) {
                 return false;
-            if (o2==null)
+            }
+            if (o2 == null) {
                 return false;
-            if (o1.getClass()!=o2.getClass()) {
+            }
+            if (o1.getClass() != o2.getClass()) {
                 throw new IllegalArgumentException("Incompatible data types "
                         + o1.getClass().toString() + " and " + o2.getClass().toString());
             }
@@ -73,19 +83,24 @@ public class YdbKeyRange implements Serializable {
                 throw new IllegalArgumentException("Uncomparable data type "
                         + o1.getClass().toString());
             }
-            int cmp = ((Comparable)o1).compareTo(o2);
-            if ( cmp > 0 )
+            @SuppressWarnings("unchecked")
+            int cmp = ((Comparable) o1).compareTo(o2);
+            if (cmp > 0) {
                 return true;
-            if ( cmp < 0 )
+            }
+            if (cmp < 0) {
                 return false;
+            }
         }
         if (!from.inclusive) {
-            if (!i1.hasNext())
+            if (!i1.hasNext()) {
                 return true;
+            }
         }
         if (!to.inclusive) {
-            if (!i2.hasNext())
+            if (!i2.hasNext()) {
                 return true;
+            }
         }
         return false;
     }
@@ -98,13 +113,13 @@ public class YdbKeyRange implements Serializable {
         if (v.isPresent()) {
             KeyBound kb = v.get();
             Value<?> tx = kb.getValue();
-            if (! (tx instanceof TupleValue) ) {
+            if (!(tx instanceof TupleValue)) {
                 throw new IllegalArgumentException();
             }
             TupleValue t = (TupleValue) tx;
             final int sz = t.size();
             List<Object> out = new ArrayList<>(sz);
-            for (int i=0; i<sz; ++i) {
+            for (int i = 0; i < sz; ++i) {
                 out.add(types.convertFromYdb(t.get(i)));
             }
             return new Limit(out, kb.isInclusive());
@@ -114,17 +129,17 @@ public class YdbKeyRange implements Serializable {
 
     @Override
     public String toString() {
-        return  (from.isInclusive() ? "[* " : "(* ")
+        return (from.isInclusive() ? "[* " : "(* ")
                 + from.value + " -> " + to.value
                 + (to.isInclusive() ? " *]" : " *)");
     }
 
     public YdbKeyRange intersect(YdbKeyRange other) {
-        if (other==null ||
-                (other.from.isUnrestricted() && other.to.isUnrestricted())) {
+        if (other == null
+                || (other.from.isUnrestricted() && other.to.isUnrestricted())) {
             return this;
         }
-        if ( from.isUnrestricted() && to.isUnrestricted() ) {
+        if (from.isUnrestricted() && to.isUnrestricted()) {
             return other;
         }
         Limit outFrom = (from.compareTo(other.from, true) > 0) ? from : other.from;
@@ -134,28 +149,37 @@ public class YdbKeyRange implements Serializable {
     }
 
     public static int compare(List<Object> v1, List<Object> v2, boolean nullsFirst) {
-        if (v1==null)
+        if (v1 == null) {
             v1 = Collections.emptyList();
-        if (v2==null)
+        }
+        if (v2 == null) {
             v2 = Collections.emptyList();
-        if (v1==v2 || (v1.isEmpty() && v2.isEmpty()))
+        }
+        if (v1 == v2 || (v1.isEmpty() && v2.isEmpty())) {
             return 0;
-        if (v1.isEmpty())
+        }
+        if (v1.isEmpty()) {
             return nullsFirst ? -1 : 1;
-        if (v2.isEmpty())
+        }
+        if (v2.isEmpty()) {
             return nullsFirst ? 1 : -1;
+        }
 
-        final Iterator<?> i1 = v1.iterator(), i2 = v2.iterator();
+        final Iterator<?> i1 = v1.iterator();
+        final Iterator<?> i2 = v2.iterator();
         while (i1.hasNext() && i2.hasNext()) {
             final Object o1 = i1.next();
             final Object o2 = i2.next();
-            if (o1==o2)
+            if (o1 == o2) {
                 continue;
-            if (o1==null)
+            }
+            if (o1 == null) {
                 return nullsFirst ? -1 : 1;
-            if (o2==null)
+            }
+            if (o2 == null) {
                 return nullsFirst ? 1 : -1;
-            if (o1.getClass()!=o2.getClass()) {
+            }
+            if (o1.getClass() != o2.getClass()) {
                 throw new IllegalArgumentException("Incompatible data types "
                         + o1.getClass().toString() + " and " + o2.getClass().toString());
             }
@@ -163,34 +187,49 @@ public class YdbKeyRange implements Serializable {
                 throw new IllegalArgumentException("Uncomparable data type "
                         + o1.getClass().toString());
             }
-            final int cmp = ((Comparable)o1).compareTo(o2);
-            if (cmp != 0) return cmp;
+            @SuppressWarnings("unchecked")
+            final int cmp = ((Comparable) o1).compareTo(o2);
+            if (cmp != 0) {
+                return cmp;
+            }
         }
-        if (!i1.hasNext() && i2.hasNext()) return nullsFirst ? -1 : 1;
-        if (i1.hasNext() && !i2.hasNext()) return nullsFirst ? 1 : -1;
+        if (!i1.hasNext() && i2.hasNext()) {
+            return nullsFirst ? -1 : 1;
+        }
+        if (i1.hasNext() && !i2.hasNext()) {
+            return nullsFirst ? 1 : -1;
+        }
         return 0;
     }
 
     public static Limit cleanup(Limit v) {
-        if (v==null)
+        if (v == null) {
             return NO_LIMIT;
-        if (v.isUnrestricted())
+        }
+        if (v.isUnrestricted()) {
             return NO_LIMIT;
+        }
         int pos = v.value.size();
         while (pos > 0) {
             Object o = v.value.get(pos - 1);
-            if (o!=null)
+            if (o != null) {
                 break;
+            }
             pos -= 1;
         }
-        if (pos==v.value.size())
+        if (pos == v.value.size()) {
             return v;
-        if (pos<1)
+        }
+        if (pos < 1) {
             return NO_LIMIT;
+        }
         return new Limit(new ArrayList<>(v.value.subList(0, pos)), v.inclusive);
     }
 
     public static class Limit implements Serializable {
+
+        private static final long serialVersionUID = 1L;
+
         private final List<Object> value;
         private final boolean inclusive;
 
@@ -208,7 +247,7 @@ public class YdbKeyRange implements Serializable {
         }
 
         public boolean isUnrestricted() {
-            return value==null || value.isEmpty();
+            return value == null || value.isEmpty();
         }
 
         @Override
@@ -244,18 +283,17 @@ public class YdbKeyRange implements Serializable {
 
         public int compareTo(Limit t, boolean nullsFirst) {
             int cmp = compare(this.value, t.value, nullsFirst);
-            if (cmp==0) {
-                if (this.inclusive == t.inclusive)
+            if (cmp == 0) {
+                if (this.inclusive == t.inclusive) {
                     return 0;
-                if (this.inclusive)
+                }
+                if (this.inclusive) {
                     return nullsFirst ? -1 : 1;
+                }
                 return nullsFirst ? 1 : -1;
             }
             return cmp;
         }
     }
-
-    public static final Limit NO_LIMIT = new Limit(new ArrayList<>(), true);
-    public static final YdbKeyRange UNRESTRICTED = new YdbKeyRange(NO_LIMIT, NO_LIMIT);
 
 }
