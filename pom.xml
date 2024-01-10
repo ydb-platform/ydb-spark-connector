@@ -20,6 +20,7 @@
         <maven.compiler.target>1.8</maven.compiler.target>
         <maven.javadoc.skip>true</maven.javadoc.skip>
         <maven.source.skip>true</maven.source.skip>
+        <log4j.version>2.20.0</log4j.version>
     </properties>
     <dependencyManagement>
         <dependencies>
@@ -77,18 +78,26 @@
         </dependency>
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-api</artifactId>
+            <version>${log4j.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-core</artifactId>
-            <version>2.20.0</version>
+            <version>${log4j.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-slf4j-impl</artifactId>
+            <version>${log4j.version}</version>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
             <version>2.16.0</version>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.logging.log4j</groupId>
-            <artifactId>log4j-slf4j-impl</artifactId>
-            <version>2.20.0</version>
         </dependency>
         <dependency>
             <groupId>org.apache.spark</groupId>
@@ -190,6 +199,21 @@
                                 </goals>
                                 <configuration>
                                     <minimizeJar>true</minimizeJar>
+                                    <promoteTransitiveDependencies>true</promoteTransitiveDependencies>
+                                    <createDependencyReducedPom>true</createDependencyReducedPom>
+                                    <dependencyReducedPomLocation>${project.build.directory}/dependency-reduced-pom.xml</dependencyReducedPomLocation>
+                                    <transformers>
+                                        <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheLicenseResourceTransformer" />
+                                        <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheNoticeResourceTransformer" />
+                                        <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer" />
+                                        <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                            <manifestEntries>
+                                                <Automatic-Module-Name>tech.ydb.spark.connector</Automatic-Module-Name>
+                                                <Specification-Title>${spec.title}</Specification-Title>
+                                                <Specification-Version>${spec.version}</Specification-Version>
+                                            </manifestEntries>
+                                        </transformer>
+                                    </transformers>
                                     <filters>
                                         <filter>
                                             <artifact>io.jsonwebtoken:jjwt-impl</artifact>
@@ -210,12 +234,6 @@
                                             </includes>
                                         </filter>
                                         <filter>
-                                            <artifact>org.bouncycastle:bcprov-jdk18on</artifact>
-                                            <includes>
-                                                <include>**</include>
-                                            </includes>
-                                        </filter>
-                                        <filter>
                                             <artifact>org.bouncycastle:bcprov-jdk15on</artifact>
                                             <includes>
                                                 <include>**</include>
@@ -224,32 +242,46 @@
                                         <filter>
                                             <artifact>*:*</artifact>
                                             <excludes>
-                                                <exclude>META-INF/NOTICE</exclude>
-                                                <exclude>META-INF/license/*.txt</exclude>
-                                                <exclude>META-INF/**.txt</exclude>
-                                                <exclude>META-INF/**.SF</exclude>
-                                                <exclude>META-INF/**.DSA</exclude>
-                                                <exclude>META-INF/**.RSA</exclude>
+                                                <exclude>mozilla/**</exclude>
+                                                <exclude>**/darwin/**</exclude>
+                                                <exclude>**/linux/**</exclude>
+                                                <exclude>**/win32/**</exclude>
                                                 <exclude>**/module-info.class</exclude>
+                                                <exclude>.netbeans_automatic_build</exclude>
+
+                                                <exclude>google/**/*.proto</exclude>
+                                                <exclude>grpc/**/*.proto</exclude>
+
+                                                <exclude>META-INF/DEPENDENCIES</exclude>
+                                                <exclude>META-INF/MANIFEST.MF</exclude>
+                                                <exclude>META-INF/maven/**</exclude>
+                                                <exclude>META-INF/native-image/**</exclude>
+                                                <exclude>META-INF/native/**</exclude>
+                                                <exclude>META-INF/services/java.security.Provider</exclude>
+                                                <exclude>META-INF/*.xml</exclude>
+                                                <exclude>META-INF/*.SF</exclude>
+                                                <exclude>META-INF/*.DSA</exclude>
+                                                <exclude>META-INF/*.RSA</exclude>
+                                                <exclude>META-INF/license/*.txt</exclude>
                                             </excludes>
                                         </filter>
                                     </filters>
                                     <relocations>
                                         <relocation>
+                                            <pattern>yandex.cloud</pattern>
+                                            <shadedPattern>shaded.yc</shadedPattern>
+                                        </relocation>
+                                        <relocation>
                                             <pattern>com.google</pattern>
-                                            <shadedPattern>yandex.shaded.google</shadedPattern>
+                                            <shadedPattern>shaded.google</shadedPattern>
                                         </relocation>
                                         <relocation>
                                             <pattern>io.grpc</pattern>
-                                            <shadedPattern>yandex.shaded.grpc</shadedPattern>
-                                        </relocation>
-                                        <relocation>
-                                            <pattern>io.grpc</pattern>
-                                            <shadedPattern>yandex.shaded.grpc</shadedPattern>
+                                            <shadedPattern>shaded.grpc</shadedPattern>
                                         </relocation>
                                         <relocation>
                                             <pattern>com.fasterxml.jackson</pattern>
-                                            <shadedPattern>yandex.shaded.jackson</shadedPattern>
+                                            <shadedPattern>shaded.jackson</shadedPattern>
                                         </relocation>
                                     </relocations>
                                 </configuration>
