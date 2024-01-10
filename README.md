@@ -5,7 +5,7 @@
 
 [YDB](https://ydb.tech) connector for [Apache Spark](https://spark.apache.org) can be used to integrate YDB data into Spark jobs. It supports reading and writing YDB tables, allowing for fast data access and ingestion.
 
-For read operations, the connector supports basic filter pushdown using the primary keys and prefixes. YDB indexes are exposed as Spark tables too, and can be used to query the data in a way similar to "normal" tables. YDB ReadTable API is used "under the covers".
+For read operations, the connector supports basic filter pushdown using the primary keys and key prefixes. YDB indexes are exposed as Spark tables too, and can be used to query the data in a way similar to "normal" tables. YDB ReadTable API is used "under the covers".
 
 For write operations, the connector uses the `UPSERT ... SELECT ...` statement to perform parallel data ingestion into the YDB tables. The connector can be configured to use the `REPLACE ... SELECT ...`, or YDB BulkUpsert API.
 
@@ -65,15 +65,23 @@ When configuring the "direct" style access to the particular YDB table to be rea
 ```Scala
 // Read the data set from YDB table
 val df1 = (spark.read.format("ydb")
-    .option("url", "<YdbUrl>")
-    ...
-    .option("table", "<TableName>")
+    .option("url", "grpc://localhost:2136?database=/Root/test")
+    .option("dbtable", "fhrw2")
     .load)
+// Show the first 10 rows
+df1.show(10, false)
 // Write the data set to YDB table
 ```
 
 ```Python
-TODO
+# Read the data set from YDB table
+df1 = spark.read.format("ydb") \
+  .option("url", "grpc://localhost:2136?database=/Root/test") \
+  .option("dbtable", "fhrw2") \
+  .load()
+# Show the first 10 rows
+df1.show(10, False)
+# Write the data set into the existing table
 ```
 
 ## Configuration reference
@@ -205,3 +213,15 @@ df2.filter(df2("closed_date").gt(to_timestamp(lit("2010-02-01")))).show(10, fals
 ```
 
 ## Accessing YDB with Python/Spark
+
+```python
+# table access
+spark.table("ydb1.fhrw0").select("created_date", "complaint_type", "city").show(10, False)
+
+# index access - note the backticks and the naming format
+spark.table("ydb1.`ix/fhrw0/ix1`").show(10, False)
+
+# read from ydb, write to parquet files
+spark.table("ydb1.fhrw0").write.parquet("file:///tmp/ydb-fhrw0")
+
+```
