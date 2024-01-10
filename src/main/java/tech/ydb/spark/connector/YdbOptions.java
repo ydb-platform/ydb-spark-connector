@@ -25,6 +25,16 @@ public abstract class YdbOptions {
     public static final String POOL_SIZE = "pool.size";
 
     /**
+     * Scan queue depth for each executor. Default 10, minimum 2.
+     */
+    public static final String SCAN_QUEUE_DEPTH = "scan.queue.depth";
+
+    /**
+     * Scan session timeout in seconds. Default 30, minimum 1.
+     */
+    public static final String SCAN_SESSION_SECONDS = "scan.session.seconds";
+
+    /**
      * CA certificates in the file.
      */
     public static final String CA_FILE = "ca.file";
@@ -90,6 +100,24 @@ public abstract class YdbOptions {
     public static final String BATCH_SIZE = "batchsize";
 
     /**
+     * YDB table's primary key, as a comma-delimited list of column names.
+     */
+    public static final String PRIMARY_KEY = "primary_key";
+
+    /**
+     * YDB table type:
+     *   - row-organized (table),
+     *   - secondary index (index),
+     *   - column-organized (columnshard).
+     */
+    public static final String TABLE_TYPE = "table_type";
+
+    /**
+     * YDB table path.
+     */
+    public static final String TABLE_PATH = "table_path";
+
+    /**
      * Partitioning setting - AUTO_PARTITIONING_BY_SIZE.
      */
     public static final String AP_BY_SIZE = "AUTO_PARTITIONING_BY_SIZE";
@@ -120,6 +148,13 @@ public abstract class YdbOptions {
     public static final List<String> CONN_IDENTITY =
             Collections.unmodifiableList(Arrays.asList(URL,
                     AUTH_MODE, AUTH_LOGIN, AUTH_SAKEY_FILE, AUTH_TOKEN));
+
+    /**
+     * Updatable table properties.
+     */
+    public static final List<String> TABLE_UPDATABLE =
+            Collections.unmodifiableList(Arrays.asList(AP_BY_SIZE, AP_BY_LOAD,
+                    AP_MIN_PARTS, AP_MAX_PARTS, AP_PART_SIZE_MB));
 
     /**
      * Check whether existing connection's properties matches the provided referenced values.

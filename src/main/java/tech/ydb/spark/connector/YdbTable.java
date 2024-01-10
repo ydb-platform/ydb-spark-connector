@@ -7,6 +7,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.apache.spark.sql.connector.catalog.*;
 import org.apache.spark.sql.connector.expressions.Expressions;
@@ -21,6 +22,7 @@ import tech.ydb.table.description.KeyRange;
 import tech.ydb.table.description.TableColumn;
 import tech.ydb.table.description.TableDescription;
 import tech.ydb.table.description.TableIndex;
+import tech.ydb.table.settings.PartitioningSettings;
 
 /**
  * YDB table metadata representation for Spark.
@@ -49,6 +51,7 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
     private final List<String> keyColumns;
     private final List<YdbFieldType> keyTypes;
     private final List<YdbKeyRange> partitions;
+    private final Map<String,String> properties;
     private StructType schema;
 
     /**
@@ -70,6 +73,7 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
         this.keyColumns = td.getPrimaryKeys();
         this.keyTypes = new ArrayList<>();
         this.partitions = new ArrayList<>();
+        this.properties = new HashMap<>();
         Map<String,TableColumn> cm = buildColumnsMap(td);
         for (String cname : td.getPrimaryKeys()) {
             TableColumn tc = cm.get(cname);
@@ -86,6 +90,33 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
                 } else {
                     partitions.add(ykr);
                 }
+            }
+        }
+        this.properties.put(YdbOptions.TABLE_TYPE, "table"); // TODO: columnshard support
+        this.properties.put(YdbOptions.TABLE_PATH, tablePath);
+        this.properties.put(YdbOptions.PRIMARY_KEY,
+                this.keyColumns.stream().collect(Collectors.joining(",")));
+        PartitioningSettings ps = td.getPartitioningSettings();
+        if (ps != null) {
+            Boolean bv = ps.getPartitioningBySize();
+            if (bv != null) {
+                this.properties.put(YdbOptions.AP_BY_SIZE.toLowerCase(), bv ? "ENABLED" : "DISABLED");
+            }
+            bv = ps.getPartitioningByLoad();
+            if (bv != null) {
+                this.properties.put(YdbOptions.AP_BY_LOAD.toLowerCase(), bv ? "ENABLED" : "DISABLED");
+            }
+            Long lv = ps.getPartitionSizeMb();
+            if (lv != null) {
+                this.properties.put(YdbOptions.AP_PART_SIZE_MB.toLowerCase(), lv.toString());
+            }
+            lv = ps.getMinPartitionsCount();
+            if (lv != null) {
+                this.properties.put(YdbOptions.AP_MIN_PARTS.toLowerCase(), lv.toString());
+            }
+            lv = ps.getMaxPartitionsCount();
+            if (lv != null) {
+                this.properties.put(YdbOptions.AP_MAX_PARTS.toLowerCase(), lv.toString());
             }
         }
         LOG.debug("Loaded table {} with {} columns and {} partitions",
@@ -126,6 +157,7 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
         this.keyColumns = ix.getColumns();
         this.keyTypes = new ArrayList<>();
         this.partitions = new ArrayList<>();
+        this.properties = new HashMap<>();
         HashSet<String> known = new HashSet<>();
         Map<String,TableColumn> cm = buildColumnsMap(td);
         // Add index key columns
@@ -155,6 +187,10 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
                 partitions.add(new YdbKeyRange(kr, connector.getDefaultTypes()));
             }
         }
+        this.properties.put(YdbOptions.TABLE_TYPE, "index");
+        this.properties.put(YdbOptions.TABLE_PATH, tablePath);
+        this.properties.put(YdbOptions.PRIMARY_KEY,
+                this.keyColumns.stream().collect(Collectors.joining(",")));
         LOG.debug("Loaded index {} with {} columns and {} partitions",
                 this.tablePath, this.columns.size(), this.partitions.size());
     }
@@ -197,16 +233,7 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
 
     @Override
     public Map<String, String> properties() {
-        final Map<String,String> m = new HashMap<>();
-        StringBuilder sb = new StringBuilder();
-        for (String kc : keyColumns) {
-            if (sb.length()>0)
-                sb.append(", ");
-            sb.append("`").append(kc).append("`");
-        }
-        m.put("primary_key", sb.toString());
-        m.put("table_path", tablePath);
-        return m;
+        return properties;
     }
 
     @Override

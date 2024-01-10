@@ -44,6 +44,14 @@ public enum YdbFieldType {
         this.sqlName = sqlName;
     }
 
+    public Type toSdkType() {
+        return toSdkType(this, false);
+    }
+
+    public Type toSdkType(boolean optional) {
+        return toSdkType(this, optional);
+    }
+
     public static YdbFieldType fromSdkType(Type t) {
         switch (t.getKind()) {
             case OPTIONAL:

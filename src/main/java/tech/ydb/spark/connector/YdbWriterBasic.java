@@ -99,9 +99,11 @@ public class YdbWriterBasic implements DataWriter<InternalRow> {
     }
 
     private void startNewStatement(List<Value<?>> input) {
+        LOG.debug("Sending a batch of {} rows into table {}", input.size(), tablePath);
         if (currentStatus!=null) {
             currentStatus.join().expectSuccess();
             currentStatus = null;
+            LOG.debug("Previous async batch completed for table {}", tablePath);
         }
         // The list is being copied here.
         // DO NOT move this call into the async methods below.
@@ -110,13 +112,14 @@ public class YdbWriterBasic implements DataWriter<InternalRow> {
             currentStatus = connector.getRetryCtx().supplyStatus(
                     session -> session.executeBulkUpsert(
                             tablePath, value, new BulkUpsertSettings()));
+            LOG.debug("Async bulk upsert started on table {}", tablePath);
         } else {
             currentStatus = connector.getRetryCtx().supplyStatus(
-                    session -> CompletableFuture.completedFuture(
-                            session.executeDataQuery(sqlStatement,
+                    session -> session.executeDataQuery(sqlStatement,
                                     TxControl.serializableRw().setCommitTx(true),
                                     Params.of("$input", value))
-                                    .join().getStatus()));
+                            .thenApply(result -> result.getStatus()));
+            LOG.debug("Async upsert transaction started on table {}", tablePath);
         }
     }
 
@@ -131,7 +134,9 @@ public class YdbWriterBasic implements DataWriter<InternalRow> {
         if (currentStatus!=null) {
             currentStatus.join().expectSuccess();
             currentStatus = null;
+            LOG.debug("Final async batch completed for table {}", tablePath);
         }
+        LOG.debug("Batch completed for table {}", tablePath);
         // All rows have been written successfully
         return new YdbWriteCommit();
     }

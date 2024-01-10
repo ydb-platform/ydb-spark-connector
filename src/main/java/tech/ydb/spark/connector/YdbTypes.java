@@ -13,6 +13,7 @@ import java.util.Map;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.Decimal;
+import org.apache.spark.sql.types.VarcharType;
 import org.apache.spark.unsafe.types.UTF8String;
 
 import tech.ydb.table.result.ValueReader;
@@ -149,6 +150,9 @@ public final class YdbTypes implements Serializable {
             if (x.scale()==38 && x.precision()==10)
                 return YdbFieldType.DyNumber;
             return YdbFieldType.Decimal;
+        }
+        if ( type instanceof org.apache.spark.sql.types.VarcharType ) {
+            return YdbFieldType.Text;
         }
         if (DataTypes.BooleanType.sameType(type)) {
             return YdbFieldType.Bool;

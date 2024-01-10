@@ -55,8 +55,7 @@ public class YdbConnector extends YdbOptions implements AutoCloseable {
         } catch(NumberFormatException nfe) {
             throw new IllegalArgumentException("Incorrect value for property " + POOL_SIZE, nfe);
         }
-        GrpcTransportBuilder builder = GrpcTransport
-                .forConnectionString(props.get(URL));
+        GrpcTransportBuilder builder = GrpcTransport.forConnectionString(props.get(URL));
         String caString = props.get(CA_FILE);
         if (caString!=null) {
             byte[] cert;
@@ -121,7 +120,7 @@ public class YdbConnector extends YdbOptions implements AutoCloseable {
         GrpcTransport gt = builder.build();
         try {
             this.tableClient = TableClient.newClient(gt)
-                    .sessionPoolSize(0, poolSize)
+                    .sessionPoolSize(1, poolSize)
                     .build();
             this.schemeClient = SchemeClient.newClient(gt).build();
             this.retryCtx = SessionRetryContext.create(tableClient).build();
@@ -168,6 +167,36 @@ public class YdbConnector extends YdbOptions implements AutoCloseable {
 
     public YdbIngestMethod getDefaultIngestMethod() {
         return defaultIngestMethod;
+    }
+
+    public int getScanQueueDepth() {
+        int scanQueueDepth;
+        try {
+            scanQueueDepth = Integer.parseInt(connectOptions.getOrDefault(SCAN_QUEUE_DEPTH, "10"));
+        } catch(NumberFormatException nfe) {
+            LOG.warn("Illegal value of {} property, reverting to default of 10.", SCAN_QUEUE_DEPTH, nfe);
+            scanQueueDepth = 10;
+        }
+        if (scanQueueDepth < 2) {
+            LOG.warn("Value of {} property too low, reverting to minimum of 2.", SCAN_QUEUE_DEPTH);
+            scanQueueDepth = 2;
+        }
+        return scanQueueDepth;
+    }
+
+    public int getScanSessionSeconds() {
+        int scanSessionSeconds;
+        try {
+            scanSessionSeconds = Integer.parseInt(connectOptions.getOrDefault(SCAN_SESSION_SECONDS, "30"));
+        } catch(NumberFormatException nfe) {
+            LOG.warn("Illegal value of {} property, reverting to default of 30.", SCAN_SESSION_SECONDS, nfe);
+            scanSessionSeconds = 30;
+        }
+        if (scanSessionSeconds < 1) {
+            LOG.warn("Value of {} property too low, reverting to minimum of 1.", SCAN_SESSION_SECONDS);
+            scanSessionSeconds = 1;
+        }
+        return scanSessionSeconds;
     }
 
     @Override

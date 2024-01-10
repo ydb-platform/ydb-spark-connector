@@ -2,7 +2,6 @@ package tech.ydb.spark.connector;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -14,44 +13,43 @@ import org.apache.spark.sql.types.StructType;
 
 import tech.ydb.core.Status;
 import tech.ydb.table.Session;
-import tech.ydb.table.SessionRetryContext;
 import tech.ydb.table.description.TableDescription;
 import tech.ydb.table.settings.PartitioningSettings;
 
 /**
+ * Create table implementation.
  *
  * @author zinal
  */
-class YdbCreateTable {
+class YdbCreateTable extends YdbPropertyHelper {
 
     private final String tablePath;
     private final List<YdbFieldInfo> fields;
     private final List<String> primaryKey;
-    private final Map<String,String> properties;
-
-    public YdbCreateTable(String tablePath, List<YdbFieldInfo> fields,
+ 
+    YdbCreateTable(String tablePath, List<YdbFieldInfo> fields,
             List<String> primaryKey, Map<String,String> properties) {
+        super(properties);
         this.tablePath = tablePath;
         this.fields = fields;
         this.primaryKey = primaryKey;
-        this.properties = properties;
     }
 
-    public YdbCreateTable(String tablePath, List<YdbFieldInfo> fields,
+    YdbCreateTable(String tablePath, List<YdbFieldInfo> fields,
             Map<String,String> properties) {
+        super(properties);
         this.tablePath = tablePath;
         this.fields = fields;
         this.primaryKey = makePrimaryKey(fields, properties);
-        this.properties = properties;
     }
 
-    public CompletableFuture<Status> createTable(Session session) {
+    CompletableFuture<Status> createTable(Session session) {
         TableDescription.Builder tdb = TableDescription.newBuilder();
         for (YdbFieldInfo yfi : fields) {
             if (yfi.isNullable()) {
-                tdb.addNullableColumn(yfi.getName(), YdbFieldType.toSdkType(yfi.getType(), false));
+                tdb.addNullableColumn(yfi.getName(), yfi.getType().toSdkType());
             } else {
-                tdb.addNonnullColumn(yfi.getName(), YdbFieldType.toSdkType(yfi.getType(), false));
+                tdb.addNonnullColumn(yfi.getName(), yfi.getType().toSdkType());
             }
         }
         tdb.setPrimaryKeys(primaryKey);
@@ -64,7 +62,7 @@ class YdbCreateTable {
             minPartitions = 1L;
         }
         long maxPartitions = getLongOption(YdbOptions.AP_MAX_PARTS, 50L);
-        if (maxPartitions < minPartitions + 49L) {
+        if (maxPartitions < minPartitions) {
             maxPartitions = minPartitions + 49L + (minPartitions / 100L);
         }
         ps.setMinPartitionsCount(minPartitions);
@@ -79,85 +77,25 @@ class YdbCreateTable {
         return session.createTable(tablePath, tdb.build());
     }
 
-    private boolean getBooleanOption(String name, boolean defval) {
-        if (properties != null) {
-            name = name.trim().toLowerCase();
-            String value = properties.get(name);
-            if (value!=null) {
-                value = value.trim();
-                if (value.length() > 0) {
-                    if ("1".equalsIgnoreCase(value)
-                            || "yes".equalsIgnoreCase(value)
-                            || "true".equalsIgnoreCase(value)
-                            || "enabled".equalsIgnoreCase(value)) {
-                        return true;
-                    }
-                    if ("0".equalsIgnoreCase(value)
-                            || "no".equalsIgnoreCase(value)
-                            || "false".equalsIgnoreCase(value)
-                            || "disabled".equalsIgnoreCase(value)) {
-                        return false;
-                    }
-                    throw new IllegalArgumentException("Illegal value [" + value + "] "
-                            + "for property " + name);
-                }
-            }
-        }
-        return defval;
-    }
-
-    private long getLongOption(String name, long defval) {
-        if (properties != null) {
-            name = name.trim().toLowerCase();
-            String value = properties.get(name);
-            if (value!=null) {
-                value = value.trim();
-                if (value.length() > 0) {
-                    try {
-                        return Long.parseLong(value);
-                    } catch(NumberFormatException nfe) {
-                        throw new IllegalArgumentException("Illegal value [" + value + "] "
-                                + "for property " + name, nfe);
-                    }
-                }
-            }
-        }
-        return defval;
-    }
-
-    public static List<YdbFieldInfo> convert(YdbTypes types, StructType st) {
+    static List<YdbFieldInfo> convert(YdbTypes types, StructType st) {
         final List<YdbFieldInfo> fields = new ArrayList<>(st.size());
         for (StructField sf : JavaConverters.asJavaCollection(st)) {
-            fields.add(new YdbFieldInfo(sf.name(), 
-                    types.mapTypeSpark2Ydb(sf.dataType()), sf.nullable()));
+            YdbFieldType yft = types.mapTypeSpark2Ydb(sf.dataType());
+            if (yft==null) {
+                throw new IllegalArgumentException("Unsupported type for table column: "
+                        + sf.dataType());
+            }
+            fields.add(new YdbFieldInfo(sf.name(), yft, sf.nullable()));
         }
         return fields;
     }
 
-    public static YdbFieldType convert(YdbTypes types, org.apache.spark.sql.types.DataType type) {
-        YdbFieldType yft = types.mapTypeSpark2Ydb(type);
-        if (yft==null) {
-            throw new IllegalArgumentException("Spark type " + type + " cannot be converted to YDB type");
-        }
-        return yft;
-    }
-
-    public static List<String> makePrimaryKey(List<YdbFieldInfo> fields, Map<String,String> properties) {
-        String value = properties.get("primary_key");
+    static List<String> makePrimaryKey(List<YdbFieldInfo> fields, Map<String,String> properties) {
+        String value = properties.get(YdbOptions.PRIMARY_KEY);
         if (value==null) {
             value = fields.get(0).getName();
         }
         return Arrays.asList(value.split("[,]"));
-    }
-
-    public static Map<String,String> makeProperties(Map<String,String> input) {
-        Map<String,String> m = new HashMap<>();
-        if (input != null) {
-            for (Map.Entry<String,String> me : input.entrySet()) {
-                m.put(me.getKey().toLowerCase(), me.getValue());
-            }
-        }
-        return m;
     }
 
 }

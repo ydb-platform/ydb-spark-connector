@@ -214,7 +214,7 @@ public class YdbCatalog extends YdbOptions
         // Actual table creation logic is moved to a separate class.
         final YdbCreateTable action = new YdbCreateTable(tablePath,
                 YdbCreateTable.convert(getConnector().getDefaultTypes(), schema),
-                YdbCreateTable.makeProperties(properties));
+                properties);
         getRetryCtx().supplyStatus(session -> action.createTable(session)).join()
                 .expectSuccess("Failed to create table " + ident);
         // Load the description for the table created.
@@ -230,10 +230,35 @@ public class YdbCatalog extends YdbOptions
     @Override
     public Table alterTable(Identifier ident, TableChange... changes) throws NoSuchTableException {
         if (ident.name().startsWith("ix/")) {
-            throw new UnsupportedOperationException("Index table alteration is not possible,"
+            throw new UnsupportedOperationException("Index table alteration is not possible, "
                     + "identifier " + ident);
         }
-        throw new UnsupportedOperationException("Not supported yet.");
+        final String tablePath = mergePath(ident);
+        // Load the current table description and set up the operation.
+        final YdbAlterTable operation = new YdbAlterTable(connector, tablePath);
+        // Prepare for processing and ensure that all changes are of supported types.
+        for (TableChange change : changes) {
+            if (change instanceof TableChange.AddColumn) {
+                operation.prepare((TableChange.AddColumn) change);
+            } else if (change instanceof TableChange.DeleteColumn) {
+                operation.prepare((TableChange.DeleteColumn) change);
+            } else if (change instanceof TableChange.SetProperty) {
+                operation.prepare((TableChange.SetProperty)change);
+            } else if (change instanceof TableChange.RemoveProperty) {
+                operation.prepare((TableChange.RemoveProperty)change);
+            } else {
+                throw new UnsupportedOperationException("YDB table alter operation not supported: " + change);
+            }
+        }
+        // Implement the desired changes.
+        getRetryCtx().supplyStatus(session -> operation.run(session)).join().expectSuccess();
+        // Load the description for the modified table.
+        TableDescription td = getRetryCtx().supplyResult(session -> {
+            final DescribeTableSettings dts = new DescribeTableSettings();
+            dts.setIncludeShardKeyBounds(true);
+            return session.describeTable(tablePath, dts);
+        }).join().getValue();
+        return new YdbTable(getConnector(), mergeLocal(ident), tablePath, td);
     }
 
     @Override

@@ -13,19 +13,30 @@ https://github.com/aamargajbhiye/big-data-projects/tree/master/Datasource%20spar
 Spark Shell example config:
 
 ```bash
-./bin/spark-shell --conf spark.sql.catalog.ydb1=tech.ydb.spark.connector.YdbCatalog \
-  --conf spark.sql.catalog.ydb1.url='grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1gfvslmokutuvt2g019/etnuogblap3e7dok6tf5' \
+./bin/spark-sql --conf spark.sql.catalog.ydb1=tech.ydb.spark.connector.YdbCatalog \
+  --conf spark.sql.catalog.ydb1.url='grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1g3o4minpkuh10pd2rj/etn5tp76hhfs5npr7j23' \
   --conf spark.sql.catalog.ydb1.auth.mode=KEY \
-  --conf spark.sql.catalog.ydb1.auth.sakey.file=/Users/mzinal/Magic/key-ydb-sa1.json
+  --conf spark.sql.catalog.ydb1.auth.sakey.file=/Users/mzinal/Magic/key-mvz-ydb1.json \
+  --conf spark.driver.extraJavaOptions=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5007
 
 ./bin/spark-sql --conf spark.sql.catalog.ydb1=tech.ydb.spark.connector.YdbCatalog \
-  --conf spark.sql.catalog.ydb1.url='grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1gfvslmokutuvt2g019/etnuogblap3e7dok6tf5' \
+  --conf spark.sql.catalog.ydb1.url='grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1g3o4minpkuh10pd2rj/etn5tp76hhfs5npr7j23' \
   --conf spark.sql.catalog.ydb1.auth.mode=KEY \
   --conf spark.sql.catalog.ydb1.auth.sakey.file=/home/zinal/Keys/ydb-sa1-key1.json \
   --conf spark.driver.extraJavaOptions=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5007
 
+cd /home/zinal/Software/spark-3.3.3-bin-hadoop3
+./bin/spark-sql --conf spark.sql.catalog.ydb1=tech.ydb.spark.connector.YdbCatalog \
+  --conf spark.sql.catalog.ydb1.url='grpc://localhost:2136?database=/Root/test' \
+  --conf spark.sql.catalog.ydb1.auth.mode=NONE
+
 ```
 
+
+```sql
+create schema ydb1.spark;
+create table ydb1.spark.test1(a integer not null, b bigint, c varchar(100)) tblproperties('primary_key'='b,a');
+```
 
 
 ```scala
