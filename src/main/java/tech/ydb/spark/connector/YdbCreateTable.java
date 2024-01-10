@@ -62,7 +62,7 @@ class YdbCreateTable extends YdbPropertyHelper {
             minPartitions = 1L;
         }
         long maxPartitions = getLongOption(YdbOptions.AP_MAX_PARTS, 50L);
-        if (maxPartitions < minPartitions + 49L) {
+        if (maxPartitions < minPartitions) {
             maxPartitions = minPartitions + 49L + (minPartitions / 100L);
         }
         ps.setMinPartitionsCount(minPartitions);

@@ -55,8 +55,7 @@ public class YdbConnector extends YdbOptions implements AutoCloseable {
         } catch(NumberFormatException nfe) {
             throw new IllegalArgumentException("Incorrect value for property " + POOL_SIZE, nfe);
         }
-        GrpcTransportBuilder builder = GrpcTransport
-                .forConnectionString(props.get(URL));
+        GrpcTransportBuilder builder = GrpcTransport.forConnectionString(props.get(URL));
         String caString = props.get(CA_FILE);
         if (caString!=null) {
             byte[] cert;
@@ -121,7 +120,7 @@ public class YdbConnector extends YdbOptions implements AutoCloseable {
         GrpcTransport gt = builder.build();
         try {
             this.tableClient = TableClient.newClient(gt)
-                    .sessionPoolSize(0, poolSize)
+                    .sessionPoolSize(1, poolSize)
                     .build();
             this.schemeClient = SchemeClient.newClient(gt).build();
             this.retryCtx = SessionRetryContext.create(tableClient).build();
