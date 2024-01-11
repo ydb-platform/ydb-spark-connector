@@ -46,7 +46,7 @@ public class YdbConnector extends YdbOptions implements AutoCloseable {
         this.defaultTypes = new YdbTypes(this.connectOptions);
         this.defaultIngestMethod = YdbIngestMethod.fromString(
                 this.connectOptions.get(YdbOptions.INGEST_METHOD));
-        this.singlePartitionScans = Boolean.getBoolean(props.getOrDefault(SCAN_SINGLE, "false"));
+        this.singlePartitionScans = Boolean.parseBoolean(props.getOrDefault(SCAN_SINGLE, "false"));
         int poolSize = getPoolSize(props);
         GrpcTransportBuilder builder = GrpcTransport.forConnectionString(props.get(URL));
         builder = applyCaSettings(builder, props);
