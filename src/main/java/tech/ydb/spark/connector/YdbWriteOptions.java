@@ -22,7 +22,7 @@ public class YdbWriteOptions extends YdbTableOperationOptions implements Seriali
     private final boolean mapByNames;
     private final String queryId;
     private final YdbIngestMethod ingestMethod;
-    private final Map<String, String> options;
+    private final HashMap<String, String> options;
     private final int maxBulkRows;
 
     public YdbWriteOptions(YdbTable table, boolean mapByNames, StructType inputType,

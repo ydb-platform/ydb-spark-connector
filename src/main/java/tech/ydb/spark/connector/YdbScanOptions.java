@@ -28,11 +28,11 @@ public class YdbScanOptions extends YdbTableOperationOptions implements Serializ
             = org.slf4j.LoggerFactory.getLogger(YdbScanOptions.class);
 
     private final StructType actualSchema;
-    private final List<String> keyColumns;
-    private final List<YdbFieldType> keyTypes;
+    private final ArrayList<String> keyColumns;
+    private final ArrayList<YdbFieldType> keyTypes;
     private final ArrayList<Object> rangeBegin;
     private final ArrayList<Object> rangeEnd;
-    private final List<YdbKeyRange> partitions;
+    private final ArrayList<YdbKeyRange> partitions;
     private final int scanQueueDepth;
     private final int scanSessionSeconds;
     private int rowLimit;

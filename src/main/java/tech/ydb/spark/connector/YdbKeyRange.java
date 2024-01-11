@@ -38,6 +38,10 @@ public class YdbKeyRange implements Serializable {
         this(convert(kr.getFrom(), types), convert(kr.getTo(), types));
     }
 
+    public YdbKeyRange(ArrayList<Object> from, ArrayList<Object> to) {
+        this(new Limit(from, true), new Limit(to, false));
+    }
+
     public YdbKeyRange(List<Object> from, List<Object> to) {
         this(new Limit(from, true), new Limit(to, false));
     }
@@ -118,7 +122,7 @@ public class YdbKeyRange implements Serializable {
             }
             TupleValue t = (TupleValue) tx;
             final int sz = t.size();
-            List<Object> out = new ArrayList<>(sz);
+            ArrayList<Object> out = new ArrayList<>(sz);
             for (int i = 0; i < sz; ++i) {
                 out.add(types.convertFromYdb(t.get(i)));
             }
@@ -230,11 +234,16 @@ public class YdbKeyRange implements Serializable {
 
         private static final long serialVersionUID = 1L;
 
-        private final List<Object> value;
+        private final ArrayList<Object> value;
         private final boolean inclusive;
 
-        public Limit(List<Object> value, boolean inclusive) {
+        public Limit(ArrayList<Object> value, boolean inclusive) {
             this.value = value;
+            this.inclusive = inclusive;
+        }
+
+        public Limit(List<Object> value, boolean inclusive) {
+            this.value = new ArrayList<>(value);
             this.inclusive = inclusive;
         }
 

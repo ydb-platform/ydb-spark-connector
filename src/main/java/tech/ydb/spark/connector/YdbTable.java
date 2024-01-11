@@ -56,8 +56,8 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
     private final String tablePath;
     private final List<TableColumn> columns;
     private final List<String> keyColumns;
-    private final List<YdbFieldType> keyTypes;
-    private final List<YdbKeyRange> partitions;
+    private final ArrayList<YdbFieldType> keyTypes;
+    private final ArrayList<YdbKeyRange> partitions;
     private final Map<String, String> properties;
     private StructType schema;
 
@@ -281,11 +281,11 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
         return keyColumns;
     }
 
-    final List<YdbFieldType> keyTypes() {
+    final ArrayList<YdbFieldType> keyTypes() {
         return keyTypes;
     }
 
-    final List<YdbKeyRange> partitions() {
+    final ArrayList<YdbKeyRange> partitions() {
         return partitions;
     }
 
