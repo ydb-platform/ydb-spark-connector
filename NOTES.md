@@ -36,6 +36,8 @@ cd /home/zinal/Software/spark-3.3.3-bin-hadoop3
 ```sql
 create schema ydb1.spark;
 create table ydb1.spark.test1(a integer not null, b bigint, c varchar(100)) tblproperties('primary_key'='b,a');
+
+CREATE TABLE ydb1.fhrw2 TBLPROPERTIES('primary_key'='h2,unique_key') AS SELECT hash(unique_key) AS h2, x.* FROM ydb1.fhrw0 x;
 ```
 
 

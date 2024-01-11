@@ -274,6 +274,22 @@ public class YdbScanViaReadTable implements AutoCloseable {
         }
     }
 
+    private void putToQueue(QueueItem qi) {
+        while (true) {
+            try {
+                queue.add(qi);
+                break; // exit the "queue put" retry loop
+            } catch (IllegalStateException ise) {
+                // The unlikely case of thread interrupt should not prevent us
+                // from putting an item into the queue
+                try {
+                    Thread.sleep(35L);
+                } catch (InterruptedException ix) {
+                }
+            }
+        }
+    }
+
     static final class QueueItem {
 
         final ResultSetReader reader;
@@ -298,21 +314,9 @@ public class YdbScanViaReadTable implements AutoCloseable {
             try {
                 stream.start(part -> {
                     final ResultSetReader rsr = part.getResultSetReader();
-                    while (true) {
-                        try {
-                            queue.add(new QueueItem(rsr));
-                            LOG.debug("Added portion of {} rows for table {} to the queue.",
-                                    rsr.getRowCount(), tablePath);
-                            return; // exit the "queue put" retry loop - and lambda too
-                        } catch (IllegalStateException ise) {
-                            // The unlikely case of interrupt should not prevent us
-                            // from putting an item into the queue
-                            try {
-                                Thread.sleep(35L);
-                            } catch (InterruptedException ix) {
-                            }
-                        }
-                    }
+                    putToQueue(new QueueItem(rsr));
+                    LOG.debug("Added portion of {} rows for table {} to the queue.",
+                            rsr.getRowCount(), tablePath);
                 }).join().expectSuccess();
             } catch (Exception ex) {
                 boolean needReport = true;
@@ -327,7 +331,7 @@ public class YdbScanViaReadTable implements AutoCloseable {
                     setIssue(ex);
                 }
             }
-            queue.add(END_OF_SCAN);
+            putToQueue(END_OF_SCAN);
             LOG.debug("Completed background scan for table {}, range {}", tablePath, keyRange);
         }
     }
