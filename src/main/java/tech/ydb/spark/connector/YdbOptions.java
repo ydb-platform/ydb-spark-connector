@@ -25,6 +25,11 @@ public abstract class YdbOptions {
     public static final String POOL_SIZE = "pool.size";
 
     /**
+     * Use single partition for scanning each table, if true. Default false.
+     */
+    public static final String SCAN_SINGLE = "scan.single";
+
+    /**
      * Scan queue depth for each executor. Default 10, minimum 2.
      */
     public static final String SCAN_QUEUE_DEPTH = "scan.queue.depth";

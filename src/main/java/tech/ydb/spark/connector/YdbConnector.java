@@ -35,6 +35,7 @@ public class YdbConnector extends YdbOptions implements AutoCloseable {
     private final String database;
     private final YdbTypes defaultTypes;
     private final YdbIngestMethod defaultIngestMethod;
+    private final boolean singlePartitionScans;
 
     public YdbConnector(String catalogName, Map<String, String> props) {
         this.catalogName = catalogName;
@@ -45,18 +46,30 @@ public class YdbConnector extends YdbOptions implements AutoCloseable {
         this.defaultTypes = new YdbTypes(this.connectOptions);
         this.defaultIngestMethod = YdbIngestMethod.fromString(
                 this.connectOptions.get(YdbOptions.INGEST_METHOD));
-        final int poolSize;
-        try {
-            int ncores = Runtime.getRuntime().availableProcessors();
-            if (ncores < 2) {
-                ncores = 2;
-            }
-            String defaultCores = String.valueOf(4 * ncores);
-            poolSize = Integer.parseInt(props.getOrDefault(POOL_SIZE, defaultCores));
-        } catch (NumberFormatException nfe) {
-            throw new IllegalArgumentException("Incorrect value for property " + POOL_SIZE, nfe);
-        }
+        this.singlePartitionScans = Boolean.getBoolean(props.getOrDefault(SCAN_SINGLE, "false"));
+        int poolSize = getPoolSize(props);
         GrpcTransportBuilder builder = GrpcTransport.forConnectionString(props.get(URL));
+        builder = applyCaSettings(builder, props);
+        builder = applyAuthSettings(builder, props);
+        GrpcTransport gt = builder.build();
+        try {
+            this.tableClient = TableClient.newClient(gt)
+                    .sessionPoolSize(1, poolSize)
+                    .build();
+            this.schemeClient = SchemeClient.newClient(gt).build();
+            this.retryCtx = SessionRetryContext.create(tableClient).build();
+            this.transport = gt;
+            gt = null; // to avoid closing below
+        } finally {
+            if (gt != null) {
+                gt.close();
+            }
+        }
+        this.database = this.transport.getDatabase();
+    }
+
+    private static GrpcTransportBuilder applyCaSettings(GrpcTransportBuilder builder,
+            Map<String, String> props) {
         String caString = props.get(CA_FILE);
         if (caString != null) {
             byte[] cert;
@@ -74,6 +87,11 @@ public class YdbConnector extends YdbOptions implements AutoCloseable {
                 builder = builder.withSecureConnection(cert);
             }
         }
+        return builder;
+    }
+
+    private static GrpcTransportBuilder applyAuthSettings(GrpcTransportBuilder builder,
+            Map<String, String> props) {
         final YdbAuthMode authMode;
         try {
             authMode = YdbAuthMode.fromString(props.get(AUTH_MODE));
@@ -120,21 +138,20 @@ public class YdbConnector extends YdbOptions implements AutoCloseable {
             default: // unreached
                 throw new UnsupportedOperationException();
         }
-        GrpcTransport gt = builder.build();
+        return builder;
+    }
+
+    private static int getPoolSize(Map<String, String> props) {
         try {
-            this.tableClient = TableClient.newClient(gt)
-                    .sessionPoolSize(1, poolSize)
-                    .build();
-            this.schemeClient = SchemeClient.newClient(gt).build();
-            this.retryCtx = SessionRetryContext.create(tableClient).build();
-            this.transport = gt;
-            gt = null; // to avoid closing below
-        } finally {
-            if (gt != null) {
-                gt.close();
+            int ncores = Runtime.getRuntime().availableProcessors();
+            if (ncores < 2) {
+                ncores = 2;
             }
+            String defaultCores = String.valueOf(4 * ncores);
+            return Integer.parseInt(props.getOrDefault(POOL_SIZE, defaultCores));
+        } catch (NumberFormatException nfe) {
+            throw new IllegalArgumentException("Incorrect value for property " + POOL_SIZE, nfe);
         }
-        this.database = this.transport.getDatabase();
     }
 
     public String getCatalogName() {
@@ -171,6 +188,10 @@ public class YdbConnector extends YdbOptions implements AutoCloseable {
 
     public YdbIngestMethod getDefaultIngestMethod() {
         return defaultIngestMethod;
+    }
+
+    public boolean isSinglePartitionScans() {
+        return singlePartitionScans;
     }
 
     public int getScanQueueDepth() {

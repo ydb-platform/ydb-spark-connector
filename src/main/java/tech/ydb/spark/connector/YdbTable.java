@@ -86,7 +86,7 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
             TableColumn tc = cm.get(cname);
             this.keyTypes.add(YdbFieldType.fromSdkType(tc.getType()));
         }
-        if (td.getKeyRanges() != null) {
+        if (!connector.isSinglePartitionScans() && td.getKeyRanges() != null) {
             for (KeyRange kr : td.getKeyRanges()) {
                 YdbKeyRange ykr = new YdbKeyRange(kr, types);
                 if (ykr.isUnrestricted() && !partitions.isEmpty()) {
@@ -103,29 +103,7 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
         this.properties.put(YdbOptions.TABLE_PATH, tablePath);
         this.properties.put(YdbOptions.PRIMARY_KEY,
                 this.keyColumns.stream().collect(Collectors.joining(",")));
-        PartitioningSettings ps = td.getPartitioningSettings();
-        if (ps != null) {
-            Boolean bv = ps.getPartitioningBySize();
-            if (bv != null) {
-                this.properties.put(YdbOptions.AP_BY_SIZE.toLowerCase(), bv ? "ENABLED" : "DISABLED");
-            }
-            bv = ps.getPartitioningByLoad();
-            if (bv != null) {
-                this.properties.put(YdbOptions.AP_BY_LOAD.toLowerCase(), bv ? "ENABLED" : "DISABLED");
-            }
-            Long lv = ps.getPartitionSizeMb();
-            if (lv != null) {
-                this.properties.put(YdbOptions.AP_PART_SIZE_MB.toLowerCase(), lv.toString());
-            }
-            lv = ps.getMinPartitionsCount();
-            if (lv != null) {
-                this.properties.put(YdbOptions.AP_MIN_PARTS.toLowerCase(), lv.toString());
-            }
-            lv = ps.getMaxPartitionsCount();
-            if (lv != null) {
-                this.properties.put(YdbOptions.AP_MAX_PARTS.toLowerCase(), lv.toString());
-            }
-        }
+        convertPartitioningSettings(td, this.properties);
         LOG.debug("Loaded table {} with {} columns and {} partitions",
                 this.tablePath, this.columns.size(), this.partitions.size());
     }
@@ -189,7 +167,7 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
                 this.columns.add(tc);
             }
         }
-        if (tdIx.getKeyRanges() != null) {
+        if (!connector.isSinglePartitionScans() && tdIx.getKeyRanges() != null) {
             for (KeyRange kr : tdIx.getKeyRanges()) {
                 partitions.add(new YdbKeyRange(kr, connector.getDefaultTypes()));
             }
@@ -215,6 +193,33 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
     YdbTable(YdbConnector connector, String logicalName, String tablePath,
             TableDescription tdMain, TableIndex ix, TableDescription tdIx) {
         this(connector, connector.getDefaultTypes(), logicalName, tablePath, tdMain, ix, tdIx);
+    }
+
+    private static void convertPartitioningSettings(TableDescription td,
+            Map<String, String> properties) {
+        PartitioningSettings ps = td.getPartitioningSettings();
+        if (ps != null) {
+            Boolean bv = ps.getPartitioningBySize();
+            if (bv != null) {
+                properties.put(YdbOptions.AP_BY_SIZE.toLowerCase(), bv ? "ENABLED" : "DISABLED");
+            }
+            bv = ps.getPartitioningByLoad();
+            if (bv != null) {
+                properties.put(YdbOptions.AP_BY_LOAD.toLowerCase(), bv ? "ENABLED" : "DISABLED");
+            }
+            Long lv = ps.getPartitionSizeMb();
+            if (lv != null) {
+                properties.put(YdbOptions.AP_PART_SIZE_MB.toLowerCase(), lv.toString());
+            }
+            lv = ps.getMinPartitionsCount();
+            if (lv != null) {
+                properties.put(YdbOptions.AP_MIN_PARTS.toLowerCase(), lv.toString());
+            }
+            lv = ps.getMaxPartitionsCount();
+            if (lv != null) {
+                properties.put(YdbOptions.AP_MAX_PARTS.toLowerCase(), lv.toString());
+            }
+        }
     }
 
     private static Map<String, TableColumn> buildColumnsMap(TableDescription td) {
