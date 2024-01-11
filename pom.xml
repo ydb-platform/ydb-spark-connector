@@ -268,20 +268,16 @@
                                     </filters>
                                     <relocations>
                                         <relocation>
-                                            <pattern>yandex.cloud</pattern>
-                                            <shadedPattern>shaded.yc</shadedPattern>
-                                        </relocation>
-                                        <relocation>
                                             <pattern>com.google</pattern>
-                                            <shadedPattern>shaded.google</shadedPattern>
+                                            <shadedPattern>yandex.shaded.google</shadedPattern>
                                         </relocation>
                                         <relocation>
                                             <pattern>io.grpc</pattern>
-                                            <shadedPattern>shaded.grpc</shadedPattern>
+                                            <shadedPattern>yandex.shaded.grpc</shadedPattern>
                                         </relocation>
                                         <relocation>
                                             <pattern>com.fasterxml.jackson</pattern>
-                                            <shadedPattern>shaded.jackson</shadedPattern>
+                                            <shadedPattern>yandex.shaded.jackson</shadedPattern>
                                         </relocation>
                                     </relocations>
                                 </configuration>
