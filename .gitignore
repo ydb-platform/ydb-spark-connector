@@ -1,3 +1,7 @@
+# Dumb files
+.DS_Store
+*.tmp
+
 # Compiled class file
 *.class
 
