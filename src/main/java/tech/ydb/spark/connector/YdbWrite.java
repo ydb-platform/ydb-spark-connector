@@ -12,12 +12,15 @@ import org.apache.spark.sql.connector.write.Write;
 import org.apache.spark.sql.connector.write.WriteBuilder;
 import org.apache.spark.sql.connector.write.WriterCommitMessage;
 
+import tech.ydb.spark.connector.impl.YdbWriterImpl;
+
 /**
  * YDB table writer: orchestration and partition writer factory.
  *
  * @author zinal
  */
-public class YdbWrite implements Serializable, WriteBuilder, Write, BatchWrite, DataWriterFactory {
+public class YdbWrite implements Serializable,
+        WriteBuilder, Write, BatchWrite, DataWriterFactory {
 
     private static final long serialVersionUID = 1L;
 
@@ -60,7 +63,7 @@ public class YdbWrite implements Serializable, WriteBuilder, Write, BatchWrite, 
 
     @Override
     public DataWriter<InternalRow> createWriter(int partitionId, long taskId) {
-        return new YdbWriterBasic(options);
+        return new YdbWriterImpl(options);
     }
 
 }

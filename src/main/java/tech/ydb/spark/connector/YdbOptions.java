@@ -167,7 +167,7 @@ public abstract class YdbOptions {
      * @param referenced properties for the connection to be found or created
      * @return true, if properties connectionMatches, false otherwise
      */
-    public static boolean connectionMatches(Map<String, String> existing, Map<String, String> referenced) {
+    public static boolean optionsMatches(Map<String, String> existing, Map<String, String> referenced) {
         for (String propName : CONN_IDENTITY) {
             String v1 = existing.get(propName);
             String v2 = referenced.get(propName);

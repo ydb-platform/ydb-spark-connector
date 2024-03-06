@@ -1,4 +1,4 @@
-package tech.ydb.spark.connector;
+package tech.ydb.spark.connector.impl;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -13,6 +13,10 @@ import tech.ydb.core.auth.StaticCredentials;
 import tech.ydb.core.grpc.GrpcTransport;
 import tech.ydb.core.grpc.GrpcTransportBuilder;
 import tech.ydb.scheme.SchemeClient;
+import tech.ydb.spark.connector.YdbAuthMode;
+import tech.ydb.spark.connector.YdbIngestMethod;
+import tech.ydb.spark.connector.YdbOptions;
+import tech.ydb.spark.connector.YdbTypes;
 import tech.ydb.table.SessionRetryContext;
 import tech.ydb.table.TableClient;
 

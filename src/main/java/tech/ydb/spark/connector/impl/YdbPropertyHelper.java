@@ -1,4 +1,4 @@
-package tech.ydb.spark.connector;
+package tech.ydb.spark.connector.impl;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -7,7 +7,7 @@ import java.util.Map;
  *
  * @author zinal
  */
-class YdbPropertyHelper {
+public class YdbPropertyHelper {
 
     final Map<String, String> properties;
 

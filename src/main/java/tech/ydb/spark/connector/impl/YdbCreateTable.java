@@ -1,4 +1,4 @@
-package tech.ydb.spark.connector;
+package tech.ydb.spark.connector.impl;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -11,6 +11,10 @@ import org.apache.spark.sql.types.StructType;
 import scala.collection.JavaConverters;
 
 import tech.ydb.core.Status;
+import tech.ydb.spark.connector.YdbFieldInfo;
+import tech.ydb.spark.connector.YdbFieldType;
+import tech.ydb.spark.connector.YdbOptions;
+import tech.ydb.spark.connector.YdbTypes;
 import tech.ydb.table.Session;
 import tech.ydb.table.description.TableDescription;
 import tech.ydb.table.settings.PartitioningSettings;
@@ -20,13 +24,13 @@ import tech.ydb.table.settings.PartitioningSettings;
  *
  * @author zinal
  */
-class YdbCreateTable extends YdbPropertyHelper {
+public class YdbCreateTable extends YdbPropertyHelper {
 
     private final String tablePath;
     private final List<YdbFieldInfo> fields;
     private final List<String> primaryKey;
 
-    YdbCreateTable(String tablePath, List<YdbFieldInfo> fields,
+    public YdbCreateTable(String tablePath, List<YdbFieldInfo> fields,
             List<String> primaryKey, Map<String, String> properties) {
         super(properties);
         this.tablePath = tablePath;
@@ -34,7 +38,7 @@ class YdbCreateTable extends YdbPropertyHelper {
         this.primaryKey = primaryKey;
     }
 
-    YdbCreateTable(String tablePath, List<YdbFieldInfo> fields,
+    public YdbCreateTable(String tablePath, List<YdbFieldInfo> fields,
             Map<String, String> properties) {
         super(properties);
         this.tablePath = tablePath;
@@ -42,7 +46,7 @@ class YdbCreateTable extends YdbPropertyHelper {
         this.primaryKey = makePrimaryKey(fields, properties);
     }
 
-    CompletableFuture<Status> createTable(Session session) {
+    public CompletableFuture<Status> createTable(Session session) {
         TableDescription.Builder tdb = TableDescription.newBuilder();
         for (YdbFieldInfo yfi : fields) {
             if (yfi.isNullable()) {
@@ -76,7 +80,7 @@ class YdbCreateTable extends YdbPropertyHelper {
         return session.createTable(tablePath, tdb.build());
     }
 
-    static List<YdbFieldInfo> convert(YdbTypes types, StructType st) {
+    public static List<YdbFieldInfo> convert(YdbTypes types, StructType st) {
         final List<YdbFieldInfo> fields = new ArrayList<>(st.size());
         for (StructField sf : JavaConverters.asJavaCollection(st)) {
             YdbFieldType yft = types.mapTypeSpark2Ydb(sf.dataType());
@@ -89,7 +93,7 @@ class YdbCreateTable extends YdbPropertyHelper {
         return fields;
     }
 
-    static List<String> makePrimaryKey(List<YdbFieldInfo> fields, Map<String, String> properties) {
+    public static List<String> makePrimaryKey(List<YdbFieldInfo> fields, Map<String, String> properties) {
         String value = properties.get(YdbOptions.PRIMARY_KEY);
         if (value == null) {
             value = fields.get(0).getName();

@@ -14,6 +14,8 @@ import tech.ydb.core.Issue;
 import tech.ydb.core.Result;
 import tech.ydb.core.Status;
 import tech.ydb.core.StatusCode;
+import tech.ydb.spark.connector.impl.YdbConnector;
+import tech.ydb.spark.connector.impl.YdbRegistry;
 import tech.ydb.table.description.TableDescription;
 import tech.ydb.table.description.TableIndex;
 import tech.ydb.table.settings.DescribeTableSettings;

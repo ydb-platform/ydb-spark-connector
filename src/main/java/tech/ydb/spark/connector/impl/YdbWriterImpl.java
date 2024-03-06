@@ -1,4 +1,4 @@
-package tech.ydb.spark.connector;
+package tech.ydb.spark.connector.impl;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -14,6 +14,12 @@ import org.apache.spark.sql.types.StructField;
 import scala.collection.JavaConverters;
 
 import tech.ydb.core.Status;
+import tech.ydb.spark.connector.YdbFieldInfo;
+import tech.ydb.spark.connector.YdbFieldType;
+import tech.ydb.spark.connector.YdbIngestMethod;
+import tech.ydb.spark.connector.YdbTypes;
+import tech.ydb.spark.connector.YdbWriteCommit;
+import tech.ydb.spark.connector.YdbWriteOptions;
 import tech.ydb.table.query.Params;
 import tech.ydb.table.settings.BulkUpsertSettings;
 import tech.ydb.table.transaction.TxControl;
@@ -28,9 +34,9 @@ import tech.ydb.table.values.Value;
  *
  * @author zinal
  */
-public class YdbWriterBasic implements DataWriter<InternalRow> {
+public class YdbWriterImpl implements DataWriter<InternalRow> {
 
-    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(YdbWriterBasic.class);
+    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(YdbWriterImpl.class);
 
     private final YdbTypes types;
     private final List<StructField> inputFields;
@@ -46,7 +52,7 @@ public class YdbWriterBasic implements DataWriter<InternalRow> {
     private final List<Value<?>> currentInput;
     private CompletableFuture<Status> currentStatus;
 
-    public YdbWriterBasic(YdbWriteOptions options) {
+    public YdbWriterImpl(YdbWriteOptions options) {
         this.types = options.getTypes();
         this.inputFields = new ArrayList<>(JavaConverters.asJavaCollection(
                 options.getInputType().toList()));

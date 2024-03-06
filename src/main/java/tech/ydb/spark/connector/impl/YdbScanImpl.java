@@ -1,4 +1,4 @@
-package tech.ydb.spark.connector;
+package tech.ydb.spark.connector.impl;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -12,6 +12,9 @@ import scala.collection.JavaConversions;
 import tech.ydb.core.StatusCode;
 import tech.ydb.core.UnexpectedResultException;
 import tech.ydb.core.grpc.GrpcReadStream;
+import tech.ydb.spark.connector.YdbFieldType;
+import tech.ydb.spark.connector.YdbKeyRange;
+import tech.ydb.spark.connector.YdbScanOptions;
 import tech.ydb.table.Session;
 import tech.ydb.table.query.ReadTablePart;
 import tech.ydb.table.result.ResultSetReader;
@@ -25,10 +28,10 @@ import tech.ydb.table.values.Value;
  *
  * @author zinal
  */
-public class YdbScanViaReadTable implements AutoCloseable {
+public class YdbScanImpl implements AutoCloseable {
 
     private static final org.slf4j.Logger LOG
-            = org.slf4j.LoggerFactory.getLogger(YdbScanViaReadTable.class);
+            = org.slf4j.LoggerFactory.getLogger(YdbScanImpl.class);
 
     private static final QueueItem END_OF_SCAN = new QueueItem(null);
 
@@ -45,7 +48,7 @@ public class YdbScanViaReadTable implements AutoCloseable {
     private volatile GrpcReadStream<ReadTablePart> stream;
     private ResultSetReader current;
 
-    public YdbScanViaReadTable(YdbScanOptions options, YdbKeyRange keyRange) {
+    public YdbScanImpl(YdbScanOptions options, YdbKeyRange keyRange) {
         this.options = options;
         this.keyRange = keyRange;
         this.queue = new ArrayBlockingQueue<>(options.getScanQueueDepth());

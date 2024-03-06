@@ -1,4 +1,4 @@
-package tech.ydb.spark.connector;
+package tech.ydb.spark.connector.impl;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -10,6 +10,10 @@ import java.util.concurrent.CompletableFuture;
 import org.apache.spark.sql.connector.catalog.TableChange;
 
 import tech.ydb.core.Status;
+import tech.ydb.spark.connector.YdbFieldInfo;
+import tech.ydb.spark.connector.YdbFieldType;
+import tech.ydb.spark.connector.YdbOptions;
+import tech.ydb.spark.connector.YdbTypes;
 import tech.ydb.table.Session;
 import tech.ydb.table.description.TableColumn;
 import tech.ydb.table.description.TableDescription;
@@ -22,7 +26,7 @@ import tech.ydb.table.settings.PartitioningSettings;
  *
  * @author zinal
  */
-class YdbAlterTable extends YdbPropertyHelper {
+public class YdbAlterTable extends YdbPropertyHelper {
 
     final YdbTypes types;
     final String tablePath;
@@ -31,7 +35,7 @@ class YdbAlterTable extends YdbPropertyHelper {
     final Map<String, YdbFieldInfo> addColumns = new HashMap<>();
     final Set<String> removeColumns = new HashSet<>();
 
-    YdbAlterTable(YdbConnector connector, String tablePath) {
+    public YdbAlterTable(YdbConnector connector, String tablePath) {
         super(null);
         this.types = connector.getDefaultTypes();
         this.tablePath = tablePath;
@@ -43,7 +47,7 @@ class YdbAlterTable extends YdbPropertyHelper {
         }
     }
 
-    void prepare(TableChange.AddColumn change) {
+    public void prepare(TableChange.AddColumn change) {
         YdbFieldType yft = types.mapTypeSpark2Ydb(change.dataType());
         if (null == yft) {
             throw new UnsupportedOperationException("Unsupported data type for column: " + change.dataType());
@@ -68,7 +72,7 @@ class YdbAlterTable extends YdbPropertyHelper {
         }
     }
 
-    void prepare(TableChange.DeleteColumn change) {
+    public void prepare(TableChange.DeleteColumn change) {
         if (change.fieldNames().length != 1) {
             throw new UnsupportedOperationException("Illegal field name value: "
                     + Arrays.toString(change.fieldNames()));
@@ -88,7 +92,7 @@ class YdbAlterTable extends YdbPropertyHelper {
         }
     }
 
-    void prepare(TableChange.SetProperty change) {
+    public void prepare(TableChange.SetProperty change) {
         String property = change.property();
         if (!YdbOptions.TABLE_UPDATABLE.contains(property.toUpperCase())) {
             throw new UnsupportedOperationException("Unsupported property for table alteration: "
@@ -97,7 +101,7 @@ class YdbAlterTable extends YdbPropertyHelper {
         properties.put(property.toLowerCase(), change.value());
     }
 
-    void prepare(TableChange.RemoveProperty change) {
+    public void prepare(TableChange.RemoveProperty change) {
         String property = change.property();
         if (!YdbOptions.TABLE_UPDATABLE.contains(property.toUpperCase())) {
             throw new UnsupportedOperationException("Unsupported property for table alteration: "
@@ -142,7 +146,7 @@ class YdbAlterTable extends YdbPropertyHelper {
         }
     }
 
-    CompletableFuture<Status> run(Session session) {
+    public CompletableFuture<Status> run(Session session) {
         final AlterTableSettings settings = new AlterTableSettings();
         for (YdbFieldInfo yfi : addColumns.values()) {
             if (yfi.isNullable()) {

@@ -2,7 +2,7 @@ package tech.ydb.spark.connector;
 
 import org.junit.Assert;
 import org.junit.Test;
-import static tech.ydb.spark.connector.YdbWriterBasic.escape;
+import static tech.ydb.spark.connector.impl.YdbWriterImpl.escape;
 
 /**
  *

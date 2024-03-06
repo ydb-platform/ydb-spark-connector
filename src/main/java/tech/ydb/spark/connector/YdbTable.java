@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.apache.spark.sql.connector.catalog.SupportsDelete;
 import org.apache.spark.sql.connector.catalog.SupportsRead;
 import org.apache.spark.sql.connector.catalog.SupportsWrite;
 import org.apache.spark.sql.connector.catalog.Table;
@@ -18,12 +19,14 @@ import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.connector.read.ScanBuilder;
 import org.apache.spark.sql.connector.write.LogicalWriteInfo;
 import org.apache.spark.sql.connector.write.WriteBuilder;
+import org.apache.spark.sql.sources.Filter;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
+import tech.ydb.spark.connector.impl.YdbConnector;
 import tech.ydb.table.description.KeyRange;
 import tech.ydb.table.description.TableColumn;
 import tech.ydb.table.description.TableDescription;
@@ -35,7 +38,7 @@ import tech.ydb.table.settings.PartitioningSettings;
  *
  * @author zinal
  */
-public class YdbTable implements Table, SupportsRead, SupportsWrite {
+public class YdbTable implements Table, SupportsRead, SupportsWrite, SupportsDelete {
 
     private static final org.slf4j.Logger LOG
             = org.slf4j.LoggerFactory.getLogger(YdbTable.class);
@@ -268,6 +271,24 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite {
     @Override
     public WriteBuilder newWriteBuilder(LogicalWriteInfo info) {
         return new YdbWriteBuilder(this, info);
+    }
+
+    @Override
+    public boolean canDeleteWhere(Filter[] filters) {
+        // We prefer per-row operations
+        return false;
+    }
+
+    @Override
+    public void deleteWhere(Filter[] filters) {
+        // Should not be called, as canDeleteWhere() returns false.
+        throw new UnsupportedOperationException("Not supported yet.");
+    }
+
+    @Override
+    public boolean truncateTable() {
+        // TODO: implementation
+        throw new UnsupportedOperationException("Not supported yet.");
     }
 
     final YdbConnector getConnector() {
