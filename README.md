@@ -19,6 +19,10 @@ The connector has passed the basic tests with Apache Spark 3.3, 3.4 and 3.5, wor
 1. Predicate pushdown is limited to primary key, secondary index key (when accessing indexes), or their prefixes. It is specially important to better support pushdowns with YDB columnar tables.
 1. Reading and writing YDB tables containing columns of PostgreSQL-compatible types is not supported yet.
 1. Handling of YDB's UInt64 data type is inefficient (conversion from and to the corresponding Spark type is performed through text representation).
+1. Joining with large YDB tables may be inefficient, because key lookups are currently not supported
+1. Reading YDB system tables (those under the `.sys` directory) is currently not supported.
+
+Those limitations are to be addressed in the future releases of the connector.
 
 ## Connector setup
 
