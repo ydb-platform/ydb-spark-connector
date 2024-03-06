@@ -145,7 +145,11 @@ class YdbAlterTable extends YdbPropertyHelper {
     CompletableFuture<Status> run(Session session) {
         final AlterTableSettings settings = new AlterTableSettings();
         for (YdbFieldInfo yfi : addColumns.values()) {
-            settings.addColumn(yfi.getName(), yfi.getType().toSdkType(yfi.isNullable()));
+            if (yfi.isNullable()) {
+                settings.addNullableColumn(yfi.getName(), yfi.getType().toSdkType(false));
+            } else {
+                settings.addNonnullColumn(yfi.getName(), yfi.getType().toSdkType(false));
+            }
         }
         for (String name : removeColumns) {
             settings.dropColumn(name);
