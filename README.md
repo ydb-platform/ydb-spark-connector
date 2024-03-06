@@ -1,4 +1,4 @@
-# Experimental YDB connector for Apache Spark
+# YDB connector for Apache Spark
 
 > [!IMPORTANT]
 > YDB Connector for Spark is at the early phase of development, and is currently not recommended for production workloads.
