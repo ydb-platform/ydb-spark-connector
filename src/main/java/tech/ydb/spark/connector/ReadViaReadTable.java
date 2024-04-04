@@ -5,10 +5,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 
-import org.apache.spark.sql.catalyst.InternalRow;
-import org.apache.spark.sql.types.StructField;
-import scala.collection.JavaConversions;
-
 import tech.ydb.core.StatusCode;
 import tech.ydb.core.UnexpectedResultException;
 import tech.ydb.core.grpc.GrpcReadStream;
@@ -25,59 +21,30 @@ import tech.ydb.table.values.Value;
  *
  * @author zinal
  */
-public class YdbScanViaReadTable implements AutoCloseable {
+public class ReadViaReadTable extends ReadAbstract {
 
     private static final org.slf4j.Logger LOG
-            = org.slf4j.LoggerFactory.getLogger(YdbScanViaReadTable.class);
+            = org.slf4j.LoggerFactory.getLogger(ReadViaReadTable.class);
 
     private static final QueueItem END_OF_SCAN = new QueueItem(null);
 
-    private final YdbScanOptions options;
-    private final YdbKeyRange keyRange;
     private final ArrayBlockingQueue<QueueItem> queue;
-    private final String tablePath;
-    private List<String> outColumns;
-    private int[] outIndexes;
     private Thread worker;
-    private volatile State state;
-    private volatile Exception firstIssue;
     private volatile Session session;
     private volatile GrpcReadStream<ReadTablePart> stream;
-    private ResultSetReader current;
 
-    public YdbScanViaReadTable(YdbScanOptions options, YdbKeyRange keyRange) {
-        this.options = options;
-        this.keyRange = keyRange;
+    public ReadViaReadTable(YdbScanOptions options, YdbKeyRange keyRange) {
+        super(options, keyRange);
         this.queue = new ArrayBlockingQueue<>(options.getScanQueueDepth());
-        this.tablePath = options.getTablePath();
-        this.state = State.CREATED;
     }
 
-    public void prepare() {
-        if (getState() != State.CREATED) {
-            return;
-        }
-
-        LOG.debug("Configuring scan for table {}, range {}, columns {}, types {}",
-                tablePath, keyRange, options.getKeyColumns(), options.getKeyTypes());
-
+    @Override
+    protected void prepareScan(YdbConnector yc) {
         // Configuring settings for the table scan.
         final ReadTableSettings.Builder rtsb = ReadTableSettings.newBuilder();
-        // Add all required fields.
-        outColumns = new ArrayList<>();
-        scala.collection.Iterator<StructField> sfit = options.readSchema().seq().iterator();
-        while (sfit.hasNext()) {
-            String colname = sfit.next().name();
+        for (String colname : outColumns) {
             rtsb.column(colname);
-            outColumns.add(colname);
         }
-        if (outColumns.isEmpty()) {
-            // In case no fields are required, add the first field of the primary key.
-            String colname = options.getKeyColumns().get(0);
-            rtsb.column(colname);
-            outColumns.add(colname);
-        }
-        outIndexes = new int[outColumns.size()];
         configureRanges(rtsb);
         if (options.getRowLimit() > 0) {
             LOG.debug("Setting row limit to {}", options.getRowLimit());
@@ -85,25 +52,18 @@ public class YdbScanViaReadTable implements AutoCloseable {
         }
         // TODO: add setting for the maximum scan duration.
         rtsb.withRequestTimeout(Duration.ofHours(8));
-
-        // Create or acquire the connector object.
-        YdbConnector c = YdbRegistry.getOrCreate(options.getCatalogName(), options.getConnectOptions());
         // Obtain the session (will be a long running one).
-        session = c.getTableClient().createSession(
+        session = yc.getTableClient().createSession(
                 Duration.ofSeconds(options.getScanSessionSeconds())).join().getValue();
         try {
             // Opening the stream - which can be canceled.
             stream = session.executeReadTable(tablePath, rtsb.build());
-            current = null;
-            state = State.PREPARED;
             Thread t = new Thread(new Worker());
             t.setDaemon(true);
             t.setName("YdbReadTable:" + tablePath);
             t.start();
             worker = t;
         } catch (Exception ex) {
-            setIssue(ex);
-            LOG.warn("Failed to initiate scan for table {}", tablePath, ex);
             try {
                 if (stream != null) {
                     stream.cancel();
@@ -114,83 +74,12 @@ public class YdbScanViaReadTable implements AutoCloseable {
                 session.close();
             } catch (Exception tmp) {
             }
-            throw new RuntimeException("Failed to initiate scan for table " + tablePath, ex);
+            throw ex;
         }
-    }
-
-    public boolean next() {
-        // If we have a row block, return its rows before checking any state.
-        if (current != null && current.next()) {
-            return true; // we have the current row
-        }        // no block, or end of rows in the block
-        switch (getState()) {
-            case PREPARED:
-                return doNext();
-            case FAILED:
-                throw new RuntimeException("Scan failed.", getIssue());
-            case CREATED:
-                throw new IllegalStateException("Scan has not been prepared.");
-            default:
-                return false;
-        }
-    }
-
-    private boolean doNext() {
-        while (true) {
-            if (current != null && current.next()) {
-                return true; // have next row in the current block
-            }            // end of rows or no block - need next
-            QueueItem qi;
-            while (true) {
-                try {
-                    qi = queue.take();
-                    break;
-                } catch (InterruptedException ix) {
-                }
-            }
-            final Exception issue = getIssue();
-            if (issue != null) {
-                current = null;
-                setState(State.FAILED);
-                throw new RuntimeException("Scan failed.", issue);
-            }
-            if (qi == null || qi.reader == null) {
-                current = null;
-                setState(State.FINISHED);
-                LOG.debug("No more blocks in queue for table {}", tablePath);
-                return false;
-            }
-            current = qi.reader;
-            // Rebuild column indexes each block, because API allows
-            // the server to change the column ordering.
-            if (outIndexes.length != current.getColumnCount()) {
-                throw new RuntimeException("Expected columns count "
-                        + outIndexes.length + ", but got " + current.getColumnCount());
-            }
-            for (int i = 0; i < outIndexes.length; ++i) {
-                outIndexes[i] = current.getColumnIndex(outColumns.get(i));
-                if (outIndexes[i] < 0) {
-                    throw new RuntimeException("Lost column [" + outColumns.get(i)
-                            + "] in the result set");
-                }
-            }
-            LOG.debug("Fetched the block of {} rows from the queue for table {}",
-                    current.getRowCount(), tablePath);
-        }
-    }
-
-    public InternalRow get() {
-        final int count = outIndexes.length;
-        final ArrayList<Object> values = new ArrayList<>(count);
-        for (int i = 0; i < count; ++i) {
-            values.add(options.getTypes().convertFromYdb(current.getColumn(outIndexes[i])));
-        }
-        return InternalRow.fromSeq(JavaConversions.asScalaBuffer(values));
     }
 
     @Override
-    public void close() {
-        setState(State.FINISHED);
+    protected void closeScan() {
         if (stream != null) {
             try {
                 stream.cancel();
@@ -215,26 +104,22 @@ public class YdbScanViaReadTable implements AutoCloseable {
         stream = null;
         session = null;
         worker = null;
-        current = null;
     }
 
-    private synchronized void setIssue(Exception issue) {
-        if (firstIssue == null) {
-            firstIssue = issue;
-            state = State.FAILED;
+    @Override
+    protected ResultSetReader nextScan() {
+        QueueItem qi;
+        while (true) {
+            try {
+                qi = queue.take();
+                break;
+            } catch (InterruptedException ix) {
+            }
         }
-    }
-
-    private synchronized Exception getIssue() {
-        return firstIssue;
-    }
-
-    private synchronized State getState() {
-        return state;
-    }
-
-    private synchronized void setState(State state) {
-        this.state = state;
+        if (qi == null || qi.reader == null) {
+            return null;
+        }
+        return qi.reader;
     }
 
     @SuppressWarnings("unchecked")
@@ -297,13 +182,6 @@ public class YdbScanViaReadTable implements AutoCloseable {
         QueueItem(ResultSetReader reader) {
             this.reader = reader;
         }
-    }
-
-    enum State {
-        CREATED,
-        PREPARED,
-        FINISHED,
-        FAILED
     }
 
     class Worker implements Runnable {
