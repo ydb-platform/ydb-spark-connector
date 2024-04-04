@@ -1,5 +1,8 @@
 # Misc notes for YDB Spark Connector
 
+
+https://github.com/delta-io/delta/commit/b9cf201fee07d5748e0a8b53883c6a5902cf836f
+
 [Reference 1](https://jaceklaskowski.github.io/spark-workshop/slides/spark-sql-Developing-Custom-Data-Source.html)
 
 [Reference 2](https://jaceklaskowski.gitbooks.io/mastering-spark-sql/content/spark-sql-data-source-api-v2.html)
