@@ -16,6 +16,7 @@ import tech.ydb.table.description.TableDescription;
 import tech.ydb.table.settings.AlterTableSettings;
 import tech.ydb.table.settings.DescribeTableSettings;
 import tech.ydb.table.settings.PartitioningSettings;
+import tech.ydb.table.values.Type;
 
 /**
  * Alter Table implementation.
@@ -145,7 +146,12 @@ class YdbAlterTable extends YdbPropertyHelper {
     CompletableFuture<Status> run(Session session) {
         final AlterTableSettings settings = new AlterTableSettings();
         for (YdbFieldInfo yfi : addColumns.values()) {
-            settings.addColumn(yfi.getName(), yfi.getType().toSdkType(yfi.isNullable()));
+            Type t = yfi.getType().toSdkType(false);
+            if (yfi.isNullable()) {
+                settings.addNullableColumn(yfi.getName(), t);
+            } else {
+                settings.addNonnullColumn(yfi.getName(), t);
+            }
         }
         for (String name : removeColumns) {
             settings.dropColumn(name);
