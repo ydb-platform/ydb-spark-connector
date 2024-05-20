@@ -108,7 +108,7 @@ public class YdbConnector extends YdbOptions implements AutoCloseable {
                         CloudAuthHelper.getAuthProviderFromEnviron());
                 break;
             case META:
-                builder = builder.withAuthProvider(opt -> CloudAuthIdentity.metadataIdentity());
+                builder = builder.withAuthProvider((opt) -> CloudAuthIdentity.metadataIdentity(null));
                 break;
             case STATIC:
                 builder = builder.withAuthProvider(
@@ -119,14 +119,14 @@ public class YdbConnector extends YdbOptions implements AutoCloseable {
                 if (keyFile != null) {
                     final String v = keyFile;
                     builder = builder.withAuthProvider((opt) -> {
-                        return CloudAuthIdentity.serviceAccountIdentity(Paths.get(v));
+                        return CloudAuthIdentity.serviceAccountIdentity(Paths.get(v), null);
                     });
                 } else {
                     keyFile = props.get(AUTH_SAKEY_TEXT);
                     if (keyFile != null) {
                         final String v = keyFile;
                         builder = builder.withAuthProvider((opt) -> {
-                            return CloudAuthIdentity.serviceAccountIdentity(v);
+                            return CloudAuthIdentity.serviceAccountIdentity(v, null);
                         });
                     }
                 }
