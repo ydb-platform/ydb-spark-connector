@@ -11,6 +11,7 @@ import java.util.stream.Collectors;
 
 import org.apache.spark.sql.connector.catalog.SupportsDelete;
 import org.apache.spark.sql.connector.catalog.SupportsRead;
+import org.apache.spark.sql.connector.catalog.SupportsRowLevelOperations;
 import org.apache.spark.sql.connector.catalog.SupportsWrite;
 import org.apache.spark.sql.connector.catalog.Table;
 import org.apache.spark.sql.connector.catalog.TableCapability;
@@ -18,6 +19,8 @@ import org.apache.spark.sql.connector.expressions.Expressions;
 import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.connector.read.ScanBuilder;
 import org.apache.spark.sql.connector.write.LogicalWriteInfo;
+import org.apache.spark.sql.connector.write.RowLevelOperationBuilder;
+import org.apache.spark.sql.connector.write.RowLevelOperationInfo;
 import org.apache.spark.sql.connector.write.WriteBuilder;
 import org.apache.spark.sql.sources.Filter;
 import org.apache.spark.sql.types.DataType;
@@ -38,7 +41,8 @@ import tech.ydb.table.settings.PartitioningSettings;
  *
  * @author zinal
  */
-public class YdbTable implements Table, SupportsRead, SupportsWrite, SupportsDelete {
+public class YdbTable implements Table,
+        SupportsRead, SupportsWrite, SupportsDelete, SupportsRowLevelOperations {
 
     private static final org.slf4j.Logger LOG
             = org.slf4j.LoggerFactory.getLogger(YdbTable.class);
@@ -289,6 +293,11 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite, SupportsDel
     public boolean truncateTable() {
         // TODO: implementation
         throw new UnsupportedOperationException("Not supported yet.");
+    }
+
+    @Override
+    public RowLevelOperationBuilder newRowLevelOperationBuilder(RowLevelOperationInfo info) {
+        return new YdbRowLevelBuilder();
     }
 
     final YdbConnector getConnector() {
