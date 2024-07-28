@@ -229,3 +229,18 @@ spark.table("ydb1.`ix/fhrw0/ix1`").show(10, False)
 spark.table("ydb1.fhrw0").write.parquet("file:///tmp/ydb-fhrw0")
 
 ```
+
+## Logging configuration
+
+Extra lines in `log4j2.properties`:
+
+```
+logger.ydb0.name = tech.ydb.spark
+logger.ydb0.level = debug
+logger.ydb1.name = tech.ydb
+logger.ydb1.level = debug
+logger.ydb2.name = tech.ydb.core.impl.discovery
+logger.ydb2.level = info
+logger.ydb3.name = tech.ydb.shaded
+logger.ydb3.level = warn
+```
