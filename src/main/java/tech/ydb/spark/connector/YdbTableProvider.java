@@ -80,7 +80,7 @@ public class YdbTableProvider extends YdbOptions implements TableProvider, DataS
         }
         LOG.debug("Table identity: {}, {}, {}, {}",
                 ti.logicalName, ti.tablePath, ti.indexName, ti.indexPath);
-        YdbTable retval = connector.getRetryCtx().supplyResult(session -> {
+        YdbTable retval = connector.getTableRetry().supplyResult(session -> {
             DescribeTableSettings dts = new DescribeTableSettings();
             dts.setIncludeShardKeyBounds(ti.indexName == null); // shard keys for table case
             Result<TableDescription> tdRes = session.describeTable(ti.tablePath, dts).join();

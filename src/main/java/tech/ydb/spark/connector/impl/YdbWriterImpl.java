@@ -116,12 +116,12 @@ public class YdbWriterImpl implements DataWriter<InternalRow> {
         // DO NOT move this call into the async methods below.
         ListValue value = listType.newValue(input);
         if (YdbIngestMethod.BULK.equals(ingestMethod)) {
-            currentStatus = connector.getRetryCtx().supplyStatus(
+            currentStatus = connector.getTableRetry().supplyStatus(
                     session -> session.executeBulkUpsert(
                             tablePath, value, new BulkUpsertSettings()));
             LOG.debug("Async bulk upsert started on table {}", tablePath);
         } else {
-            currentStatus = connector.getRetryCtx().supplyStatus(
+            currentStatus = connector.getTableRetry().supplyStatus(
                     session -> session.executeDataQuery(sqlStatement,
                             TxControl.serializableRw().setCommitTx(true),
                             Params.of("$input", value))

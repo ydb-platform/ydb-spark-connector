@@ -85,8 +85,8 @@ public class YdbCatalog extends YdbOptions
         return getConnector().getSchemeClient();
     }
 
-    private SessionRetryContext getRetryCtx() {
-        return getConnector().getRetryCtx();
+    private SessionRetryContext getTableRetry() {
+        return getConnector().getTableRetry();
     }
 
     public static <T> T checkStatus(Result<T> res, String[] namespace)
@@ -152,7 +152,7 @@ public class YdbCatalog extends YdbOptions
     private void listIndexes(String[] namespace, List<Identifier> retval,
             SchemeOperationProtos.Entry tableEntry) {
         String tablePath = mergePath(namespace, tableEntry.getName());
-        Result<TableDescription> res = getRetryCtx().supplyResult(session -> {
+        Result<TableDescription> res = getTableRetry().supplyResult(session -> {
             return session.describeTable(tablePath, new DescribeTableSettings());
         }).join();
         if (!res.isSuccess()) {
@@ -176,7 +176,7 @@ public class YdbCatalog extends YdbOptions
         }
         // Processing for regular tables.
         String tablePath = mergePath(ident);
-        Result<TableDescription> res = getRetryCtx().supplyResult(session -> {
+        Result<TableDescription> res = getTableRetry().supplyResult(session -> {
             final DescribeTableSettings dts = new DescribeTableSettings();
             dts.setIncludeShardKeyBounds(true);
             return session.describeTable(tablePath, dts);
@@ -195,7 +195,7 @@ public class YdbCatalog extends YdbOptions
         String tabName = tabParts[1];
         String ixName = tabParts[2];
         String tablePath = mergePath(ident.namespace(), tabName);
-        Result<YdbTable> res = getRetryCtx().supplyResult(session -> {
+        Result<YdbTable> res = getTableRetry().supplyResult(session -> {
             DescribeTableSettings dts = new DescribeTableSettings();
             Result<TableDescription> tdRes = session.describeTable(tablePath, dts).join();
             if (!tdRes.isSuccess()) {
@@ -237,10 +237,10 @@ public class YdbCatalog extends YdbOptions
         final YdbCreateTable action = new YdbCreateTable(tablePath,
                 YdbCreateTable.convert(getConnector().getDefaultTypes(), schema),
                 properties);
-        getRetryCtx().supplyStatus(session -> action.createTable(session)).join()
+        getTableRetry().supplyStatus(session -> action.createTable(session)).join()
                 .expectSuccess("Failed to create table " + ident);
         // Load the description for the table created.
-        Result<TableDescription> res = getRetryCtx().supplyResult(session -> {
+        Result<TableDescription> res = getTableRetry().supplyResult(session -> {
             final DescribeTableSettings dts = new DescribeTableSettings();
             dts.setIncludeShardKeyBounds(true);
             return session.describeTable(tablePath, dts);
@@ -273,9 +273,9 @@ public class YdbCatalog extends YdbOptions
             }
         }
         // Implement the desired changes.
-        getRetryCtx().supplyStatus(session -> operation.run(session)).join().expectSuccess();
+        getTableRetry().supplyStatus(session -> operation.run(session)).join().expectSuccess();
         // Load the description for the modified table.
-        TableDescription td = getRetryCtx().supplyResult(session -> {
+        TableDescription td = getTableRetry().supplyResult(session -> {
             final DescribeTableSettings dts = new DescribeTableSettings();
             dts.setIncludeShardKeyBounds(true);
             return session.describeTable(tablePath, dts);
@@ -289,7 +289,7 @@ public class YdbCatalog extends YdbOptions
             throw new UnsupportedOperationException("Cannot drop index table " + ident);
         }
         final String tablePath = mergePath(ident);
-        Result<TableDescription> res = getRetryCtx().supplyResult(session -> {
+        Result<TableDescription> res = getTableRetry().supplyResult(session -> {
             final DescribeTableSettings dts = new DescribeTableSettings();
             dts.setIncludeShardKeyBounds(false);
             return session.describeTable(tablePath, dts);
@@ -299,7 +299,7 @@ public class YdbCatalog extends YdbOptions
         } catch (NoSuchTableException nste) {
             return false;
         }
-        Status status = connector.getRetryCtx().supplyStatus(
+        Status status = getTableRetry().supplyStatus(
                 session -> session.dropTable(tablePath)).join();
         if (!status.isSuccess()) {
             status.expectSuccess("Failed to drop table " + ident);
@@ -318,7 +318,7 @@ public class YdbCatalog extends YdbOptions
         }
         final String oldPath = mergePath(oldIdent);
         final String newPath = mergePath(newIdent);
-        Status status = getRetryCtx().supplyStatus(
+        Status status = getTableRetry().supplyStatus(
                 session -> session.renameTable(oldPath, newPath, false)).join();
         if (!status.isSuccess()) {
             status.expectSuccess("Failed to rename table [" + oldIdent + "] to [" + newIdent + "]");

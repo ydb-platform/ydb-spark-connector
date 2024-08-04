@@ -12,12 +12,12 @@ import tech.ydb.auth.iam.CloudAuthIdentity;
 import tech.ydb.core.auth.StaticCredentials;
 import tech.ydb.core.grpc.GrpcTransport;
 import tech.ydb.core.grpc.GrpcTransportBuilder;
+import tech.ydb.query.QueryClient;
 import tech.ydb.scheme.SchemeClient;
 import tech.ydb.spark.connector.YdbAuthMode;
 import tech.ydb.spark.connector.YdbIngestMethod;
 import tech.ydb.spark.connector.YdbOptions;
 import tech.ydb.spark.connector.YdbTypes;
-import tech.ydb.table.SessionRetryContext;
 import tech.ydb.table.TableClient;
 
 /**
@@ -33,13 +33,17 @@ public class YdbConnector extends YdbOptions implements AutoCloseable {
     private final String catalogName;
     private final Map<String, String> connectOptions;
     private final GrpcTransport transport;
-    private final TableClient tableClient;
-    private final SchemeClient schemeClient;
-    private final SessionRetryContext retryCtx;
     private final String database;
     private final YdbTypes defaultTypes;
     private final YdbIngestMethod defaultIngestMethod;
     private final boolean singlePartitionScans;
+    private final int poolSize;
+
+    private SchemeClient schemeClient;
+    private TableClient tableClient;
+    private tech.ydb.table.SessionRetryContext tableRetry;
+    private QueryClient queryClient;
+    private tech.ydb.query.tools.SessionRetryContext queryRetry;
 
     public YdbConnector(String catalogName, Map<String, String> props) {
         this.catalogName = catalogName;
@@ -51,24 +55,11 @@ public class YdbConnector extends YdbOptions implements AutoCloseable {
         this.defaultIngestMethod = YdbIngestMethod.fromString(
                 this.connectOptions.get(YdbOptions.INGEST_METHOD));
         this.singlePartitionScans = Boolean.parseBoolean(props.getOrDefault(SCAN_SINGLE, "false"));
-        int poolSize = getPoolSize(props);
+        this.poolSize = getPoolSize(props);
         GrpcTransportBuilder builder = GrpcTransport.forConnectionString(props.get(URL));
         builder = applyCaSettings(builder, props);
         builder = applyAuthSettings(builder, props);
-        GrpcTransport gt = builder.build();
-        try {
-            this.tableClient = TableClient.newClient(gt)
-                    .sessionPoolSize(1, poolSize)
-                    .build();
-            this.schemeClient = SchemeClient.newClient(gt).build();
-            this.retryCtx = SessionRetryContext.create(tableClient).build();
-            this.transport = gt;
-            gt = null; // to avoid closing below
-        } finally {
-            if (gt != null) {
-                gt.close();
-            }
-        }
+        this.transport = builder.build();
         this.database = this.transport.getDatabase();
     }
 
@@ -166,20 +157,44 @@ public class YdbConnector extends YdbOptions implements AutoCloseable {
         return connectOptions;
     }
 
-    public GrpcTransport getTransport() {
-        return transport;
-    }
-
     public TableClient getTableClient() {
+        if (tableClient == null) {
+            tableClient = TableClient.newClient(transport)
+                    .sessionPoolSize(1, poolSize)
+                    .build();
+        }
         return tableClient;
     }
 
-    public SchemeClient getSchemeClient() {
-        return schemeClient;
+    public tech.ydb.table.SessionRetryContext getTableRetry() {
+        if (tableRetry == null) {
+            tableRetry = tech.ydb.table.SessionRetryContext.create(getTableClient()).build();
+        }
+        return tableRetry;
     }
 
-    public SessionRetryContext getRetryCtx() {
-        return retryCtx;
+    public QueryClient getQueryClient() {
+        if (queryClient == null) {
+            queryClient = QueryClient.newClient(transport)
+                    .sessionPoolMinSize(1)
+                    .sessionPoolMaxSize(poolSize)
+                    .build();
+        }
+        return queryClient;
+    }
+
+    public tech.ydb.query.tools.SessionRetryContext getQueryRetry() {
+        if (queryRetry == null) {
+            queryRetry = tech.ydb.query.tools.SessionRetryContext.create(getQueryClient()).build();
+        }
+        return queryRetry;
+    }
+
+    public SchemeClient getSchemeClient() {
+        if (schemeClient == null) {
+            schemeClient = SchemeClient.newClient(transport).build();
+        }
+        return schemeClient;
     }
 
     public String getDatabase() {
@@ -230,11 +245,11 @@ public class YdbConnector extends YdbOptions implements AutoCloseable {
 
     @Override
     public void close() {
-        if (tableClient != null) {
+        if (queryClient != null) {
             try {
-                tableClient.close();
+                queryClient.close();
             } catch (Exception ex) {
-                LOG.warn("TableClient closing threw an exception", ex);
+                LOG.warn("QueryClient closing threw an exception", ex);
             }
         }
         if (schemeClient != null) {

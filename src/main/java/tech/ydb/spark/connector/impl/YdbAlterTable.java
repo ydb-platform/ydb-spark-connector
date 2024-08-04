@@ -40,7 +40,7 @@ public class YdbAlterTable extends YdbPropertyHelper {
         super(null);
         this.types = connector.getDefaultTypes();
         this.tablePath = tablePath;
-        this.td = connector.getRetryCtx().supplyResult(session -> {
+        this.td = connector.getTableRetry().supplyResult(session -> {
             return session.describeTable(tablePath, new DescribeTableSettings());
         }).join().getValue();
         for (TableColumn tc : this.td.getColumns()) {
