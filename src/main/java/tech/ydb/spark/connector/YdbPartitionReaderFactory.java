@@ -7,7 +7,8 @@ import org.apache.spark.sql.connector.read.InputPartition;
 import org.apache.spark.sql.connector.read.PartitionReader;
 import org.apache.spark.sql.connector.read.PartitionReaderFactory;
 
-import tech.ydb.spark.connector.impl.YdbScanImpl;
+import tech.ydb.spark.connector.impl.YdbReadAbstract;
+import tech.ydb.spark.connector.impl.YdbReadViaReadTable;
 
 /**
  * Partition reader factory delivers the scan options to partition reader instances.
@@ -32,11 +33,16 @@ public class YdbPartitionReaderFactory implements PartitionReaderFactory {
         return new YdbReader(options, (YdbTablePartition) partition);
     }
 
+    static YdbReadAbstract newScan(YdbScanOptions options, YdbTablePartition partition) {
+        // TODO: switch to the chosen implementation based on the options.
+        return new YdbReadViaReadTable(options, partition.getRange());
+    }
+
     static class YdbReader implements PartitionReader<InternalRow> {
 
         private final YdbScanOptions options;
         private final YdbTablePartition partition;
-        private YdbScanImpl scan;
+        private YdbReadAbstract scan;
 
         YdbReader(YdbScanOptions options, YdbTablePartition partition) {
             this.options = options;
@@ -48,7 +54,7 @@ public class YdbPartitionReaderFactory implements PartitionReaderFactory {
             if (scan == null) {
                 LOG.debug("Preparing scan for table {} at partition {}",
                         options.getTablePath(), partition);
-                scan = new YdbScanImpl(options, partition.getRange());
+                scan = newScan(options, partition);
                 scan.prepare();
                 LOG.debug("Scan prepared, ready to fetch...");
             }
