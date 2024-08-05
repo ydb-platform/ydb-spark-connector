@@ -158,7 +158,7 @@ public class YdbConnector extends YdbOptions implements AutoCloseable {
     }
 
     public TableClient getTableClient() {
-        synchronized(this) {
+        synchronized (this) {
             if (tableClient == null) {
                 tableClient = TableClient.newClient(transport)
                         .sessionPoolSize(1, poolSize)
@@ -169,7 +169,7 @@ public class YdbConnector extends YdbOptions implements AutoCloseable {
     }
 
     public tech.ydb.table.SessionRetryContext getTableRetry() {
-        synchronized(this) {
+        synchronized (this) {
             if (tableRetry == null) {
                 tableRetry = tech.ydb.table.SessionRetryContext.create(getTableClient()).build();
             }
@@ -178,7 +178,7 @@ public class YdbConnector extends YdbOptions implements AutoCloseable {
     }
 
     public QueryClient getQueryClient() {
-        synchronized(this) {
+        synchronized (this) {
             if (queryClient == null) {
                 queryClient = QueryClient.newClient(transport)
                         .sessionPoolMinSize(1)
@@ -190,7 +190,7 @@ public class YdbConnector extends YdbOptions implements AutoCloseable {
     }
 
     public tech.ydb.query.tools.SessionRetryContext getQueryRetry() {
-        synchronized(this) {
+        synchronized (this) {
             if (queryRetry == null) {
                 queryRetry = tech.ydb.query.tools.SessionRetryContext.create(getQueryClient()).build();
             }
@@ -199,7 +199,7 @@ public class YdbConnector extends YdbOptions implements AutoCloseable {
     }
 
     public SchemeClient getSchemeClient() {
-        synchronized(this) {
+        synchronized (this) {
             if (schemeClient == null) {
                 schemeClient = SchemeClient.newClient(transport).build();
             }
