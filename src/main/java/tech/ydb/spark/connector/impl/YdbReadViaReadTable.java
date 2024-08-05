@@ -54,8 +54,12 @@ public class YdbReadViaReadTable extends YdbReadAbstract {
             LOG.debug("Setting row limit to {}", options.getRowLimit());
             rtsb.rowLimit(options.getRowLimit());
         }
-        // TODO: add setting for the maximum scan duration.
-        rtsb.withRequestTimeout(Duration.ofHours(8));
+        // maximum scan duration.
+        if (options.getMaxDurationSeconds() > 0) {
+            rtsb.withRequestTimeout(Duration.ofSeconds(options.getMaxDurationSeconds()));
+        } else {
+            rtsb.withRequestTimeout(Duration.ofHours(8));
+        }
         // Obtain the session (will be a long running one).
         session = yc.getTableClient().createSession(
                 Duration.ofSeconds(options.getScanSessionSeconds())).join().getValue();

@@ -158,43 +158,53 @@ public class YdbConnector extends YdbOptions implements AutoCloseable {
     }
 
     public TableClient getTableClient() {
-        if (tableClient == null) {
-            tableClient = TableClient.newClient(transport)
-                    .sessionPoolSize(1, poolSize)
-                    .build();
+        synchronized(this) {
+            if (tableClient == null) {
+                tableClient = TableClient.newClient(transport)
+                        .sessionPoolSize(1, poolSize)
+                        .build();
+            }
+            return tableClient;
         }
-        return tableClient;
     }
 
     public tech.ydb.table.SessionRetryContext getTableRetry() {
-        if (tableRetry == null) {
-            tableRetry = tech.ydb.table.SessionRetryContext.create(getTableClient()).build();
+        synchronized(this) {
+            if (tableRetry == null) {
+                tableRetry = tech.ydb.table.SessionRetryContext.create(getTableClient()).build();
+            }
+            return tableRetry;
         }
-        return tableRetry;
     }
 
     public QueryClient getQueryClient() {
-        if (queryClient == null) {
-            queryClient = QueryClient.newClient(transport)
-                    .sessionPoolMinSize(1)
-                    .sessionPoolMaxSize(poolSize)
-                    .build();
+        synchronized(this) {
+            if (queryClient == null) {
+                queryClient = QueryClient.newClient(transport)
+                        .sessionPoolMinSize(1)
+                        .sessionPoolMaxSize(poolSize)
+                        .build();
+            }
+            return queryClient;
         }
-        return queryClient;
     }
 
     public tech.ydb.query.tools.SessionRetryContext getQueryRetry() {
-        if (queryRetry == null) {
-            queryRetry = tech.ydb.query.tools.SessionRetryContext.create(getQueryClient()).build();
+        synchronized(this) {
+            if (queryRetry == null) {
+                queryRetry = tech.ydb.query.tools.SessionRetryContext.create(getQueryClient()).build();
+            }
+            return queryRetry;
         }
-        return queryRetry;
     }
 
     public SchemeClient getSchemeClient() {
-        if (schemeClient == null) {
-            schemeClient = SchemeClient.newClient(transport).build();
+        synchronized(this) {
+            if (schemeClient == null) {
+                schemeClient = SchemeClient.newClient(transport).build();
+            }
+            return schemeClient;
         }
-        return schemeClient;
     }
 
     public String getDatabase() {
@@ -250,6 +260,13 @@ public class YdbConnector extends YdbOptions implements AutoCloseable {
                 queryClient.close();
             } catch (Exception ex) {
                 LOG.warn("QueryClient closing threw an exception", ex);
+            }
+        }
+        if (tableClient != null) {
+            try {
+                tableClient.close();
+            } catch (Exception ex) {
+                LOG.warn("TableClient closing threw an exception", ex);
             }
         }
         if (schemeClient != null) {

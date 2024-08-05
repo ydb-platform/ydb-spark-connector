@@ -34,7 +34,8 @@ public class YdbScanOptions extends YdbTableOperationOptions implements Serializ
     private final ArrayList<Object> rangeEnd;
     private final ArrayList<YdbKeyRange> partitions;
     private final int scanQueueDepth;
-    private final int scanSessionSeconds;
+    private int maxSessionSeconds;
+    private int maxDurationSeconds;
     private int rowLimit;
     private StructType requiredSchema;
 
@@ -47,8 +48,9 @@ public class YdbScanOptions extends YdbTableOperationOptions implements Serializ
         this.rangeEnd = new ArrayList<>();
         this.partitions = table.partitions();
         this.scanQueueDepth = table.getConnector().getScanQueueDepth();
-        this.scanSessionSeconds = table.getConnector().getScanSessionSeconds();
+        this.maxSessionSeconds = table.getConnector().getScanSessionSeconds();
         this.rowLimit = -1;
+        this.maxDurationSeconds = -1;
     }
 
     public void setupPredicates(Predicate[] predicates) {
@@ -95,7 +97,7 @@ public class YdbScanOptions extends YdbTableOperationOptions implements Serializ
     }
 
     public int getScanSessionSeconds() {
-        return scanSessionSeconds;
+        return maxSessionSeconds;
     }
 
     public int getRowLimit() {
@@ -104,6 +106,22 @@ public class YdbScanOptions extends YdbTableOperationOptions implements Serializ
 
     public void setRowLimit(int rowLimit) {
         this.rowLimit = rowLimit;
+    }
+
+    public int getMaxSessionSeconds() {
+        return maxSessionSeconds;
+    }
+
+    public void setMaxSessionSeconds(int maxSessionSeconds) {
+        this.maxSessionSeconds = maxSessionSeconds;
+    }
+
+    public int getMaxDurationSeconds() {
+        return maxDurationSeconds;
+    }
+
+    public void setMaxDurationSeconds(int maxDurationSeconds) {
+        this.maxDurationSeconds = maxDurationSeconds;
     }
 
     /**

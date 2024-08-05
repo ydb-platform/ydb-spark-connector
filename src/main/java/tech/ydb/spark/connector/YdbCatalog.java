@@ -53,10 +53,12 @@ public class YdbCatalog extends YdbOptions
             = org.slf4j.LoggerFactory.getLogger(YdbCatalog.class);
 
     // X.Y[-SNAPSHOT]
-    public static final String VERSION = "1.2";
+    public static final String VERSION = "1.3-SNAPSHOT";
 
     public static final String ENTRY_TYPE = "ydb_entry_type";
     public static final String ENTRY_OWNER = "ydb_entry_owner";
+
+    public static final String IX_PREFIX = "ix/";
 
     private String catalogName;
     private YdbConnector connector;
@@ -163,14 +165,14 @@ public class YdbCatalog extends YdbOptions
         }
         TableDescription td = res.getValue();
         for (TableIndex ix : td.getIndexes()) {
-            String ixname = "ix/" + tableEntry.getName() + "/" + ix.getName();
+            String ixname = IX_PREFIX + tableEntry.getName() + "/" + ix.getName();
             retval.add(Identifier.of(namespace, ixname));
         }
     }
 
     @Override
     public Table loadTable(Identifier ident) throws NoSuchTableException {
-        if (ident.name().startsWith("ix/")) {
+        if (ident.name().startsWith(IX_PREFIX)) {
             // Special support for index "tables".
             return loadIndexTable(ident);
         }
@@ -228,7 +230,7 @@ public class YdbCatalog extends YdbOptions
     @Override
     public Table createTable(Identifier ident, StructType schema, Transform[] partitions,
             Map<String, String> properties) throws TableAlreadyExistsException, NoSuchNamespaceException {
-        if (ident.name().startsWith("ix/")) {
+        if (ident.name().startsWith(IX_PREFIX)) {
             throw new UnsupportedOperationException("Direct index table creation is not possible,"
                     + "identifier " + ident);
         }
@@ -251,7 +253,7 @@ public class YdbCatalog extends YdbOptions
 
     @Override
     public Table alterTable(Identifier ident, TableChange... changes) throws NoSuchTableException {
-        if (ident.name().startsWith("ix/")) {
+        if (ident.name().startsWith(IX_PREFIX)) {
             throw new UnsupportedOperationException("Index table alteration is not possible, "
                     + "identifier " + ident);
         }
@@ -285,7 +287,7 @@ public class YdbCatalog extends YdbOptions
 
     @Override
     public boolean dropTable(Identifier ident) {
-        if (ident.name().startsWith("ix/")) {
+        if (ident.name().startsWith(IX_PREFIX)) {
             throw new UnsupportedOperationException("Cannot drop index table " + ident);
         }
         final String tablePath = mergePath(ident);
@@ -310,10 +312,10 @@ public class YdbCatalog extends YdbOptions
     @Override
     public void renameTable(Identifier oldIdent, Identifier newIdent)
             throws NoSuchTableException, TableAlreadyExistsException {
-        if (oldIdent.name().startsWith("ix/")) {
+        if (oldIdent.name().startsWith(IX_PREFIX)) {
             throw new UnsupportedOperationException("Cannot rename index table " + oldIdent);
         }
-        if (newIdent.name().startsWith("ix/")) {
+        if (newIdent.name().startsWith(IX_PREFIX)) {
             throw new UnsupportedOperationException("Cannot rename table to index " + newIdent);
         }
         final String oldPath = mergePath(oldIdent);
