@@ -63,8 +63,7 @@ public class YdbWriterImpl implements DataWriter<InternalRow> {
         this.listType = tech.ydb.table.values.ListType.of(this.inputType);
         this.ingestMethod = options.getIngestMethod();
         this.maxBulkRows = options.getMaxBulkRows();
-        this.connector = YdbRegistry.getOrCreate(
-                options.getCatalogName(), options.getConnectOptions());
+        this.connector = options.grabConnector();
         this.currentInput = new ArrayList<>();
         this.currentStatus = null;
         if (LOG.isDebugEnabled()) {

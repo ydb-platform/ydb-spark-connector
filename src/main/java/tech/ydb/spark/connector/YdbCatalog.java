@@ -169,7 +169,7 @@ public class YdbCatalog extends YdbOptions
     }
 
     @Override
-    public Table loadTable(Identifier ident) throws NoSuchTableException {
+    public YdbTable loadTable(Identifier ident) throws NoSuchTableException {
         if (ident.name().startsWith("ix/")) {
             // Special support for index "tables".
             return loadIndexTable(ident);
@@ -185,7 +185,7 @@ public class YdbCatalog extends YdbOptions
         return new YdbTable(getConnector(), mergeLocal(ident), tablePath, td);
     }
 
-    private Table loadIndexTable(Identifier ident) throws NoSuchTableException {
+    private YdbTable loadIndexTable(Identifier ident) throws NoSuchTableException {
         String pseudoName = ident.name();
         String[] tabParts = pseudoName.split("[/]");
         if (tabParts.length != 3) {

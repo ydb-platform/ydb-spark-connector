@@ -6,6 +6,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import tech.ydb.spark.connector.impl.YdbConnector;
+import tech.ydb.spark.connector.impl.YdbRegistry;
+
 /**
  * Generic YDB table operation settings.
  *
@@ -66,6 +69,10 @@ public abstract class YdbTableOperationOptions implements Serializable {
 
     public Map<String, YdbFieldInfo> getFieldsMap() {
         return fieldsMap;
+    }
+
+    public YdbConnector grabConnector() {
+        return YdbRegistry.getOrCreate(catalogName, connectOptions);
     }
 
 }
