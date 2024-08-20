@@ -149,7 +149,7 @@ public class YdbTableProvider extends YdbOptions implements TableProvider, DataS
                 localName = localPath;
                 localPath = database + "/" + localName;
             }
-            if (localName.endsWith("/indexImplTable")) {
+            if (localName.endsWith(YdbCatalog.IX_IMPL)) {
                 // Index table special case - to be name-compatible with the catalog.
                 String[] parts = localName.split("[/]");
                 localIxName = (parts.length > 2) ? parts[parts.length - 2] : null;

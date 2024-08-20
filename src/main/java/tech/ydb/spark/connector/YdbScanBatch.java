@@ -45,9 +45,8 @@ public class YdbScanBatch implements Batch {
                 .map(kr -> new YdbTablePartition(kr))
                 .toArray(InputPartition[]::new);
         if (LOG.isDebugEnabled()) {
-            LOG.debug("Input partitions count {}, filtered partitions count {}",
-                    partitions.size(), out.length);
-            LOG.debug("Filtered partition ranges: {}", Arrays.toString(out));
+            LOG.debug("Input partitions: count={}. Filtered partitions: count={}, {}",
+                    partitions.size(), out.length, Arrays.toString(out));
         }
         return out;
     }

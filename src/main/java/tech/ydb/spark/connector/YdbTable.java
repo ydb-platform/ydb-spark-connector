@@ -144,7 +144,7 @@ public class YdbTable implements Table,
         this.connector = connector;
         this.types = types;
         this.logicalName = logicalName;
-        this.tablePath = tablePath + "/" + ix.getName() + "/indexImplTable";
+        this.tablePath = tablePath + "/" + ix.getName() + YdbCatalog.IX_IMPL;
         this.columns = new ArrayList<>();
         this.keyColumns = ix.getColumns();
         this.keyTypes = new ArrayList<>();

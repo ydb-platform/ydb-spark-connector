@@ -58,6 +58,7 @@ public class YdbCatalog extends YdbOptions
     public static final String ENTRY_TYPE = "ydb_entry_type";
     public static final String ENTRY_OWNER = "ydb_entry_owner";
 
+    public static final String IX_IMPL = "/indexImplTable";
     public static final String IX_PREFIX = "ix/";
 
     private String catalogName;
@@ -207,7 +208,7 @@ public class YdbCatalog extends YdbOptions
             for (TableIndex ix : td.getIndexes()) {
                 if (ixName.equals(ix.getName())) {
                     // Grab the description for secondary index table.
-                    String indexPath = tablePath + "/" + ix.getName() + "/indexImplTable";
+                    String indexPath = tablePath + "/" + ix.getName() + IX_IMPL;
                     dts.setIncludeShardKeyBounds(true);
                     tdRes = session.describeTable(indexPath, dts).join();
                     if (!tdRes.isSuccess()) {

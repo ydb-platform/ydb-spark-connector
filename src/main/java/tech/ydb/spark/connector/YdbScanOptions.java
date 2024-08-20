@@ -30,8 +30,12 @@ public class YdbScanOptions extends YdbTableOperationOptions implements Serializ
     private final StructType actualSchema;
     private final ArrayList<String> keyColumns;
     private final ArrayList<YdbFieldType> keyTypes;
+    // flatterned predicates
+    private final ArrayList<Predicate> predicates;
+    // range is extracted from the predicates
     private final ArrayList<Object> rangeBegin;
     private final ArrayList<Object> rangeEnd;
+    // table partitioning scheme as is, without predicates applied
     private final ArrayList<YdbKeyRange> partitions;
     private final int scanQueueDepth;
     private int maxSessionSeconds;
@@ -47,6 +51,7 @@ public class YdbScanOptions extends YdbTableOperationOptions implements Serializ
         this.rangeBegin = new ArrayList<>();
         this.rangeEnd = new ArrayList<>();
         this.partitions = table.partitions();
+        this.predicates = new ArrayList<>();
         this.scanQueueDepth = table.getConnector().getScanQueueDepth();
         this.maxSessionSeconds = table.getConnector().getScanSessionSeconds();
         this.rowLimit = -1;
@@ -57,8 +62,12 @@ public class YdbScanOptions extends YdbTableOperationOptions implements Serializ
         if (predicates == null || predicates.length == 0) {
             return;
         }
+        this.predicates.clear();
         List<Predicate> flat = flattenPredicates(predicates);
-        detectRangeSimple(flat);
+        if (flat != null) {
+            this.predicates.addAll(flat);
+            detectRangeSimple(flat);
+        }
     }
 
     public void pruneColumns(StructType requiredSchema) {
@@ -90,6 +99,10 @@ public class YdbScanOptions extends YdbTableOperationOptions implements Serializ
 
     public List<YdbKeyRange> getPartitions() {
         return partitions;
+    }
+
+    public ArrayList<Predicate> getPredicates() {
+        return predicates;
     }
 
     public int getScanQueueDepth() {
