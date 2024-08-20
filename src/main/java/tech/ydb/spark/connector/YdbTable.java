@@ -1,7 +1,6 @@
 package tech.ydb.spark.connector;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -30,6 +29,7 @@ import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 import tech.ydb.spark.connector.impl.YdbConnector;
+import tech.ydb.spark.connector.impl.YdbTruncateTable;
 import tech.ydb.table.description.KeyRange;
 import tech.ydb.table.description.TableColumn;
 import tech.ydb.table.description.TableDescription;
@@ -47,16 +47,6 @@ public class YdbTable implements Table,
     private static final org.slf4j.Logger LOG
             = org.slf4j.LoggerFactory.getLogger(YdbTable.class);
 
-    static final Set<TableCapability> CAPABILITIES;
-
-    static {
-        final Set<TableCapability> c = new HashSet<>();
-        c.add(TableCapability.BATCH_READ);
-        c.add(TableCapability.BATCH_WRITE);
-        c.add(TableCapability.ACCEPT_ANY_SCHEMA); // allow YDB to check the schema
-        CAPABILITIES = Collections.unmodifiableSet(c);
-    }
-
     private final YdbConnector connector;
     private final YdbTypes types;
     private final String logicalName;
@@ -66,6 +56,7 @@ public class YdbTable implements Table,
     private final ArrayList<YdbFieldType> keyTypes;
     private final ArrayList<YdbKeyRange> partitions;
     private final Map<String, String> properties;
+    private final boolean indexPseudoTable;
     private StructType schema;
 
     /**
@@ -88,6 +79,7 @@ public class YdbTable implements Table,
         this.keyTypes = new ArrayList<>();
         this.partitions = new ArrayList<>();
         this.properties = new HashMap<>();
+        this.indexPseudoTable = false;
         Map<String, TableColumn> cm = buildColumnsMap(td);
         for (String cname : td.getPrimaryKeys()) {
             TableColumn tc = cm.get(cname);
@@ -150,6 +142,7 @@ public class YdbTable implements Table,
         this.keyTypes = new ArrayList<>();
         this.partitions = new ArrayList<>();
         this.properties = new HashMap<>();
+        this.indexPseudoTable = true;
         HashSet<String> known = new HashSet<>();
         Map<String, TableColumn> cm = buildColumnsMap(tdMain);
         // Add index key columns
@@ -257,7 +250,15 @@ public class YdbTable implements Table,
 
     @Override
     public Set<TableCapability> capabilities() {
-        return CAPABILITIES;
+        final Set<TableCapability> c = new HashSet<>();
+        c.add(TableCapability.BATCH_READ);
+        c.add(TableCapability.ACCEPT_ANY_SCHEMA); // allow YDB to check the schema
+        if (!indexPseudoTable) {
+            // tables support writes, while indexes do not
+            c.add(TableCapability.BATCH_WRITE);
+            c.add(TableCapability.TRUNCATE);
+        }
+        return c;
     }
 
     @Override
@@ -274,7 +275,7 @@ public class YdbTable implements Table,
 
     @Override
     public WriteBuilder newWriteBuilder(LogicalWriteInfo info) {
-        return new YdbWriteBuilder(this, info);
+        return new YdbWriteBuilder(this, info, false);
     }
 
     @Override
@@ -291,8 +292,11 @@ public class YdbTable implements Table,
 
     @Override
     public boolean truncateTable() {
-        // TODO: implementation
-        throw new UnsupportedOperationException("Not supported yet.");
+        final YdbTruncateTable action = new YdbTruncateTable(tablePath);
+        connector.getRetryCtx().supplyStatus(session -> action.run(session))
+                .join()
+                .expectSuccess();
+        return true;
     }
 
     @Override

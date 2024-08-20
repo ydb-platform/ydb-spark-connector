@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.regex.Pattern;
 
 import org.apache.spark.sql.connector.write.LogicalWriteInfo;
+import org.apache.spark.sql.connector.write.SupportsTruncate;
 import org.apache.spark.sql.connector.write.Write;
 import org.apache.spark.sql.connector.write.WriteBuilder;
 import org.apache.spark.sql.types.DataType;
@@ -17,19 +18,22 @@ import scala.collection.JavaConverters;
  *
  * @author zinal
  */
-public class YdbWriteBuilder implements WriteBuilder {
+public class YdbWriteBuilder implements WriteBuilder, SupportsTruncate {
 
     private final YdbTable table;
     private final LogicalWriteInfo info;
+    private final boolean truncate;
 
-    public YdbWriteBuilder(YdbTable table, LogicalWriteInfo info) {
+    public YdbWriteBuilder(YdbTable table, LogicalWriteInfo info, boolean truncate) {
         this.table = table;
         this.info = info;
+        this.truncate = truncate;
     }
 
     @Override
     public Write build() {
-        return new YdbWrite(table, info, validateSchemas(table.schema(), info.schema()));
+        boolean mapByNames = validateSchemas(table.schema(), info.schema());
+        return new YdbWrite(table, info, mapByNames, truncate);
     }
 
     private boolean validateSchemas(StructType actualSchema, StructType inputSchema) {
@@ -74,6 +78,11 @@ public class YdbWriteBuilder implements WriteBuilder {
     private boolean isAssignableFrom(DataType dst, DataType src) {
         // TODO: validate data type compatibility
         return true;
+    }
+
+    @Override
+    public WriteBuilder truncate() {
+        return new YdbWriteBuilder(table, info, true);
     }
 
 }

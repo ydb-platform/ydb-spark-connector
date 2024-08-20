@@ -90,7 +90,7 @@ public class YdbScanImpl implements AutoCloseable {
         rtsb.withRequestTimeout(Duration.ofHours(8));
 
         // Create or acquire the connector object.
-        YdbConnector c = YdbRegistry.getOrCreate(options.getCatalogName(), options.getConnectOptions());
+        YdbConnector c = options.grabConnector();
         // Obtain the session (will be a long running one).
         session = c.getTableClient().createSession(
                 Duration.ofSeconds(options.getScanSessionSeconds())).join().getValue();

@@ -24,9 +24,10 @@ public class YdbWriteOptions extends YdbTableOperationOptions implements Seriali
     private final YdbIngestMethod ingestMethod;
     private final HashMap<String, String> options;
     private final int maxBulkRows;
+    private final boolean truncate;
 
     public YdbWriteOptions(YdbTable table, boolean mapByNames, StructType inputType,
-            String queryId, Map<String, String> options) {
+            String queryId, Map<String, String> options, boolean truncate) {
         super(table);
         this.tableType = table.schema();
         this.inputType = inputType;
@@ -53,6 +54,7 @@ public class YdbWriteOptions extends YdbTableOperationOptions implements Seriali
             n = 500;
         }
         this.maxBulkRows = n;
+        this.truncate = truncate;
     }
 
     public String getQueryId() {
@@ -81,6 +83,10 @@ public class YdbWriteOptions extends YdbTableOperationOptions implements Seriali
 
     public int getMaxBulkRows() {
         return maxBulkRows;
+    }
+
+    public boolean isTruncate() {
+        return truncate;
     }
 
 }

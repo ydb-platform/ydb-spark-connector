@@ -12,6 +12,7 @@ import org.apache.spark.sql.connector.write.Write;
 import org.apache.spark.sql.connector.write.WriteBuilder;
 import org.apache.spark.sql.connector.write.WriterCommitMessage;
 
+import tech.ydb.spark.connector.impl.YdbTruncateTable;
 import tech.ydb.spark.connector.impl.YdbWriterImpl;
 
 /**
@@ -26,9 +27,9 @@ public class YdbWrite implements Serializable,
 
     private final YdbWriteOptions options;
 
-    YdbWrite(YdbTable table, LogicalWriteInfo lwi, boolean mapByNames) {
+    YdbWrite(YdbTable table, LogicalWriteInfo lwi, boolean mapByNames, boolean truncate) {
         this.options = new YdbWriteOptions(table, mapByNames,
-                lwi.schema(), lwi.queryId(), lwi.options());
+                lwi.schema(), lwi.queryId(), lwi.options(), truncate);
     }
 
     @Override
@@ -48,6 +49,13 @@ public class YdbWrite implements Serializable,
     @Override
     public DataWriterFactory createBatchWriterFactory(PhysicalWriteInfo info) {
         // TODO: create the COW copy of the destination table
+        if (options.isTruncate()) {
+            YdbTruncateTable action = new YdbTruncateTable(options.getTablePath());
+            options.grabConnector().getRetryCtx()
+                    .supplyStatus(session -> action.run(session))
+                    .join()
+                    .expectSuccess();
+        }
         return this;
     }
 
