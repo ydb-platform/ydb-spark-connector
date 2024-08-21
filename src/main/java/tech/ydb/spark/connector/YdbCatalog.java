@@ -35,6 +35,7 @@ import tech.ydb.scheme.description.ListDirectoryResult;
 import tech.ydb.spark.connector.impl.YdbAlterTable;
 import tech.ydb.spark.connector.impl.YdbConnector;
 import tech.ydb.spark.connector.impl.YdbCreateTable;
+import tech.ydb.spark.connector.impl.YdbIntrospectTable;
 import tech.ydb.spark.connector.impl.YdbRegistry;
 import tech.ydb.table.SessionRetryContext;
 import tech.ydb.table.description.TableDescription;
@@ -61,10 +62,12 @@ public class YdbCatalog extends YdbOptions
     private String catalogName;
     private YdbConnector connector;
     private boolean listIndexes;
+    private Map<String, String> options;
 
     @Override
     public void initialize(String name, CaseInsensitiveStringMap options) {
         this.catalogName = name;
+        this.options = options;
         this.connector = YdbRegistry.getOrCreate(name, options);
         this.listIndexes = options.getBoolean(LIST_INDEXES, false);
     }
@@ -170,19 +173,29 @@ public class YdbCatalog extends YdbOptions
 
     @Override
     public YdbTable loadTable(Identifier ident) throws NoSuchTableException {
+        // not sure if it was covered properly by table provider's implementation
         if (ident.name().startsWith("ix/")) {
             // Special support for index "tables".
             return loadIndexTable(ident);
         }
-        // Processing for regular tables.
-        String tablePath = mergePath(ident);
-        Result<TableDescription> res = getRetryCtx().supplyResult(session -> {
-            final DescribeTableSettings dts = new DescribeTableSettings();
-            dts.setIncludeShardKeyBounds(true);
-            return session.describeTable(tablePath, dts);
-        }).join();
-        TableDescription td = checkStatus(res, ident);
-        return new YdbTable(getConnector(), mergeLocal(ident), tablePath, td);
+
+        Map<String, String> props = new HashMap<>(options);
+        props.put(DBTABLE, ident.name());
+        YdbIntrospectTable introspection = new YdbIntrospectTable(props);
+        Result<YdbTable> result = connector.getRetryCtx()
+                .supplyResult(introspection::run)
+                .join();
+
+        if (!result.isSuccess()) {
+            return null;
+        }
+
+        YdbTable table = result.getValue();
+        if (!table.isActualTable()) {
+            return null;
+        }
+
+        return table;
     }
 
     private YdbTable loadIndexTable(Identifier ident) throws NoSuchTableException {

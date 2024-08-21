@@ -68,7 +68,7 @@ public class YdbTable implements Table,
      * @param actualPath Table path
      * @param td Table description object obtained from YDB
      */
-    YdbTable(YdbConnector connector, YdbTypes types,
+    public YdbTable(YdbConnector connector, YdbTypes types,
             String logicalName, String tablePath, TableDescription td) {
         this.connector = connector;
         this.types = types;
@@ -130,7 +130,7 @@ public class YdbTable implements Table,
      * @param ix Index information entry
      * @param tdIx Table description object for the index table
      */
-    YdbTable(YdbConnector connector, YdbTypes types,
+    public YdbTable(YdbConnector connector, YdbTypes types,
             String logicalName, String tablePath,
             TableDescription tdMain, TableIndex ix, TableDescription tdIx) {
         this.connector = connector;
@@ -193,6 +193,19 @@ public class YdbTable implements Table,
     YdbTable(YdbConnector connector, String logicalName, String tablePath,
             TableDescription tdMain, TableIndex ix, TableDescription tdIx) {
         this(connector, connector.getDefaultTypes(), logicalName, tablePath, tdMain, ix, tdIx);
+    }
+
+    private YdbTable() {
+        connector = null;
+        types = null;
+        logicalName = null;
+        tablePath = null;
+        columns = null;
+        keyColumns = null;
+        keyTypes = null;
+        partitions = null;
+        properties = null;
+        indexPseudoTable = false;
     }
 
     private static void convertPartitioningSettings(TableDescription td,
@@ -358,4 +371,16 @@ public class YdbTable implements Table,
         return "YdbTable:" + connector.getCatalogName() + ":" + tablePath;
     }
 
+    public boolean isActualTable() {
+        return true;
+    }
+
+    public static YdbTable buildShell() {
+        return new YdbTable() {
+            @Override
+            public boolean isActualTable() {
+                return false;
+            }
+        };
+    }
 }
