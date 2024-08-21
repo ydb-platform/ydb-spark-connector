@@ -1,8 +1,10 @@
 package tech.ydb.spark.connector;
 
+import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
+import org.apache.spark.sql.connector.catalog.Identifier;
 import org.apache.spark.sql.connector.catalog.Table;
 import org.apache.spark.sql.connector.catalog.TableProvider;
 import org.apache.spark.sql.connector.expressions.Transform;
@@ -46,20 +48,20 @@ public class YdbTableProvider extends YdbOptions implements TableProvider, DataS
 
     @Override
     public StructType inferSchema(CaseInsensitiveStringMap options) {
-        return getOrLoadTable(options).schema();
+        return getOrLoadTable(options, null).schema();
     }
 
     @Override
     public Transform[] inferPartitioning(CaseInsensitiveStringMap options) {
-        return getOrLoadTable(options).partitioning();
+        return getOrLoadTable(options, null).partitioning();
     }
 
     @Override
     public Table getTable(StructType schema, Transform[] partitioning, Map<String, String> properties) {
-        return getOrLoadTable(properties);
+        return getOrLoadTable(properties, schema);
     }
 
-    private YdbTable getOrLoadTable(Map<String, String> props) {
+    private YdbTable getOrLoadTable(Map<String, String> props, StructType schema) {
         // Check that table path is provided
         final String inputTable = props.get(DBTABLE);
         if (inputTable == null || inputTable.length() == 0) {
@@ -85,8 +87,16 @@ public class YdbTableProvider extends YdbOptions implements TableProvider, DataS
             dts.setIncludeShardKeyBounds(ti.indexName == null); // shard keys for table case
             Result<TableDescription> tdRes = session.describeTable(ti.tablePath, dts).join();
             if (!tdRes.isSuccess()) {
-                LOG.debug("Failed to load table description for {}: {}", ti.tablePath, tdRes.getStatus());
-                return CompletableFuture.completedFuture(Result.fail(tdRes.getStatus()));
+                if (schema == null) {
+                    LOG.debug("Failed to load table description for {}: {}", ti.tablePath, tdRes.getStatus());
+                    return CompletableFuture.completedFuture(Result.fail(tdRes.getStatus()));
+                }
+                // not such table => create a new, according the schema of given dataframe
+                YdbCatalog catalog = new YdbCatalog();
+                catalog.initialize(null, new CaseInsensitiveStringMap(props));
+                YdbTable table = (YdbTable) catalog.createTable(
+                        Identifier.of(new String[]{}, ti.logicalName), schema, null, Collections.emptyMap());
+                return CompletableFuture.completedFuture(Result.success(table));
             }
             TableDescription td = tdRes.getValue();
             if (ti.indexName == null) {
@@ -186,4 +196,8 @@ public class YdbTableProvider extends YdbOptions implements TableProvider, DataS
         }
     }
 
+    @Override
+    public boolean supportsExternalMetadata() {
+        return true;
+    }
 }

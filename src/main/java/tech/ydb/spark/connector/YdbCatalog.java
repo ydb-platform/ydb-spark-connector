@@ -227,7 +227,7 @@ public class YdbCatalog extends YdbOptions
 
     @Override
     public Table createTable(Identifier ident, StructType schema, Transform[] partitions,
-            Map<String, String> properties) throws TableAlreadyExistsException, NoSuchNamespaceException {
+            Map<String, String> properties) {
         if (ident.name().startsWith("ix/")) {
             throw new UnsupportedOperationException("Direct index table creation is not possible,"
                     + "identifier " + ident);
