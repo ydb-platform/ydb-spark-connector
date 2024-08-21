@@ -11,11 +11,12 @@ import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
+import org.junit.After;
 import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
 import org.testcontainers.containers.GenericContainer;
 import tech.ydb.core.Result;
+import tech.ydb.core.Status;
 import tech.ydb.spark.connector.impl.YdbConnector;
 import tech.ydb.spark.connector.impl.YdbRegistry;
 import tech.ydb.table.query.Params;
@@ -32,14 +33,17 @@ public class IntegrationTest {
     public static final String CATALOG = "spark.sql.catalog.ydb";
     public static final String TEST_TABLE = "test_table";
 
-    @Rule
-    public GenericContainer<?> ydb = new GenericContainer<>("cr.yandex/yc/yandex-docker-local-ydb:latest")
+    public static GenericContainer<?> ydb = new GenericContainer<>("cr.yandex/yc/yandex-docker-local-ydb:latest")
             .withCreateContainerCmdModifier(cmd -> cmd.withHostName("localhost"))
             .withNetworkMode("host")
             .withEnv("GRPC_TLS_PORT", "2135")
             .withEnv("GRPC_PORT", "2136")
             .withEnv("MON_PORT", "8765")
             .withEnv("YDB_USE_IN_MEMORY_PDISKS", "true");
+
+    static {
+        ydb.start();
+    }
 
     protected SparkSession spark;
     protected Map<String, String> options;
@@ -67,10 +71,17 @@ public class IntegrationTest {
 
     private Map<String, String> commonConfigs() {
         HashMap<String, String> result = new HashMap<>();
-        result.put("url", "grpc://localhost:2136?database=/local");
+        result.put("url", "grpc://127.0.0.1:2136?database=/local");
         result.put("auth.mode", "NONE");
         result.put("dbtable", TEST_TABLE);
         return result;
+    }
+
+    @After
+    public void cleanup() {
+        schemaQuery("drop table " + TEST_TABLE);
+        schemaQuery("drop table " + TEST_TABLE + "_original");
+        schemaQuery("drop table toster");
     }
 
     @Test
@@ -95,7 +106,7 @@ public class IntegrationTest {
 
     @Test
     public void testOverwrite() {
-        schemaQuery("create table " + TEST_TABLE + "(id Uint64, value Text, PRIMARY KEY(id))");
+        schemaQuery("create table " + TEST_TABLE + "(id Uint64, value Text, PRIMARY KEY(id))").expectSuccess();
         dataQuery("upsert into " + TEST_TABLE + "(id, value) values (1, 'asdf'), (2, 'zxcv'), (3, 'fghj')");
 
         Dataset<Row> dataFrame = sampleDataset();
@@ -125,6 +136,33 @@ public class IntegrationTest {
     }
 
     @Test
+    public void testCreateBySparkSQL() {
+        String original = TEST_TABLE + "_original";
+        schemaQuery("create table " + original + "(id Uint64, value Text, PRIMARY KEY(id))").expectSuccess();
+        dataQuery("upsert into " + original + "(id, value) values (1, 'asdf'), (2, 'zxcv'), (3, 'fghj')");
+
+        spark.sql("create table ydb." + TEST_TABLE + "(id bigint, value string) ").queryExecution();
+        spark.sql("insert into ydb." + TEST_TABLE + " select * from ydb." + original).queryExecution();
+        List<Row> rows = spark.sql("select * from ydb." + TEST_TABLE)
+                .collectAsList();
+        assertThat(rows).hasSize(3);
+    }
+
+    @Test
+    public void testCreateWithSelect() {
+        String original = TEST_TABLE + "_original";
+        schemaQuery("create table " + original + "(id Uint64, value Text, PRIMARY KEY(id))").expectSuccess();
+        dataQuery("upsert into " + original + "(id, value) values (1, 'asdf'), (2, 'zxcv'), (3, 'fghj')");
+
+        spark.sql("create table ydb." + TEST_TABLE + " as select * from ydb." + original)
+                .queryExecution();
+        List<Row> rows = spark.sql("select * from ydb." + TEST_TABLE)
+                .collectAsList();
+        assertThat(rows).hasSize(3);
+    }
+
+
+    @Test
     public void testCatalogAccess() {
         String createToster = "CREATE TABLE toster(\n" +
                 "  a Uint64 NOT NULL,\n" +
@@ -146,7 +184,7 @@ public class IntegrationTest {
                 "  PRIMARY KEY(a)\n" +
                 ")";
 
-        schemaQuery(createToster);
+        schemaQuery(createToster).expectSuccess();
 
         String upsertToster = "UPSERT INTO toster(a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p) VALUES (\n" +
                 "  1001,\n" +
@@ -210,11 +248,11 @@ public class IntegrationTest {
                 .join().expectSuccess();
     }
 
-    private void schemaQuery(String query) {
-        connector.getRetryCtx().supplyStatus(session -> session.executeSchemeQuery(
+    private Status schemaQuery(String query) {
+        return connector.getRetryCtx().supplyStatus(session -> session.executeSchemeQuery(
                         query
                 ))
-                .join().expectSuccess();
+                .join();
     }
 
 }
