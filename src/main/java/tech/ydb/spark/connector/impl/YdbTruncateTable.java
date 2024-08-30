@@ -77,6 +77,7 @@ public class YdbTruncateTable {
         src.getColumns().forEach(tc -> undressColumn(b, tc));
         b.setPrimaryKeys(src.getPrimaryKeys());
         src.getIndexes().forEach(ti -> undressIndex(b, ti));
+        b.setPartitioningSettings(src.getPartitioningSettings());
         return b.build();
     }
 
