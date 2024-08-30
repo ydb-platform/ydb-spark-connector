@@ -217,6 +217,7 @@ df2.filter(df2("closed_date").gt(to_timestamp(lit("2010-02-01")))).show(10, fals
 
 // build some dataframe from the literal list of values
 import spark.implicits._
+import org.apache.spark.sql.types._
 import org.apache.spark.sql.Row
 val someData = Seq(
   Row(4, 501, 401, 4001),

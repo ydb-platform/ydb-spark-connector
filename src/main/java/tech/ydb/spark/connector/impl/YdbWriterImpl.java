@@ -141,14 +141,16 @@ public class YdbWriterImpl implements DataWriter<InternalRow> {
             currentStatus.join().expectSuccess();
             currentStatus = null;
             LOG.debug("Final async batch completed for table {}", tablePath);
+        } else {
+            LOG.debug("Empty commit call for table {}", tablePath);
         }
-        LOG.debug("Batch completed for table {}", tablePath);
         // All rows have been written successfully
         return new YdbWriteCommit();
     }
 
     @Override
     public void abort() throws IOException {
+        LOG.debug("Aborting writes for table {}", tablePath);
         currentInput.clear();
         if (currentStatus != null) {
             currentStatus.cancel(true);
@@ -159,6 +161,7 @@ public class YdbWriterImpl implements DataWriter<InternalRow> {
 
     @Override
     public void close() throws IOException {
+        LOG.debug("Closing the writer for table {}", tablePath);
         currentInput.clear();
         if (currentStatus != null) {
             currentStatus.cancel(true);
