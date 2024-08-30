@@ -214,6 +214,28 @@ val df2 = (spark.read.format("ydb")
     .option("table", "test2_fhrw/ix1/indexImplTable")
     .load)
 df2.filter(df2("closed_date").gt(to_timestamp(lit("2010-02-01")))).show(10, false)
+
+// build some dataframe from the literal list of values
+import spark.implicits._
+import org.apache.spark.sql.Row
+val someData = Seq(
+  Row(4, 501, 401, 4001),
+  Row(4, 502, 402, 4002),
+  Row(4, 503, 403, 4003)
+)
+val someSchema = List(
+  StructField("a_ref", IntegerType, true),
+  StructField("id", IntegerType, true),
+  StructField("q", IntegerType, true),
+  StructField("z", IntegerType, true)
+)
+val someDF = spark.createDataFrame(
+  spark.sparkContext.parallelize(someData),
+  StructType(someSchema)
+)
+// writing data to the existing table available via "ydb1" catalog
+someDF.write.mode("append").saveAsTable("ydb1.table3")
+
 ```
 
 ## Accessing YDB with Python/Spark

@@ -6,7 +6,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 
 import org.apache.spark.sql.catalyst.analysis.NamespaceAlreadyExistsException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException;
@@ -53,8 +52,8 @@ public class YdbCatalog extends YdbOptions
             = org.slf4j.LoggerFactory.getLogger(YdbCatalog.class);
 
     // X.Y[-SNAPSHOT]
-    public static final String VERSION = "1.2";
-
+    public static final String VERSION = "1.3-SNAPSHOT";
+    public static final String INDEX_PREFIX = "ix/";
     public static final String ENTRY_TYPE = "ydb_entry_type";
     public static final String ENTRY_OWNER = "ydb_entry_owner";
 
@@ -163,72 +162,37 @@ public class YdbCatalog extends YdbOptions
         }
         TableDescription td = res.getValue();
         for (TableIndex ix : td.getIndexes()) {
-            String ixname = "ix/" + tableEntry.getName() + "/" + ix.getName();
+            String ixname = INDEX_PREFIX + tableEntry.getName() + "/" + ix.getName();
             retval.add(Identifier.of(namespace, ixname));
         }
     }
 
     @Override
     public YdbTable loadTable(Identifier ident) throws NoSuchTableException {
-        if (ident.name().startsWith("ix/")) {
+        if (ident.name().startsWith(INDEX_PREFIX)) {
             // Special support for index "tables".
-            return loadIndexTable(ident);
+            String pseudoName = ident.name();
+            String[] tabParts = pseudoName.split("[/]");
+            if (tabParts.length != 3) {
+                // Illegal name format - so "no such table".
+                throw new NoSuchTableException(ident);
+            }
+            String tabName = tabParts[1];
+            String ixName = tabParts[2];
+            String tablePath = mergePath(ident.namespace(), tabName);
+            return checkStatus(YdbTable.lookup(connector, connector.getDefaultTypes(),
+                    tablePath, mergeLocal(ident), ixName), ident);
         }
         // Processing for regular tables.
         String tablePath = mergePath(ident);
-        Result<TableDescription> res = getRetryCtx().supplyResult(session -> {
-            final DescribeTableSettings dts = new DescribeTableSettings();
-            dts.setIncludeShardKeyBounds(true);
-            return session.describeTable(tablePath, dts);
-        }).join();
-        TableDescription td = checkStatus(res, ident);
-        return new YdbTable(getConnector(), mergeLocal(ident), tablePath, td);
-    }
-
-    private YdbTable loadIndexTable(Identifier ident) throws NoSuchTableException {
-        String pseudoName = ident.name();
-        String[] tabParts = pseudoName.split("[/]");
-        if (tabParts.length != 3) {
-            // Illegal name format - so "no such table".
-            throw new NoSuchTableException(ident);
-        }
-        String tabName = tabParts[1];
-        String ixName = tabParts[2];
-        String tablePath = mergePath(ident.namespace(), tabName);
-        Result<YdbTable> res = getRetryCtx().supplyResult(session -> {
-            DescribeTableSettings dts = new DescribeTableSettings();
-            Result<TableDescription> tdRes = session.describeTable(tablePath, dts).join();
-            if (!tdRes.isSuccess()) {
-                return CompletableFuture.completedFuture(Result.fail(tdRes.getStatus()));
-            }
-            TableDescription td = tdRes.getValue();
-            for (TableIndex ix : td.getIndexes()) {
-                if (ixName.equals(ix.getName())) {
-                    // Grab the description for secondary index table.
-                    String indexPath = tablePath + "/" + ix.getName() + "/indexImplTable";
-                    dts.setIncludeShardKeyBounds(true);
-                    tdRes = session.describeTable(indexPath, dts).join();
-                    if (!tdRes.isSuccess()) {
-                        return CompletableFuture.completedFuture(Result.fail(tdRes.getStatus()));
-                    }
-                    TableDescription tdIx = tdRes.getValue();
-                    // Construct the YdbTable object
-                    return CompletableFuture.completedFuture(Result.success(
-                            new YdbTable(getConnector(), mergeLocal(ident), tablePath, td, ix, tdIx)));
-                }
-            }
-            return CompletableFuture.completedFuture(
-                    Result.fail(Status.of(StatusCode.SCHEME_ERROR)
-                            .withIssues(Issue.of("Path not found", Issue.Severity.ERROR))));
-        }).join();
-
-        return checkStatus(res, ident);
+        return checkStatus(YdbTable.lookup(connector, connector.getDefaultTypes(),
+                tablePath, mergeLocal(ident), null), ident);
     }
 
     @Override
     public Table createTable(Identifier ident, StructType schema, Transform[] partitions,
             Map<String, String> properties) throws TableAlreadyExistsException, NoSuchNamespaceException {
-        if (ident.name().startsWith("ix/")) {
+        if (ident.name().startsWith(INDEX_PREFIX)) {
             throw new UnsupportedOperationException("Direct index table creation is not possible,"
                     + "identifier " + ident);
         }
@@ -240,18 +204,17 @@ public class YdbCatalog extends YdbOptions
         getRetryCtx().supplyStatus(session -> action.createTable(session)).join()
                 .expectSuccess("Failed to create table " + ident);
         // Load the description for the table created.
-        Result<TableDescription> res = getRetryCtx().supplyResult(session -> {
-            final DescribeTableSettings dts = new DescribeTableSettings();
-            dts.setIncludeShardKeyBounds(true);
-            return session.describeTable(tablePath, dts);
-        }).join();
-        res.getStatus().expectSuccess();
-        return new YdbTable(getConnector(), mergeLocal(ident), tablePath, res.getValue());
+        try {
+            return checkStatus(YdbTable.lookup(connector, connector.getDefaultTypes(),
+                    tablePath, mergeLocal(ident), null), ident);
+        } catch (NoSuchTableException nste) {
+            throw new RuntimeException("Lost table after creation on id " + ident);
+        }
     }
 
     @Override
     public Table alterTable(Identifier ident, TableChange... changes) throws NoSuchTableException {
-        if (ident.name().startsWith("ix/")) {
+        if (ident.name().startsWith(INDEX_PREFIX)) {
             throw new UnsupportedOperationException("Index table alteration is not possible, "
                     + "identifier " + ident);
         }
@@ -275,17 +238,13 @@ public class YdbCatalog extends YdbOptions
         // Implement the desired changes.
         getRetryCtx().supplyStatus(session -> operation.run(session)).join().expectSuccess();
         // Load the description for the modified table.
-        TableDescription td = getRetryCtx().supplyResult(session -> {
-            final DescribeTableSettings dts = new DescribeTableSettings();
-            dts.setIncludeShardKeyBounds(true);
-            return session.describeTable(tablePath, dts);
-        }).join().getValue();
-        return new YdbTable(getConnector(), mergeLocal(ident), tablePath, td);
+        return checkStatus(YdbTable.lookup(connector, connector.getDefaultTypes(),
+                tablePath, mergeLocal(ident), null), ident);
     }
 
     @Override
     public boolean dropTable(Identifier ident) {
-        if (ident.name().startsWith("ix/")) {
+        if (ident.name().startsWith(INDEX_PREFIX)) {
             throw new UnsupportedOperationException("Cannot drop index table " + ident);
         }
         final String tablePath = mergePath(ident);
@@ -310,10 +269,10 @@ public class YdbCatalog extends YdbOptions
     @Override
     public void renameTable(Identifier oldIdent, Identifier newIdent)
             throws NoSuchTableException, TableAlreadyExistsException {
-        if (oldIdent.name().startsWith("ix/")) {
+        if (oldIdent.name().startsWith(INDEX_PREFIX)) {
             throw new UnsupportedOperationException("Cannot rename index table " + oldIdent);
         }
-        if (newIdent.name().startsWith("ix/")) {
+        if (newIdent.name().startsWith(INDEX_PREFIX)) {
             throw new UnsupportedOperationException("Cannot rename table to index " + newIdent);
         }
         final String oldPath = mergePath(oldIdent);
