@@ -16,11 +16,12 @@ The connector has passed the basic tests with Apache Spark 3.3, 3.4 and 3.5, wor
 1. The connector does not currently support consistent reading and transactional writes. Both features are planned to be implemented using the YDB's snapshots and its `CopyTables` and `RenameTables` APIs.
 1. The connector may require significant memory on the Spark executor side to read large tables with the default settings. 4 GB or more memory per core is highly recommended.
 1. Access to YDB columnar tables is not supported yet.
+1. Reading YDB system tables (those under the `.sys` directory) is currently not supported.
 1. Predicate pushdown is limited to primary key, secondary index key (when accessing indexes), or their prefixes. It is specially important to better support pushdowns with YDB columnar tables.
 1. Reading and writing YDB tables containing columns of PostgreSQL-compatible types is not supported yet.
 1. Handling of YDB's UInt64 data type is inefficient (conversion from and to the corresponding Spark type is performed through text representation).
-1. Joining with large YDB tables may be inefficient, because key lookups are currently not supported
-1. Reading YDB system tables (those under the `.sys` directory) is currently not supported.
+1. Joining with large YDB tables may be inefficient, because key lookups are currently not supported.
+1. When writing to YDB tables, there is no way to specify the primary key when explicit table creation is performed in the "error" and "overwrite" save modes. Random unique key is generated in that case and stored in the `_spark_key` column. As a workaround, explicit table creation should be used instead, plus the `truncate=true` option where needed.
 
 Those limitations are to be addressed in the future releases of the connector.
 
@@ -119,7 +120,8 @@ The following Spark configuration properties are supported by the YDB connector 
     * `bulk` - use the BulkUpsert YDB API for data ingestion.
 
 * `batchsize` - max batch rows to be ingested in a single portion, default 500. Use with care, typically should not exceed 1000;
-* `primary_key` - list of comma-separated column names to define the YDB table's primary key (only supported for `CREATE TABLE` operations).
+* `primary_key` - list of comma-separated column names to define the YDB table's primary key (only supported for `CREATE TABLE` operations);
+* `truncate` - a boolean value (`true` or `false`) specifying whether the connector should truncate the existing table before writing to it.
 
 ## Using the SQL statements with YDB catalog defined
 
@@ -234,9 +236,12 @@ val someDF = spark.createDataFrame(
   spark.sparkContext.parallelize(someData),
   StructType(someSchema)
 )
-// writing data to the existing table available via "ydb1" catalog
+// append data to the existing table available via "ydb1" catalog
 someDF.write.mode("append").saveAsTable("ydb1.table3")
+// replace data in the existing table available via "ydb1" catalog
 someDF.write.option("truncate", "true").mode("append").saveAsTable("ydb1.table3")
+// create the new table in the "ydb1" catalog
+someDF.write.saveAsTable("ydb1.table4")
 ```
 
 ## Accessing YDB with Python/Spark

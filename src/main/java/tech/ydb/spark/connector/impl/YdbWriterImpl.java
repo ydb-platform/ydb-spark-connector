@@ -1,10 +1,13 @@
 package tech.ydb.spark.connector.impl;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 import org.apache.spark.sql.catalyst.InternalRow;
@@ -97,16 +100,33 @@ public class YdbWriterImpl implements DataWriter<InternalRow> {
         for (int i = 0; i < numFields; ++i) {
             YdbFieldInfo yfi = statementFields.get(i);
             final Object value = record.get(i, inputFields.get(i).dataType());
-            Value<?> conv = types.convertToYdb(value, yfi.getType());
-            if (yfi.isNullable()) {
-                if (conv.getType().getKind() != Type.Kind.OPTIONAL) {
-                    conv = conv.makeOptional();
-                }
-            }
-            currentRow.put(yfi.getName(), conv);
+            currentRow.put(yfi.getName(), convertValue(value, yfi));
+        }
+        if (statementFields.size() > numFields) {
+            // The last field should be the auto-generated PK.
+            YdbFieldInfo yfi = statementFields.get(numFields);
+            currentRow.put(yfi.getName(), convertValue(randomPk(), yfi));
         }
         // LOG.debug("Converted input row: {}", currentRow);
         return currentRow;
+    }
+
+    private Value<?> convertValue(Object value, YdbFieldInfo yfi) {
+        Value<?> conv = types.convertToYdb(value, yfi.getType());
+        if (yfi.isNullable()) {
+            if (conv.getType().getKind() != Type.Kind.OPTIONAL) {
+                conv = conv.makeOptional();
+            }
+        }
+        return conv;
+    }
+
+    private String randomPk() {
+        UUID uuid = UUID.randomUUID();
+        ByteBuffer bb = ByteBuffer.allocate(16);
+        bb.putLong(uuid.getMostSignificantBits());
+        bb.putLong(uuid.getLeastSignificantBits());
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bb.array());
     }
 
     private void startNewStatement(List<Value<?>> input) {
@@ -197,6 +217,10 @@ public class YdbWriterImpl implements DataWriter<InternalRow> {
                 YdbFieldInfo yfi = options.getFieldsList().get(pos);
                 out.add(yfi);
             }
+        }
+        if (options.getGeneratedPk() != null) {
+            // Generated PK is the last column, if one is presented at all.
+            out.add(new YdbFieldInfo(options.getGeneratedPk(), YdbFieldType.Text, false));
         }
         return out;
     }

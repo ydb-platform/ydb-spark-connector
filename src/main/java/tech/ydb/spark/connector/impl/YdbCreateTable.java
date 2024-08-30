@@ -101,12 +101,23 @@ public class YdbCreateTable extends YdbPropertyHelper {
         return fields;
     }
 
-    public static List<String> makePrimaryKey(List<YdbFieldInfo> fields, Map<String, String> properties) {
+    private static List<String> makePrimaryKey(List<YdbFieldInfo> fields, Map<String, String> properties) {
         String value = properties.get(YdbOptions.PRIMARY_KEY);
         if (value == null) {
-            throw new IllegalArgumentException("Cannot create table without primary_key option");
+            String autoPk = grabAutoPk(fields);
+            return Arrays.asList(new String[]{autoPk});
         }
         return Arrays.asList(value.split("[,]"));
+    }
+
+    private static String grabAutoPk(List<YdbFieldInfo> fields) {
+        for (YdbFieldInfo yfi : fields) {
+            if (YdbOptions.AUTO_PK.equalsIgnoreCase(yfi.getName())) {
+                return yfi.getName();
+            }
+        }
+        fields.add(new YdbFieldInfo(YdbOptions.AUTO_PK, YdbFieldType.Text, false));
+        return YdbOptions.AUTO_PK;
     }
 
 }

@@ -110,6 +110,11 @@ public abstract class YdbOptions {
     public static final String PRIMARY_KEY = "primary_key";
 
     /**
+     * YDB table's automatic primary key column name to be filled by the YDB Spark Connector.
+     */
+    public static final String AUTO_PK = "_spark_key";
+
+    /**
      * YDB table's truncate option when writing to the existing table.
      */
     public static final String TRUNCATE = "truncate";

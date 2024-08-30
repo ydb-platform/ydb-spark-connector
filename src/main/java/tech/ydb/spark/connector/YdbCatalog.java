@@ -107,24 +107,13 @@ public class YdbCatalog extends YdbOptions
     public static <T> T checkStatus(Result<T> res, Identifier id)
             throws NoSuchTableException {
         if (!res.isSuccess()) {
-            checkStatus(res.getStatus(), id);
+            Status status = res.getStatus();
+            if (StatusCode.SCHEME_ERROR.equals(status.getCode())) {
+                throw new NoSuchTableException(id);
+            }
+            status.expectSuccess("ydb metadata query failed on " + id);
         }
         return res.getValue();
-    }
-
-    public static void checkStatus(Status status, Identifier id)
-            throws NoSuchTableException {
-        if (status.isSuccess()) {
-            return;
-        }
-        if (StatusCode.SCHEME_ERROR.equals(status.getCode())) {
-            for (Issue i : status.getIssues()) {
-                if (i != null && i.getMessage().endsWith("Path not found")) {
-                    throw new NoSuchTableException(id);
-                }
-            }
-        }
-        status.expectSuccess("ydb metadata query failed on " + id);
     }
 
     @Override

@@ -20,6 +20,7 @@ public class YdbWriteOptions extends YdbTableOperationOptions implements Seriali
     private final StructType tableType;
     private final StructType inputType;
     private final boolean mapByNames;
+    private final String generatedPk;
     private final String queryId;
     private final YdbIngestMethod ingestMethod;
     private final HashMap<String, String> options;
@@ -32,6 +33,7 @@ public class YdbWriteOptions extends YdbTableOperationOptions implements Seriali
         this.tableType = table.schema();
         this.inputType = inputType;
         this.mapByNames = mapByNames;
+        this.generatedPk = detectGeneratedPk(this.tableType, this.inputType);
         this.queryId = queryId;
         this.options = new HashMap<>();
         if (options != null) {
@@ -62,6 +64,7 @@ public class YdbWriteOptions extends YdbTableOperationOptions implements Seriali
         this.tableType = src.tableType;
         this.inputType = src.inputType;
         this.mapByNames = src.mapByNames;
+        this.generatedPk = src.generatedPk;
         this.queryId = src.queryId;
         this.ingestMethod = src.ingestMethod;
         this.options = new HashMap<>(src.options);
@@ -93,12 +96,41 @@ public class YdbWriteOptions extends YdbTableOperationOptions implements Seriali
         return mapByNames;
     }
 
+    public String getGeneratedPk() {
+        return generatedPk;
+    }
+
     public int getMaxBulkRows() {
         return maxBulkRows;
     }
 
     public boolean isTruncate() {
         return truncate;
+    }
+
+    /**
+     * PK generation detection.
+     * @param tableType Target table structure
+     * @param inputType Input dataset structure
+     * @return generated PK column name, if target table has automatic PK column,
+     *      and it is not included in the input dataset
+     */
+    private static String detectGeneratedPk(StructType tableType, StructType inputType) {
+        String pkName = null;
+        for (String name : tableType.fieldNames()) {
+            if (YdbOptions.AUTO_PK.equalsIgnoreCase(name)) {
+                pkName = name;
+            }
+        }
+        if (pkName == null) {
+            return null;
+        }
+        for (String name : inputType.fieldNames()) {
+            if (pkName.equals(name)) {
+                return null;
+            }
+        }
+        return pkName;
     }
 
 }
