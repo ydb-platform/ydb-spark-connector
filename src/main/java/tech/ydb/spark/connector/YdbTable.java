@@ -6,6 +6,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 import org.apache.spark.sql.connector.catalog.SupportsDelete;
@@ -28,12 +29,17 @@ import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
+import tech.ydb.core.Issue;
+import tech.ydb.core.Result;
+import tech.ydb.core.Status;
+import tech.ydb.core.StatusCode;
 import tech.ydb.spark.connector.impl.YdbConnector;
 import tech.ydb.spark.connector.impl.YdbTruncateTable;
 import tech.ydb.table.description.KeyRange;
 import tech.ydb.table.description.TableColumn;
 import tech.ydb.table.description.TableDescription;
 import tech.ydb.table.description.TableIndex;
+import tech.ydb.table.settings.DescribeTableSettings;
 import tech.ydb.table.settings.PartitioningSettings;
 
 /**
@@ -108,18 +114,6 @@ public class YdbTable implements Table,
     }
 
     /**
-     * Create table provider for the real YDB table.
-     *
-     * @param connector YDB connector
-     * @param logicalName Table logical name
-     * @param actualPath Table path
-     * @param td Table description object obtained from YDB
-     */
-    YdbTable(YdbConnector connector, String logicalName, String tablePath, TableDescription td) {
-        this(connector, connector.getDefaultTypes(), logicalName, tablePath, td);
-    }
-
-    /**
      * Create table provider for YDB index.
      *
      * @param connector YDB connector
@@ -180,19 +174,42 @@ public class YdbTable implements Table,
                 this.tablePath, this.columns.size(), this.partitions.size());
     }
 
-    /**
-     * Create table provider for YDB index.
-     *
-     * @param connector YDB connector
-     * @param logicalName Index table logical name
-     * @param tablePath Table path for the actual table (not index)
-     * @param tdMain Table description object for the actual table
-     * @param ix Index information entry
-     * @param tdIx Table description object for the index table
-     */
-    YdbTable(YdbConnector connector, String logicalName, String tablePath,
-            TableDescription tdMain, TableIndex ix, TableDescription tdIx) {
-        this(connector, connector.getDefaultTypes(), logicalName, tablePath, tdMain, ix, tdIx);
+    public static Result<YdbTable> lookup(YdbConnector connector, YdbTypes types,
+            String tablePath, String logicalName, String indexName) {
+        return connector.getRetryCtx().supplyResult(session -> {
+            // Describe the main table
+            DescribeTableSettings dts = new DescribeTableSettings();
+            // Need key bounds for the main table only
+            dts.setIncludeShardKeyBounds(indexName == null);
+            Result<TableDescription> tdRes = session.describeTable(tablePath, dts).join();
+            if (!tdRes.isSuccess()) {
+                return CompletableFuture.completedFuture(Result.fail(tdRes.getStatus()));
+            }
+            TableDescription td = tdRes.getValue();
+            if (indexName == null) {
+                // No index name - construct the YdbTable for the main table
+                return CompletableFuture.completedFuture(Result.success(
+                        new YdbTable(connector, types, logicalName, tablePath, td)));
+            }
+            for (TableIndex ix : td.getIndexes()) {
+                if (indexName.equals(ix.getName())) {
+                    // Grab the description for the secondary index table.
+                    String indexPath = tablePath + "/" + ix.getName() + "/indexImplTable";
+                    dts.setIncludeShardKeyBounds(true);
+                    tdRes = session.describeTable(indexPath, dts).join();
+                    if (!tdRes.isSuccess()) {
+                        return CompletableFuture.completedFuture(Result.fail(tdRes.getStatus()));
+                    }
+                    TableDescription tdIx = tdRes.getValue();
+                    // Construct the YdbTable object for the index
+                    return CompletableFuture.completedFuture(Result.success(
+                            new YdbTable(connector, types, logicalName, tablePath, td, ix, tdIx)));
+                }
+            }
+            return CompletableFuture.completedFuture(
+                    Result.fail(Status.of(StatusCode.SCHEME_ERROR)
+                            .withIssues(Issue.of("Path not found", Issue.Severity.ERROR))));
+        }).join();
     }
 
     private YdbTable() {
@@ -288,7 +305,9 @@ public class YdbTable implements Table,
 
     @Override
     public WriteBuilder newWriteBuilder(LogicalWriteInfo info) {
-        return new YdbWriteBuilder(this, info, false);
+        boolean truncate = info.options().getBoolean(YdbOptions.TRUNCATE, false);
+        LOG.debug("Creating YdbWriteBuilder for table {} with truncate={}", tablePath, truncate);
+        return new YdbWriteBuilder(this, info, truncate);
     }
 
     @Override

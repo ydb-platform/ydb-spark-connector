@@ -26,6 +26,9 @@ import tech.ydb.table.settings.PartitioningSettings;
  */
 public class YdbCreateTable extends YdbPropertyHelper {
 
+    private static final org.slf4j.Logger LOG
+            = org.slf4j.LoggerFactory.getLogger(YdbCreateTable.class);
+
     private final String tablePath;
     private final List<YdbFieldInfo> fields;
     private final List<String> primaryKey;
@@ -47,6 +50,11 @@ public class YdbCreateTable extends YdbPropertyHelper {
     }
 
     public CompletableFuture<Status> createTable(Session session) {
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Creating table {} with fields {} and PK {}",
+                    tablePath, fields, primaryKey);
+        }
+
         TableDescription.Builder tdb = TableDescription.newBuilder();
         for (YdbFieldInfo yfi : fields) {
             if (yfi.isNullable()) {
@@ -93,12 +101,23 @@ public class YdbCreateTable extends YdbPropertyHelper {
         return fields;
     }
 
-    public static List<String> makePrimaryKey(List<YdbFieldInfo> fields, Map<String, String> properties) {
+    private static List<String> makePrimaryKey(List<YdbFieldInfo> fields, Map<String, String> properties) {
         String value = properties.get(YdbOptions.PRIMARY_KEY);
         if (value == null) {
-            value = fields.get(0).getName();
+            String autoPk = grabAutoPk(fields);
+            return Arrays.asList(new String[]{autoPk});
         }
         return Arrays.asList(value.split("[,]"));
+    }
+
+    private static String grabAutoPk(List<YdbFieldInfo> fields) {
+        for (YdbFieldInfo yfi : fields) {
+            if (YdbOptions.AUTO_PK.equalsIgnoreCase(yfi.getName())) {
+                return yfi.getName();
+            }
+        }
+        fields.add(new YdbFieldInfo(YdbOptions.AUTO_PK, YdbFieldType.Text, false));
+        return YdbOptions.AUTO_PK;
     }
 
 }

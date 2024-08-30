@@ -33,4 +33,9 @@ public class YdbFieldInfo implements Serializable {
         return nullable;
     }
 
+    @Override
+    public String toString() {
+        return name + ":" + type + (nullable ? "?" : "");
+    }
+
 }

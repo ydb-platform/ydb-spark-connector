@@ -1,60 +1,51 @@
 package tech.ydb.spark.connector.impl;
 
-import org.apache.spark.sql.types.StructType;
-import org.slf4j.Logger;
-import tech.ydb.core.Issue;
+import java.util.Map;
+
 import tech.ydb.core.Result;
 import tech.ydb.core.Status;
 import tech.ydb.core.StatusCode;
+import tech.ydb.spark.connector.YdbOptions;
 import tech.ydb.spark.connector.YdbTable;
 import tech.ydb.spark.connector.YdbTypes;
-import tech.ydb.table.Session;
-import tech.ydb.table.description.TableDescription;
-import tech.ydb.table.description.TableIndex;
-import tech.ydb.table.settings.DescribeTableSettings;
+import tech.ydb.table.SessionRetryContext;
 
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
+/**
+ * Generate the normalized table identity from the table path structure.
+ *
+ * @author VVBondarenko
+ * @author zinal
+ */
+public class YdbIntrospectTable extends YdbOptions {
 
-import static tech.ydb.spark.connector.YdbOptions.DBTABLE;
-
-public class YdbIntrospectTable {
-    private static final Logger LOG = org.slf4j.LoggerFactory.getLogger(YdbIntrospectTable.class);
-
-    private final Map<String, String> props;
-    private final StructType schema;
+    private static final org.slf4j.Logger LOG
+            = org.slf4j.LoggerFactory.getLogger(YdbIntrospectTable.class);
 
     private final YdbConnector connector;
     private final YdbTypes types;
 
-    private String tablePath;
-    private String logicalName;
-    private String indexName;
-    private String indexPath;
-
+    private final String inputTable;
+    private final String tablePath;
+    private final String logicalName;
+    private final String indexName;
 
     public YdbIntrospectTable(Map<String, String> props) {
-        this(props, null);
-    }
+        this.connector = YdbRegistry.getOrCreate(props);
+        this.types = new YdbTypes(props);
 
-    public YdbIntrospectTable(Map<String, String> props, StructType schema) {
-        this.props = props;
-        this.schema = schema;
-        connector = YdbRegistry.getOrCreate(props);
-        types = new YdbTypes(props);
-
-        resolveIdentity(props.get(DBTABLE), connector.getDatabase());
-    }
-
-    private void resolveIdentity(String inputTable, String database) {
+        // Check that table path is provided
+        this.inputTable = props.get(DBTABLE);
         if (inputTable == null || inputTable.length() == 0) {
-            throw new IllegalArgumentException("Missing table name property");
+            throw new IllegalArgumentException("Missing property: " + DBTABLE);
         }
+        final String database = this.connector.getDatabase();
+
+        LOG.debug("Locating table {} in database {}", inputTable, database);
+
         // Adjust the input path and build the logical name
         String localPath = inputTable;
         String localName;
         String localIxName = null;
-        String localIxPath = null;
         if (localPath.startsWith("/")) {
             if (!localPath.startsWith(database + "/")) {
                 throw new IllegalArgumentException("Database name ["
@@ -75,7 +66,6 @@ public class YdbIntrospectTable {
             if (localIxName == null || localIxName.length() == 0) {
                 throw new IllegalArgumentException("Illegal index table reference [" + inputTable + "]");
             }
-            localIxPath = localPath;
             String tabName = parts[parts.length - 3];
             final StringBuilder sbLogical = new StringBuilder();
             final StringBuilder sbPath = new StringBuilder();
@@ -94,6 +84,8 @@ public class YdbIntrospectTable {
                 sbLogical.append("/");
             }
             sbPath.append(tabName);
+            // Underscores '_' to mimic the results of YdbCatalog.mergeLocal(),
+            // which calls YdbCatalog.safeName() effectivly replacing '/' -> '_'.
             sbLogical.append("ix_").append(tabName).append("_").append(localIxName);
             localName = sbLogical.toString();
             localPath = sbPath.toString();
@@ -101,54 +93,41 @@ public class YdbIntrospectTable {
         this.tablePath = localPath;
         this.logicalName = localName;
         this.indexName = localIxName;
-        this.indexPath = localIxPath;
 
-        LOG.debug("Table identity: {}, {}, {}, {}", logicalName, tablePath, indexName, indexPath);
+        LOG.debug("Table identity: {}, {}, {}", this.logicalName, this.tablePath, this.indexName);
     }
 
-    public CompletableFuture<Result<YdbTable>> run(Session session) {
-        DescribeTableSettings dts = new DescribeTableSettings();
-        dts.setIncludeShardKeyBounds(indexName == null); // shard keys for table case
-        Result<TableDescription> tdRes = session.describeTable(tablePath, dts).join();
-        if (!tdRes.isSuccess()) {
-            if (schema == null) {
-                LOG.debug("Failed to load table description for {}: {}", tablePath, tdRes.getStatus());
-                return CompletableFuture.completedFuture(Result.fail(tdRes.getStatus()));
+    public YdbTable load(boolean allowMissing) {
+        Result<YdbTable> retval = YdbTable.lookup(connector, types,
+                tablePath, logicalName, indexName);
+        if (!retval.isSuccess()) {
+            Status status = retval.getStatus();
+            if (StatusCode.SCHEME_ERROR.equals(status.getCode())) {
+                if (allowMissing) {
+                    return null;
+                }
+                status.expectSuccess("Table not found: " + inputTable);
             }
-            // not such table => create a new, but it's not really related to this action
-            return CompletableFuture.completedFuture(Result.success(YdbTable.buildShell()));
+            status.expectSuccess("Failed to locate table " + inputTable);
         }
-        TableDescription td = tdRes.getValue();
-        if (indexName == null) {
-            return CompletableFuture.completedFuture(Result.success(
-                    new YdbTable(connector, types, logicalName, tablePath, td)));
-        }
-        dts.setIncludeShardKeyBounds(true); // shard keys for index case
-        tdRes = session.describeTable(indexPath, dts).join();
-        if (!tdRes.isSuccess()) {
-            LOG.debug("Failed to load index description for {}: {}", indexPath, tdRes.getStatus());
-            return CompletableFuture.completedFuture(Result.fail(tdRes.getStatus()));
-        }
-        for (TableIndex ix : td.getIndexes()) {
-            if (indexName.equals(ix.getName())) {
-                TableDescription tdIx = tdRes.getValue();
-                return CompletableFuture.completedFuture(Result.success(
-                        new YdbTable(connector, types, logicalName, tablePath, td, ix, tdIx)));
-            }
-        }
-        LOG.debug("Missing index description in the table for {}", indexPath);
-        return CompletableFuture.completedFuture(
-                Result.fail(Status.of(StatusCode.SCHEME_ERROR)
-                        .withIssues(Issue.of("Path not found", Issue.Severity.ERROR))));
+        return retval.getValue();
     }
 
-    public YdbTable apply() {
-        return connector.getRetryCtx()
-                .supplyResult(this::run)
-                .join()
-                .getValue();
+    public SessionRetryContext getRetryCtx() {
+        return connector.getRetryCtx();
     }
 
+    public YdbConnector getConnector() {
+        return connector;
+    }
+
+    public YdbTypes getTypes() {
+        return types;
+    }
+
+    public String getInputTable() {
+        return inputTable;
+    }
 
     public String getTablePath() {
         return tablePath;
@@ -162,15 +141,4 @@ public class YdbIntrospectTable {
         return indexName;
     }
 
-    public String getIndexPath() {
-        return indexPath;
-    }
-
-    public YdbConnector getConnector() {
-        return connector;
-    }
-
-    public YdbTypes getTypes() {
-        return types;
-    }
 }

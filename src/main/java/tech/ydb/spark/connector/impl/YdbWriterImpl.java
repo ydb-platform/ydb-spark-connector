@@ -1,10 +1,13 @@
 package tech.ydb.spark.connector.impl;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 import org.apache.spark.sql.catalyst.InternalRow;
@@ -38,6 +41,9 @@ public class YdbWriterImpl implements DataWriter<InternalRow> {
 
     private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(YdbWriterImpl.class);
 
+    private final int partitionId;
+    private final long taskId;
+
     private final YdbTypes types;
     private final List<StructField> inputFields;
     private final List<YdbFieldInfo> statementFields;
@@ -52,7 +58,9 @@ public class YdbWriterImpl implements DataWriter<InternalRow> {
     private final List<Value<?>> currentInput;
     private CompletableFuture<Status> currentStatus;
 
-    public YdbWriterImpl(YdbWriteOptions options) {
+    public YdbWriterImpl(YdbWriteOptions options, int partitionId, long taskId) {
+        this.partitionId = partitionId;
+        this.taskId = taskId;
         this.types = options.getTypes();
         this.inputFields = new ArrayList<>(JavaConverters.asJavaCollection(
                 options.getInputType().toList()));
@@ -67,8 +75,8 @@ public class YdbWriterImpl implements DataWriter<InternalRow> {
         this.currentInput = new ArrayList<>();
         this.currentStatus = null;
         if (LOG.isDebugEnabled()) {
-            LOG.debug("YQL statement: {}", this.sqlStatement);
-            LOG.debug("Input structure: {}", this.inputType);
+            LOG.debug("[{}, {}] YQL statement: {}", partitionId, taskId, this.sqlStatement);
+            LOG.debug("[{}, {}] Input structure: {}", partitionId, taskId, this.inputType);
         }
     }
 
@@ -92,24 +100,43 @@ public class YdbWriterImpl implements DataWriter<InternalRow> {
         for (int i = 0; i < numFields; ++i) {
             YdbFieldInfo yfi = statementFields.get(i);
             final Object value = record.get(i, inputFields.get(i).dataType());
-            Value<?> conv = types.convertToYdb(value, yfi.getType());
-            if (yfi.isNullable()) {
-                if (conv.getType().getKind() != Type.Kind.OPTIONAL) {
-                    conv = conv.makeOptional();
-                }
-            }
-            currentRow.put(yfi.getName(), conv);
+            currentRow.put(yfi.getName(), convertValue(value, yfi));
+        }
+        if (statementFields.size() > numFields) {
+            // The last field should be the auto-generated PK.
+            YdbFieldInfo yfi = statementFields.get(numFields);
+            currentRow.put(yfi.getName(), convertValue(randomPk(), yfi));
         }
         // LOG.debug("Converted input row: {}", currentRow);
         return currentRow;
     }
 
+    private Value<?> convertValue(Object value, YdbFieldInfo yfi) {
+        Value<?> conv = types.convertToYdb(value, yfi.getType());
+        if (yfi.isNullable()) {
+            if (conv.getType().getKind() != Type.Kind.OPTIONAL) {
+                conv = conv.makeOptional();
+            }
+        }
+        return conv;
+    }
+
+    private String randomPk() {
+        UUID uuid = UUID.randomUUID();
+        ByteBuffer bb = ByteBuffer.allocate(16);
+        bb.putLong(uuid.getMostSignificantBits());
+        bb.putLong(uuid.getLeastSignificantBits());
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bb.array());
+    }
+
     private void startNewStatement(List<Value<?>> input) {
-        LOG.debug("Sending a batch of {} rows into table {}", input.size(), tablePath);
+        LOG.debug("[{}, {}] Sending a batch of {} rows into table {}",
+                partitionId, taskId, input.size(), tablePath);
         if (currentStatus != null) {
             currentStatus.join().expectSuccess();
             currentStatus = null;
-            LOG.debug("Previous async batch completed for table {}", tablePath);
+            LOG.debug("[{}, {}] Previous async batch completed for table {}",
+                    partitionId, taskId, tablePath);
         }
         // The list is being copied here.
         // DO NOT move this call into the async methods below.
@@ -118,14 +145,16 @@ public class YdbWriterImpl implements DataWriter<InternalRow> {
             currentStatus = connector.getRetryCtx().supplyStatus(
                     session -> session.executeBulkUpsert(
                             tablePath, value, new BulkUpsertSettings()));
-            LOG.debug("Async bulk upsert started on table {}", tablePath);
+            LOG.debug("[{}, {}] Async bulk upsert started on table {}",
+                    partitionId, taskId, tablePath);
         } else {
             currentStatus = connector.getRetryCtx().supplyStatus(
                     session -> session.executeDataQuery(sqlStatement,
                             TxControl.serializableRw().setCommitTx(true),
                             Params.of("$input", value))
                             .thenApply(result -> result.getStatus()));
-            LOG.debug("Async upsert transaction started on table {}", tablePath);
+            LOG.debug("[{}, {}] Async upsert transaction started on table {}",
+                    partitionId, taskId, tablePath);
         }
     }
 
@@ -140,15 +169,19 @@ public class YdbWriterImpl implements DataWriter<InternalRow> {
         if (currentStatus != null) {
             currentStatus.join().expectSuccess();
             currentStatus = null;
-            LOG.debug("Final async batch completed for table {}", tablePath);
+            LOG.debug("[{}, {}] Final async batch completed for table {}",
+                    partitionId, taskId, tablePath);
+        } else {
+            LOG.debug("[{}, {}] Empty commit call for table {}",
+                    partitionId, taskId, tablePath);
         }
-        LOG.debug("Batch completed for table {}", tablePath);
         // All rows have been written successfully
         return new YdbWriteCommit();
     }
 
     @Override
     public void abort() throws IOException {
+        LOG.debug("[{}, {}] Aborting writes for table {}", partitionId, taskId, tablePath);
         currentInput.clear();
         if (currentStatus != null) {
             currentStatus.cancel(true);
@@ -159,6 +192,7 @@ public class YdbWriterImpl implements DataWriter<InternalRow> {
 
     @Override
     public void close() throws IOException {
+        LOG.debug("[{}, {}] Closing the writer for table {}", partitionId, taskId, tablePath);
         currentInput.clear();
         if (currentStatus != null) {
             currentStatus.cancel(true);
@@ -183,6 +217,10 @@ public class YdbWriterImpl implements DataWriter<InternalRow> {
                 YdbFieldInfo yfi = options.getFieldsList().get(pos);
                 out.add(yfi);
             }
+        }
+        if (options.getGeneratedPk() != null) {
+            // Generated PK is the last column, if one is presented at all.
+            out.add(new YdbFieldInfo(options.getGeneratedPk(), YdbFieldType.Text, false));
         }
         return out;
     }
