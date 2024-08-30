@@ -292,7 +292,9 @@ public class YdbTable implements Table,
 
     @Override
     public WriteBuilder newWriteBuilder(LogicalWriteInfo info) {
-        return new YdbWriteBuilder(this, info, false);
+        boolean truncate = info.options().getBoolean(YdbOptions.TRUNCATE, false);
+        LOG.debug("Creating YdbWriteBuilder for table {} with truncate={}", tablePath, truncate);
+        return new YdbWriteBuilder(this, info, truncate);
     }
 
     @Override

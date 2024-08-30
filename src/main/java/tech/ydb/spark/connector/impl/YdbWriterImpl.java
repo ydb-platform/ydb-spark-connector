@@ -38,6 +38,9 @@ public class YdbWriterImpl implements DataWriter<InternalRow> {
 
     private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(YdbWriterImpl.class);
 
+    private final int partitionId;
+    private final long taskId;
+
     private final YdbTypes types;
     private final List<StructField> inputFields;
     private final List<YdbFieldInfo> statementFields;
@@ -52,7 +55,9 @@ public class YdbWriterImpl implements DataWriter<InternalRow> {
     private final List<Value<?>> currentInput;
     private CompletableFuture<Status> currentStatus;
 
-    public YdbWriterImpl(YdbWriteOptions options) {
+    public YdbWriterImpl(YdbWriteOptions options, int partitionId, long taskId) {
+        this.partitionId = partitionId;
+        this.taskId = taskId;
         this.types = options.getTypes();
         this.inputFields = new ArrayList<>(JavaConverters.asJavaCollection(
                 options.getInputType().toList()));
@@ -67,8 +72,8 @@ public class YdbWriterImpl implements DataWriter<InternalRow> {
         this.currentInput = new ArrayList<>();
         this.currentStatus = null;
         if (LOG.isDebugEnabled()) {
-            LOG.debug("YQL statement: {}", this.sqlStatement);
-            LOG.debug("Input structure: {}", this.inputType);
+            LOG.debug("[{}, {}] YQL statement: {}", partitionId, taskId, this.sqlStatement);
+            LOG.debug("[{}, {}] Input structure: {}", partitionId, taskId, this.inputType);
         }
     }
 
@@ -105,11 +110,13 @@ public class YdbWriterImpl implements DataWriter<InternalRow> {
     }
 
     private void startNewStatement(List<Value<?>> input) {
-        LOG.debug("Sending a batch of {} rows into table {}", input.size(), tablePath);
+        LOG.debug("[{}, {}] Sending a batch of {} rows into table {}",
+                partitionId, taskId, input.size(), tablePath);
         if (currentStatus != null) {
             currentStatus.join().expectSuccess();
             currentStatus = null;
-            LOG.debug("Previous async batch completed for table {}", tablePath);
+            LOG.debug("[{}, {}] Previous async batch completed for table {}",
+                    partitionId, taskId, tablePath);
         }
         // The list is being copied here.
         // DO NOT move this call into the async methods below.
@@ -118,14 +125,16 @@ public class YdbWriterImpl implements DataWriter<InternalRow> {
             currentStatus = connector.getRetryCtx().supplyStatus(
                     session -> session.executeBulkUpsert(
                             tablePath, value, new BulkUpsertSettings()));
-            LOG.debug("Async bulk upsert started on table {}", tablePath);
+            LOG.debug("[{}, {}] Async bulk upsert started on table {}",
+                    partitionId, taskId, tablePath);
         } else {
             currentStatus = connector.getRetryCtx().supplyStatus(
                     session -> session.executeDataQuery(sqlStatement,
                             TxControl.serializableRw().setCommitTx(true),
                             Params.of("$input", value))
                             .thenApply(result -> result.getStatus()));
-            LOG.debug("Async upsert transaction started on table {}", tablePath);
+            LOG.debug("[{}, {}] Async upsert transaction started on table {}",
+                    partitionId, taskId, tablePath);
         }
     }
 
@@ -140,9 +149,11 @@ public class YdbWriterImpl implements DataWriter<InternalRow> {
         if (currentStatus != null) {
             currentStatus.join().expectSuccess();
             currentStatus = null;
-            LOG.debug("Final async batch completed for table {}", tablePath);
+            LOG.debug("[{}, {}] Final async batch completed for table {}",
+                    partitionId, taskId, tablePath);
         } else {
-            LOG.debug("Empty commit call for table {}", tablePath);
+            LOG.debug("[{}, {}] Empty commit call for table {}",
+                    partitionId, taskId, tablePath);
         }
         // All rows have been written successfully
         return new YdbWriteCommit();
@@ -150,7 +161,7 @@ public class YdbWriterImpl implements DataWriter<InternalRow> {
 
     @Override
     public void abort() throws IOException {
-        LOG.debug("Aborting writes for table {}", tablePath);
+        LOG.debug("[{}, {}] Aborting writes for table {}", partitionId, taskId, tablePath);
         currentInput.clear();
         if (currentStatus != null) {
             currentStatus.cancel(true);
@@ -161,7 +172,7 @@ public class YdbWriterImpl implements DataWriter<InternalRow> {
 
     @Override
     public void close() throws IOException {
-        LOG.debug("Closing the writer for table {}", tablePath);
+        LOG.debug("[{}, {}] Closing the writer for table {}", partitionId, taskId, tablePath);
         currentInput.clear();
         if (currentStatus != null) {
             currentStatus.cancel(true);

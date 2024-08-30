@@ -236,7 +236,7 @@ val someDF = spark.createDataFrame(
 )
 // writing data to the existing table available via "ydb1" catalog
 someDF.write.mode("append").saveAsTable("ydb1.table3")
-
+someDF.write.option("truncate", "true").mode("append").saveAsTable("ydb1.table3")
 ```
 
 ## Accessing YDB with Python/Spark
@@ -257,13 +257,15 @@ spark.table("ydb1.fhrw0").write.parquet("file:///tmp/ydb-fhrw0")
 
 Extra lines in `log4j2.properties`:
 
-```
+```java.properties
 logger.ydb0.name = tech.ydb.spark
 logger.ydb0.level = debug
 logger.ydb1.name = tech.ydb
 logger.ydb1.level = debug
-logger.ydb2.name = tech.ydb.core.impl.discovery
-logger.ydb2.level = info
-logger.ydb3.name = tech.ydb.shaded
+logger.ydb2.name = tech.ydb.core.impl
+logger.ydb2.level = warn
+logger.ydb3.name = tech.ydb.table.impl
 logger.ydb3.level = warn
+logger.ydb4.name = tech.ydb.shaded
+logger.ydb4.level = warn
 ```

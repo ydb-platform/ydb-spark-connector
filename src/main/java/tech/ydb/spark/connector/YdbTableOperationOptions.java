@@ -43,6 +43,16 @@ public abstract class YdbTableOperationOptions implements Serializable {
         }
     }
 
+    public YdbTableOperationOptions(YdbTableOperationOptions src) {
+        this.catalogName = src.catalogName;
+        this.connectOptions = new HashMap<>(src.connectOptions);
+        this.types = src.types;
+        this.tableName = src.tableName;
+        this.tablePath = src.tablePath;
+        this.fieldsList = new ArrayList<>(src.fieldsList);
+        this.fieldsMap = new HashMap<>(src.fieldsMap);
+    }
+
     public String getCatalogName() {
         return catalogName;
     }

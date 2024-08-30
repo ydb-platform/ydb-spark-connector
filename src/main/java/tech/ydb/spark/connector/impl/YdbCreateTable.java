@@ -26,6 +26,9 @@ import tech.ydb.table.settings.PartitioningSettings;
  */
 public class YdbCreateTable extends YdbPropertyHelper {
 
+    private static final org.slf4j.Logger LOG
+            = org.slf4j.LoggerFactory.getLogger(YdbCreateTable.class);
+
     private final String tablePath;
     private final List<YdbFieldInfo> fields;
     private final List<String> primaryKey;
@@ -47,6 +50,11 @@ public class YdbCreateTable extends YdbPropertyHelper {
     }
 
     public CompletableFuture<Status> createTable(Session session) {
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Creating table {} with fields {} and PK {}",
+                    tablePath, fields, primaryKey);
+        }
+
         TableDescription.Builder tdb = TableDescription.newBuilder();
         for (YdbFieldInfo yfi : fields) {
             if (yfi.isNullable()) {
@@ -96,7 +104,7 @@ public class YdbCreateTable extends YdbPropertyHelper {
     public static List<String> makePrimaryKey(List<YdbFieldInfo> fields, Map<String, String> properties) {
         String value = properties.get(YdbOptions.PRIMARY_KEY);
         if (value == null) {
-            value = fields.get(0).getName();
+            throw new IllegalArgumentException("Cannot create table without primary_key option");
         }
         return Arrays.asList(value.split("[,]"));
     }

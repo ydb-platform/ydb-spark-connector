@@ -248,6 +248,7 @@ public class YdbCatalog extends YdbOptions
             throw new UnsupportedOperationException("Cannot drop index table " + ident);
         }
         final String tablePath = mergePath(ident);
+        LOG.debug("Dropping table {}", tablePath);
         Result<TableDescription> res = getRetryCtx().supplyResult(session -> {
             final DescribeTableSettings dts = new DescribeTableSettings();
             dts.setIncludeShardKeyBounds(false);

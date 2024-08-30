@@ -57,6 +57,18 @@ public class YdbWriteOptions extends YdbTableOperationOptions implements Seriali
         this.truncate = truncate;
     }
 
+    public YdbWriteOptions(YdbWriteOptions src, boolean truncate) {
+        super(src);
+        this.tableType = src.tableType;
+        this.inputType = src.inputType;
+        this.mapByNames = src.mapByNames;
+        this.queryId = src.queryId;
+        this.ingestMethod = src.ingestMethod;
+        this.options = new HashMap<>(src.options);
+        this.maxBulkRows = src.maxBulkRows;
+        this.truncate = truncate;
+    }
+
     public String getQueryId() {
         return queryId;
     }

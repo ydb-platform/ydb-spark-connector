@@ -20,6 +20,8 @@ import scala.collection.JavaConverters;
  */
 public class YdbWriteBuilder implements WriteBuilder, SupportsTruncate {
 
+    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(YdbWriteBuilder.class);
+
     private final YdbTable table;
     private final LogicalWriteInfo info;
     private final boolean truncate;
@@ -32,8 +34,15 @@ public class YdbWriteBuilder implements WriteBuilder, SupportsTruncate {
 
     @Override
     public Write build() {
+        LOG.debug("Creating YdbWrite for table {}", table.tablePath());
         boolean mapByNames = validateSchemas(table.schema(), info.schema());
         return new YdbWrite(table, info, mapByNames, truncate);
+    }
+
+    @Override
+    public WriteBuilder truncate() {
+        LOG.debug("Truncation requested for table {}", table.tablePath());
+        return new YdbWriteBuilder(table, info, true);
     }
 
     private boolean validateSchemas(StructType actualSchema, StructType inputSchema) {
@@ -78,11 +87,6 @@ public class YdbWriteBuilder implements WriteBuilder, SupportsTruncate {
     private boolean isAssignableFrom(DataType dst, DataType src) {
         // TODO: validate data type compatibility
         return true;
-    }
-
-    @Override
-    public WriteBuilder truncate() {
-        return new YdbWriteBuilder(table, info, true);
     }
 
 }

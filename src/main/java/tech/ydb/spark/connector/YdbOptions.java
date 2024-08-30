@@ -110,6 +110,11 @@ public abstract class YdbOptions {
     public static final String PRIMARY_KEY = "primary_key";
 
     /**
+     * YDB table's truncate option when writing to the existing table.
+     */
+    public static final String TRUNCATE = "truncate";
+
+    /**
      * YDB table type: - row-organized (table), - secondary index (index), - column-organized
      * (columnshard).
      */

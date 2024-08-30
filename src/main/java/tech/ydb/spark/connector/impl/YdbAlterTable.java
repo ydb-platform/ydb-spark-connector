@@ -28,6 +28,9 @@ import tech.ydb.table.settings.PartitioningSettings;
  */
 public class YdbAlterTable extends YdbPropertyHelper {
 
+    private static final org.slf4j.Logger LOG
+            = org.slf4j.LoggerFactory.getLogger(YdbAlterTable.class);
+
     final YdbTypes types;
     final String tablePath;
     final TableDescription td;
@@ -147,6 +150,7 @@ public class YdbAlterTable extends YdbPropertyHelper {
     }
 
     public CompletableFuture<Status> run(Session session) {
+        LOG.debug("Altering table {}", tablePath);
         final AlterTableSettings settings = new AlterTableSettings();
         for (YdbFieldInfo yfi : addColumns.values()) {
             if (yfi.isNullable()) {
