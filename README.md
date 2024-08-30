@@ -199,13 +199,13 @@ spark.table("ydb1.`ix/test2_fhrw/ix1`").show(10, false)
 // read from ydb, write to parquet files
 spark.table("ydb1.test2_fhrw").write.parquet("s3a://mzinal-dproc1/tests/test2_fhrw");
 
-val ydb_url = "grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1gfvslmokutuvt2g019/etnd6mguvlul8qm4psvn"
+val ydb_url = "grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1g3o4minpkuh10pd2rj/etnfjib1gmua6mvvgdcl"
 
 // direct specification of connection properties
 val df1 = (spark.read.format("ydb")
     .option("url", ydb_url)
     .option("auth.mode", "META")
-    .option("table", "test2_fhrw")
+    .option("dbtable", "test2_fhrw")
     .load)
 df1.select("created_date", "complaint_type", "city").show(10, false)
 
@@ -213,7 +213,7 @@ df1.select("created_date", "complaint_type", "city").show(10, false)
 val df2 = (spark.read.format("ydb")
     .option("url", ydb_url)
     .option("auth.mode", "META")
-    .option("table", "test2_fhrw/ix1/indexImplTable")
+    .option("dbtable", "test2_fhrw/ix1/indexImplTable")
     .load)
 df2.filter(df2("closed_date").gt(to_timestamp(lit("2010-02-01")))).show(10, false)
 
@@ -224,7 +224,10 @@ import org.apache.spark.sql.Row
 val someData = Seq(
   Row(4, 501, 401, 4001),
   Row(4, 502, 402, 4002),
-  Row(4, 503, 403, 4003)
+  Row(4, 503, 403, 4003),
+  Row(4, 505, 405, 4005),
+  Row(4, 506, 406, 4006),
+  Row(4, 507, 407, 4007)
 )
 val someSchema = List(
   StructField("a_ref", IntegerType, true),
@@ -242,6 +245,14 @@ someDF.write.mode("append").saveAsTable("ydb1.table3")
 someDF.write.option("truncate", "true").mode("append").saveAsTable("ydb1.table3")
 // create the new table in the "ydb1" catalog
 someDF.write.saveAsTable("ydb1.table4")
+// create new or replace the existing table table5
+(someDF.write.format("ydb")
+    .option("url", ydb_url)
+    .option("auth.mode", "KEY")
+    .option("auth.sakey.file", "/home/zinal/Keys/delta1_sa.json")
+    .option("dbtable", "table5")
+    .mode("overwrite")
+    .save)
 ```
 
 ## Accessing YDB with Python/Spark

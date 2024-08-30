@@ -10,7 +10,10 @@ import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 import tech.ydb.core.Result;
+import tech.ydb.core.Status;
+import tech.ydb.core.StatusCode;
 import tech.ydb.spark.connector.impl.YdbConnector;
+import tech.ydb.spark.connector.impl.YdbCreateTable;
 import tech.ydb.spark.connector.impl.YdbRegistry;
 
 /**
@@ -24,8 +27,6 @@ public class YdbTableProvider extends YdbOptions implements TableProvider, DataS
     private static final org.slf4j.Logger LOG
             = org.slf4j.LoggerFactory.getLogger(YdbTableProvider.class);
 
-    private YdbTable table;
-
     /**
      * "Implementations must have a public, 0-arg constructor".
      */
@@ -38,62 +39,69 @@ public class YdbTableProvider extends YdbOptions implements TableProvider, DataS
     }
 
     @Override
+    public boolean supportsExternalMetadata() {
+        return true;
+    }
+
+    @Override
     public StructType inferSchema(CaseInsensitiveStringMap options) {
-        return getOrLoadTable(options).schema();
+        return new Loader(options).load(false).schema();
     }
 
     @Override
     public Transform[] inferPartitioning(CaseInsensitiveStringMap options) {
-        return getOrLoadTable(options).partitioning();
+        return new Loader(options).load(false).partitioning();
     }
 
     @Override
     public Table getTable(StructType schema, Transform[] partitioning, Map<String, String> properties) {
-        return getOrLoadTable(properties);
-    }
-
-    private YdbTable getOrLoadTable(Map<String, String> props) {
-        // Check that table path is provided
-        final String inputTable = props.get(DBTABLE);
-        if (inputTable == null || inputTable.length() == 0) {
-            throw new IllegalArgumentException("Missing table name property");
+        final Loader loader = new Loader(properties);
+        if (schema == null) {
+            // No schema provided, so the table must exist.
+            return loader.load(false);
         }
-        // Grab the connector and type convertor.
-        final YdbConnector connector = YdbRegistry.getOrCreate(props);
-        final YdbTypes types = new YdbTypes(props);
-        // Adjust the input path and build the logical name
-        final TableIdentity ti = new TableIdentity(inputTable, connector.getDatabase());
-        // Return the pre-loaded table if one is available
-        synchronized (this) {
-            if (table != null) {
-                if (ti.logicalName.equals(table.name()) && connector == table.getConnector()) {
-                    return table;
-                }
-            }
+        // We have the schema, so the table may need to be created.
+        YdbTable table = loader.load(true);
+        if (table != null) {
+            // Table already exists.
+            return table;
         }
-        LOG.debug("Table identity: {}, {}, {}", ti.logicalName, ti.tablePath, ti.indexName);
-        Result<YdbTable> retval = YdbTable.lookup(connector, types,
-                ti.tablePath, ti.logicalName, ti.indexName);
-        retval.getStatus().expectSuccess("Failed to locate table " + inputTable);
-        synchronized (this) {
-            table = retval.getValue();
-        }
-        return retval.getValue();
+        // No such table - creating it.
+        final YdbCreateTable action = new YdbCreateTable(loader.tablePath,
+                YdbCreateTable.convert(loader.connector.getDefaultTypes(), schema),
+                properties);
+        loader.connector.getRetryCtx().supplyStatus(session -> action.createTable(session)).join()
+                .expectSuccess("Failed to create table: " + loader.inputTable);
+        // Trying to load one once again.
+        return loader.load(false);
     }
 
     /**
      * Generate the normalized table identity from the table path structure.
      */
-    static final class TableIdentity {
+    final class Loader {
 
+        final YdbConnector connector;
+        final YdbTypes types;
+
+        final String inputTable;
         final String tablePath;
         final String logicalName;
         final String indexName;
 
-        TableIdentity(String inputTable, String database) {
+        Loader(Map<String, String> props) {
+            this.connector = YdbRegistry.getOrCreate(props);
+            this.types = new YdbTypes(props);
+
+            // Check that table path is provided
+            this.inputTable = props.get(DBTABLE);
             if (inputTable == null || inputTable.length() == 0) {
-                throw new IllegalArgumentException("Missing table name property");
+                throw new IllegalArgumentException("Missing property: " + DBTABLE);
             }
+            final String database = this.connector.getDatabase();
+
+            LOG.debug("Locating table {} in database {}", inputTable, database);
+
             // Adjust the input path and build the logical name
             String localPath = inputTable;
             String localName;
@@ -145,6 +153,24 @@ public class YdbTableProvider extends YdbOptions implements TableProvider, DataS
             this.tablePath = localPath;
             this.logicalName = localName;
             this.indexName = localIxName;
+
+            LOG.debug("Table identity: {}, {}, {}", this.logicalName, this.tablePath, this.indexName);
+        }
+
+        YdbTable load(boolean allowMissing) {
+            Result<YdbTable> retval = YdbTable.lookup(connector, types,
+                    tablePath, logicalName, indexName);
+            if (!retval.isSuccess()) {
+                Status status = retval.getStatus();
+                if (StatusCode.SCHEME_ERROR.equals(status.getCode())) {
+                    if (allowMissing) {
+                        return null;
+                    }
+                    status.expectSuccess("Table not found: " + inputTable);
+                }
+                status.expectSuccess("Failed to locate table " + inputTable);
+            }
+            return retval.getValue();
         }
     }
 
