@@ -71,10 +71,10 @@ public class YdbTable implements Table,
      * @param connector YDB connector
      * @param types YDB type convertor
      * @param logicalName Table logical name
-     * @param actualPath Table path
+     * @param tablePath Table path
      * @param td Table description object obtained from YDB
      */
-    public YdbTable(YdbConnector connector, YdbTypes types,
+    YdbTable(YdbConnector connector, YdbTypes types,
             String logicalName, String tablePath, TableDescription td) {
         this.connector = connector;
         this.types = types;
@@ -124,7 +124,7 @@ public class YdbTable implements Table,
      * @param ix Index information entry
      * @param tdIx Table description object for the index table
      */
-    public YdbTable(YdbConnector connector, YdbTypes types,
+    YdbTable(YdbConnector connector, YdbTypes types,
             String logicalName, String tablePath,
             TableDescription tdMain, TableIndex ix, TableDescription tdIx) {
         this.connector = connector;
@@ -212,21 +212,7 @@ public class YdbTable implements Table,
         }).join();
     }
 
-    private YdbTable() {
-        connector = null;
-        types = null;
-        logicalName = null;
-        tablePath = null;
-        columns = null;
-        keyColumns = null;
-        keyTypes = null;
-        partitions = null;
-        properties = null;
-        indexPseudoTable = false;
-    }
-
-    private static void convertPartitioningSettings(TableDescription td,
-            Map<String, String> properties) {
+    static void convertPartitioningSettings(TableDescription td, Map<String, String> properties) {
         PartitioningSettings ps = td.getPartitioningSettings();
         if (ps != null) {
             Boolean bv = ps.getPartitioningBySize();
@@ -252,7 +238,7 @@ public class YdbTable implements Table,
         }
     }
 
-    private static Map<String, TableColumn> buildColumnsMap(TableDescription td) {
+    static Map<String, TableColumn> buildColumnsMap(TableDescription td) {
         Map<String, TableColumn> m = new HashMap<>();
         for (TableColumn tc : td.getColumns()) {
             m.put(tc.getName(), tc);
@@ -390,16 +376,4 @@ public class YdbTable implements Table,
         return "YdbTable:" + connector.getCatalogName() + ":" + tablePath;
     }
 
-    public boolean isActualTable() {
-        return true;
-    }
-
-    public static YdbTable buildShell() {
-        return new YdbTable() {
-            @Override
-            public boolean isActualTable() {
-                return false;
-            }
-        };
-    }
 }
