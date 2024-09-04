@@ -121,6 +121,7 @@ The following Spark configuration properties are supported by the YDB connector 
 
 * `batchsize` - max batch rows to be ingested in a single portion, default 500. Use with care, typically should not exceed 1000;
 * `primary_key` - list of comma-separated column names to define the YDB table's primary key (only supported for `CREATE TABLE` operations);
+* `table_type` - one of values 'ROW' (default) or 'COLUMN', determining the store type for the tables being created (only supported for `CREATE TABLE` operations);
 * `truncate` - a boolean value (`true` or `false`) specifying whether the connector should truncate the existing table before writing to it.
 
 ## Using the SQL statements with YDB catalog defined

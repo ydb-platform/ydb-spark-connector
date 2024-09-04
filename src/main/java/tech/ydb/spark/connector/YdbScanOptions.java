@@ -41,11 +41,11 @@ public class YdbScanOptions extends YdbTableOperationOptions implements Serializ
     public YdbScanOptions(YdbTable table) {
         super(table);
         this.actualSchema = table.schema();
-        this.keyColumns = new ArrayList<>(table.keyColumns()); // ensure serializable list
-        this.keyTypes = table.keyTypes();
+        this.keyColumns = new ArrayList<>(table.getKeyColumns()); // ensure serializable list
+        this.keyTypes = table.getKeyTypes();
         this.rangeBegin = new ArrayList<>();
         this.rangeEnd = new ArrayList<>();
-        this.partitions = table.partitions();
+        this.partitions = table.getPartitions();
         this.scanQueueDepth = table.getConnector().getScanQueueDepth();
         this.scanSessionSeconds = table.getConnector().getScanSessionSeconds();
         this.rowLimit = -1;

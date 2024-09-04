@@ -129,6 +129,8 @@ public class YdbCatalog extends YdbOptions
                     if (listIndexes) {
                         listIndexes(namespace, retval, e);
                     }
+                } else if (SchemeOperationProtos.Entry.Type.COLUMN_TABLE.equals(e.getType())) {
+                    retval.add(Identifier.of(namespace, e.getName()));
                 }
             }
             return retval.toArray(new Identifier[0]);

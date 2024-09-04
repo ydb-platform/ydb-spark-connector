@@ -14,6 +14,7 @@ import tech.ydb.core.Status;
 import tech.ydb.spark.connector.YdbFieldInfo;
 import tech.ydb.spark.connector.YdbFieldType;
 import tech.ydb.spark.connector.YdbOptions;
+import tech.ydb.spark.connector.YdbStoreType;
 import tech.ydb.spark.connector.YdbTypes;
 import tech.ydb.table.Session;
 import tech.ydb.table.description.TableDescription;
@@ -32,6 +33,7 @@ public class YdbCreateTable extends YdbPropertyHelper {
     private final String tablePath;
     private final List<YdbFieldInfo> fields;
     private final List<String> primaryKey;
+    private final YdbStoreType storeType;
 
     public YdbCreateTable(String tablePath, List<YdbFieldInfo> fields,
             List<String> primaryKey, Map<String, String> properties) {
@@ -39,6 +41,7 @@ public class YdbCreateTable extends YdbPropertyHelper {
         this.tablePath = tablePath;
         this.fields = fields;
         this.primaryKey = primaryKey;
+        this.storeType = getStoreType(properties);
     }
 
     public YdbCreateTable(String tablePath, List<YdbFieldInfo> fields,
@@ -47,6 +50,7 @@ public class YdbCreateTable extends YdbPropertyHelper {
         this.tablePath = tablePath;
         this.fields = fields;
         this.primaryKey = makePrimaryKey(fields, properties);
+        this.storeType = getStoreType(properties);
     }
 
     public CompletableFuture<Status> createTable(Session session) {
@@ -85,6 +89,17 @@ public class YdbCreateTable extends YdbPropertyHelper {
         ps.setPartitionSize(minSizeMb);
         tdb.setPartitioningSettings(ps);
 
+        switch (storeType) {
+            case ROW:
+                tdb.setStoreType(TableDescription.StoreType.ROW);
+                break;
+            case COLUMN:
+                tdb.setStoreType(TableDescription.StoreType.COLUMN);
+                break;
+            default:
+                break;
+        }
+
         return session.createTable(tablePath, tdb.build());
     }
 
@@ -101,7 +116,7 @@ public class YdbCreateTable extends YdbPropertyHelper {
         return fields;
     }
 
-    private static List<String> makePrimaryKey(List<YdbFieldInfo> fields, Map<String, String> properties) {
+    static List<String> makePrimaryKey(List<YdbFieldInfo> fields, Map<String, String> properties) {
         String value = properties.get(YdbOptions.PRIMARY_KEY);
         if (value == null) {
             String autoPk = grabAutoPk(fields);
@@ -110,7 +125,7 @@ public class YdbCreateTable extends YdbPropertyHelper {
         return Arrays.asList(value.split("[,]"));
     }
 
-    private static String grabAutoPk(List<YdbFieldInfo> fields) {
+    static String grabAutoPk(List<YdbFieldInfo> fields) {
         for (YdbFieldInfo yfi : fields) {
             if (YdbOptions.AUTO_PK.equalsIgnoreCase(yfi.getName())) {
                 return yfi.getName();
@@ -118,6 +133,14 @@ public class YdbCreateTable extends YdbPropertyHelper {
         }
         fields.add(new YdbFieldInfo(YdbOptions.AUTO_PK, YdbFieldType.Text, false));
         return YdbOptions.AUTO_PK;
+    }
+
+    private YdbStoreType getStoreType(Map<String, String> properties) {
+        String value = properties.get(YdbOptions.TABLE_TYPE);
+        if (value == null) {
+            return YdbStoreType.UNSPECIFIED;
+        }
+        return YdbStoreType.valueOf(value.toUpperCase());
     }
 
 }
