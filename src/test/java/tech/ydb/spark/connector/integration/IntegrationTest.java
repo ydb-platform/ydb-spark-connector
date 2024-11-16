@@ -34,7 +34,8 @@ public class IntegrationTest {
     public static final String CATALOG = "spark.sql.catalog.ydb1";
     public static final String TEST_TABLE = "test_table";
 
-    public static GenericContainer<?> ydb = new GenericContainer<>("cr.yandex/yc/yandex-docker-local-ydb:latest")
+    public static final GenericContainer<?> YDB =
+            new GenericContainer<>("cr.yandex/yc/yandex-docker-local-ydb:latest")
             .withCreateContainerCmdModifier(cmd -> cmd.withHostName("localhost"))
             .withNetworkMode("host")
             .withEnv("GRPC_TLS_PORT", "2135")
@@ -43,7 +44,7 @@ public class IntegrationTest {
             .withEnv("YDB_USE_IN_MEMORY_PDISKS", "true");
 
     static {
-        ydb.start();
+        YDB.start();
     }
 
     protected SparkSession spark;
@@ -132,7 +133,6 @@ public class IntegrationTest {
                 .load()
                 .collectAsList();
         assertThat(rows1).hasSize(1);
-
     }
 
     @Test

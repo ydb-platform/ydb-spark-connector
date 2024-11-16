@@ -62,7 +62,7 @@ public class YdbTable implements Table,
     private final ArrayList<YdbFieldType> keyTypes;
     private final ArrayList<YdbKeyRange> partitions;
     private final Map<String, String> properties;
-    private final boolean indexPseudoTable;
+    private final YdbStoreType storeType;
     private StructType schema;
 
     /**
@@ -85,7 +85,7 @@ public class YdbTable implements Table,
         this.keyTypes = new ArrayList<>();
         this.partitions = new ArrayList<>();
         this.properties = new HashMap<>();
-        this.indexPseudoTable = false;
+        this.storeType = convertStoreType(td);
         Map<String, TableColumn> cm = buildColumnsMap(td);
         for (String cname : td.getPrimaryKeys()) {
             TableColumn tc = cm.get(cname);
@@ -104,10 +104,7 @@ public class YdbTable implements Table,
                 }
             }
         }
-        this.properties.put(YdbOptions.TABLE_TYPE, "table"); // TODO: columnshard support
-        this.properties.put(YdbOptions.TABLE_PATH, tablePath);
-        this.properties.put(YdbOptions.PRIMARY_KEY,
-                this.keyColumns.stream().collect(Collectors.joining(",")));
+        fillProperties(this.properties, this.tablePath, this.storeType, this.keyColumns);
         convertPartitioningSettings(td, this.properties);
         LOG.debug("Loaded table {} with {} columns and {} partitions",
                 this.tablePath, this.columns.size(), this.partitions.size());
@@ -136,7 +133,7 @@ public class YdbTable implements Table,
         this.keyTypes = new ArrayList<>();
         this.partitions = new ArrayList<>();
         this.properties = new HashMap<>();
-        this.indexPseudoTable = true;
+        this.storeType = YdbStoreType.INDEX;
         HashSet<String> known = new HashSet<>();
         Map<String, TableColumn> cm = buildColumnsMap(tdMain);
         // Add index key columns
@@ -166,10 +163,7 @@ public class YdbTable implements Table,
                 partitions.add(new YdbKeyRange(kr, connector.getDefaultTypes()));
             }
         }
-        this.properties.put(YdbOptions.TABLE_TYPE, "index");
-        this.properties.put(YdbOptions.TABLE_PATH, tablePath);
-        this.properties.put(YdbOptions.PRIMARY_KEY,
-                this.keyColumns.stream().collect(Collectors.joining(",")));
+        fillProperties(this.properties, this.tablePath, this.storeType, this.keyColumns);
         LOG.debug("Loaded index {} with {} columns and {} partitions",
                 this.tablePath, this.columns.size(), this.partitions.size());
     }
@@ -210,6 +204,29 @@ public class YdbTable implements Table,
                     Result.fail(Status.of(StatusCode.SCHEME_ERROR)
                             .withIssues(Issue.of("Path not found", Issue.Severity.ERROR))));
         }).join();
+    }
+
+    static YdbStoreType convertStoreType(TableDescription td) {
+        /* TODO: implement store type detection
+        switch (td.getStoreType()) {
+            case COLUMN:
+                return YdbStoreType.COLUMN;
+            case ROW:
+                return YdbStoreType.ROW;
+            default:
+                return YdbStoreType.UNSPECIFIED;
+        }
+        */
+        return YdbStoreType.ROW;
+    }
+
+    static void fillProperties(Map<String, String> props, String tablePath,
+            YdbStoreType storeType, List<String> keyColumns) {
+        props.clear();
+        props.put(YdbOptions.TABLE_TYPE, storeType.name());
+        props.put(YdbOptions.TABLE_PATH, tablePath);
+        props.put(YdbOptions.PRIMARY_KEY,
+                keyColumns.stream().collect(Collectors.joining(",")));
     }
 
     static void convertPartitioningSettings(TableDescription td, Map<String, String> properties) {
@@ -269,7 +286,7 @@ public class YdbTable implements Table,
         final Set<TableCapability> c = new HashSet<>();
         c.add(TableCapability.BATCH_READ);
         c.add(TableCapability.ACCEPT_ANY_SCHEMA); // allow YDB to check the schema
-        if (!indexPseudoTable) {
+        if (!YdbStoreType.INDEX.equals(storeType)) {
             // tables support writes, while indexes do not
             c.add(TableCapability.BATCH_WRITE);
             c.add(TableCapability.TRUNCATE);
@@ -322,28 +339,32 @@ public class YdbTable implements Table,
         return new YdbRowLevelBuilder();
     }
 
-    final YdbConnector getConnector() {
+    public YdbConnector getConnector() {
         return connector;
     }
 
-    final YdbTypes getTypes() {
+    public YdbTypes getTypes() {
         return types;
     }
 
-    final String tablePath() {
+    public String getTablePath() {
         return tablePath;
     }
 
-    final List<String> keyColumns() {
+    public List<String> getKeyColumns() {
         return keyColumns;
     }
 
-    final ArrayList<YdbFieldType> keyTypes() {
+    public ArrayList<YdbFieldType> getKeyTypes() {
         return keyTypes;
     }
 
-    final ArrayList<YdbKeyRange> partitions() {
+    public ArrayList<YdbKeyRange> getPartitions() {
         return partitions;
+    }
+
+    public YdbStoreType getStoreType() {
+        return storeType;
     }
 
     private StructField[] mapFields(List<TableColumn> columns) {

@@ -34,14 +34,14 @@ public class YdbWriteBuilder implements WriteBuilder, SupportsTruncate {
 
     @Override
     public Write build() {
-        LOG.debug("Creating YdbWrite for table {}", table.tablePath());
+        LOG.debug("Creating YdbWrite for table {}", table.getTablePath());
         boolean mapByNames = validateSchemas(table.schema(), info.schema());
         return new YdbWrite(table, info, mapByNames, truncate);
     }
 
     @Override
     public WriteBuilder truncate() {
-        LOG.debug("Truncation requested for table {}", table.tablePath());
+        LOG.debug("Truncation requested for table {}", table.getTablePath());
         return new YdbWriteBuilder(table, info, true);
     }
 

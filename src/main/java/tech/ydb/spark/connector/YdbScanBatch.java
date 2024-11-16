@@ -3,6 +3,7 @@ package tech.ydb.spark.connector;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Random;
 
 import org.apache.spark.sql.connector.read.Batch;
 import org.apache.spark.sql.connector.read.InputPartition;
@@ -39,16 +40,19 @@ public class YdbScanBatch implements Batch {
                 new YdbKeyRange.Limit(options.getRangeBegin(), true),
                 new YdbKeyRange.Limit(options.getRangeEnd(), true)
         );
-        InputPartition[] out = partitions.stream()
+        final Random random = new Random();
+        YdbTablePartition[] out = partitions.stream()
                 .map(kr -> kr.intersect(predicates))
                 .filter(kr -> !kr.isEmpty())
-                .map(kr -> new YdbTablePartition(kr))
-                .toArray(InputPartition[]::new);
+                .map(kr -> new YdbTablePartition(random.nextInt(999999999), kr))
+                .toArray(YdbTablePartition[]::new);
         if (LOG.isDebugEnabled()) {
             LOG.debug("Input partitions count {}, filtered partitions count {}",
                     partitions.size(), out.length);
             LOG.debug("Filtered partition ranges: {}", Arrays.toString(out));
         }
+        // Random ordering is better for multiple  concurrent scans with limited parallelism.
+        Arrays.sort(out, (p1, p2) -> Integer.compare(p1.getOrderingKey(), p2.getOrderingKey()));
         return out;
     }
 

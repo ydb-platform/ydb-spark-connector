@@ -35,7 +35,7 @@ public abstract class YdbTableOperationOptions implements Serializable {
         this.connectOptions = new HashMap<>(table.getConnector().getConnectOptions());
         this.types = table.getTypes();
         this.tableName = table.name();
-        this.tablePath = table.tablePath();
+        this.tablePath = table.getTablePath();
         this.fieldsList = table.makeColumns();
         this.fieldsMap = new HashMap<>();
         for (YdbFieldInfo yfi : fieldsList) {
