@@ -207,6 +207,7 @@ public class YdbTable implements Table,
     }
 
     static YdbStoreType convertStoreType(TableDescription td) {
+        /* TODO: implement store type detection
         switch (td.getStoreType()) {
             case COLUMN:
                 return YdbStoreType.COLUMN;
@@ -215,6 +216,8 @@ public class YdbTable implements Table,
             default:
                 return YdbStoreType.UNSPECIFIED;
         }
+        */
+        return YdbStoreType.ROW;
     }
 
     static void fillProperties(Map<String, String> props, String tablePath,

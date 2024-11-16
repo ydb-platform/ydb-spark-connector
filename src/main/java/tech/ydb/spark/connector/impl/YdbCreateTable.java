@@ -82,13 +82,14 @@ public class YdbCreateTable extends YdbPropertyHelper {
         }
         ps.setMinPartitionsCount(minPartitions);
         ps.setMaxPartitionsCount(maxPartitions);
-        long minSizeMb = getLongOption(YdbOptions.AP_PART_SIZE_MB, 2000L);
+        long minSizeMb = getLongOption(YdbOptions.AP_PART_SIZE_MB, 1000L);
         if (minSizeMb < 1L) {
             minSizeMb = 10L;
         }
         ps.setPartitionSize(minSizeMb);
         tdb.setPartitioningSettings(ps);
 
+        /* TODO: implement store type configuration
         switch (storeType) {
             case ROW:
                 tdb.setStoreType(TableDescription.StoreType.ROW);
@@ -99,6 +100,7 @@ public class YdbCreateTable extends YdbPropertyHelper {
             default:
                 break;
         }
+        */
 
         return session.createTable(tablePath, tdb.build());
     }

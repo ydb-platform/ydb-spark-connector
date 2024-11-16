@@ -6,7 +6,24 @@
     <version>1.3-SNAPSHOT</version>
     <!-- <version>X.Y[-SNAPSHOT]</version> -->
     <packaging>jar</packaging>
+    <licenses>
+        <license>
+            <name>Apache License, Version 2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0</url>
+        </license>
+    </licenses>
+    <scm>
+        <url>https://github.com/ydb-platform/ydb-spark-connector</url>
+        <connection>scm:git:https://github.com/ydb-platform/ydb-spark-connector.git</connection>
+        <developerConnection>scm:git:https://github.com/ydb-platform/ydb-spark-connector.git</developerConnection>
+    </scm>
     <developers>
+        <developer>
+            <name>Aleksandr Gorshenin</name>
+            <email>alexandr268@ydb.tech</email>
+            <organization>YDB</organization>
+            <organizationUrl>https://ydb.tech/</organizationUrl>
+        </developer>
         <developer>
             <name>Maksim Zinal</name>
             <email>zinal@ydb.tech</email>
@@ -27,11 +44,11 @@
             <dependency>
                 <groupId>tech.ydb</groupId>
                 <artifactId>ydb-sdk-bom</artifactId>
-                <version>2.2.11-SNAPSHOT</version>
+                <version>2.3.6</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
-            <dependency>
+            <dependency> <!-- for manual dependency injection in shaded mode -->
                 <groupId>io.grpc</groupId>
                 <artifactId>grpc-bom</artifactId>
                 <version>1.59.1</version>
