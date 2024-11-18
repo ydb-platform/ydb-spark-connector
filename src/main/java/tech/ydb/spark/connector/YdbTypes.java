@@ -3,6 +3,7 @@ package tech.ydb.spark.connector;
 import java.io.Serializable;
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -661,6 +662,12 @@ public final class YdbTypes implements Serializable {
         }
         if (v instanceof byte[]) {
             return PrimitiveValue.newBytes((byte[]) v);
+        }
+        if (v instanceof String) {
+            return PrimitiveValue.newBytes(v.toString().getBytes(StandardCharsets.UTF_8));
+        }
+        if (v instanceof UTF8String) {
+            return PrimitiveValue.newBytes(((UTF8String) v).getBytes());
         }
         throw badConversion(v, t);
     }
