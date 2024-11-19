@@ -61,7 +61,10 @@ public class YdbConnector extends YdbOptions implements AutoCloseable {
                     .sessionPoolSize(1, poolSize)
                     .build();
             this.schemeClient = SchemeClient.newClient(gt).build();
-            this.retryCtx = SessionRetryContext.create(tableClient).build();
+            this.retryCtx = SessionRetryContext.create(tableClient)
+                    .idempotent(true)
+                    .maxRetries(20)
+                    .build();
             this.transport = gt;
             gt = null; // to avoid closing below
         } finally {
