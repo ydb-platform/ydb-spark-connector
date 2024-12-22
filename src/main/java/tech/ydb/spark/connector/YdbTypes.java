@@ -11,6 +11,7 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeParseException;
 import java.util.Map;
 
+import org.apache.spark.sql.catalyst.util.DateTimeUtils;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.Decimal;
@@ -31,6 +32,8 @@ import tech.ydb.table.values.Value;
  * @author zinal
  */
 public final class YdbTypes implements Serializable {
+
+    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(YdbTypes.class);
 
     private static final long serialVersionUID = 1L;
 
@@ -604,9 +607,8 @@ public final class YdbTypes implements Serializable {
         if (v == null) {
             return PrimitiveType.Timestamp.makeOptional().emptyValue();
         }
-        if (v instanceof Number) {
-            return PrimitiveValue.newTimestamp(
-                    Instant.ofEpochMilli(((Number) v).longValue() / 1000L));
+        if (v instanceof Long) {
+            return PrimitiveValue.newTimestamp(DateTimeUtils.microsToInstant((Long) v));
         }
         try {
             if (v instanceof String || v instanceof UTF8String) {
@@ -624,9 +626,8 @@ public final class YdbTypes implements Serializable {
         if (v instanceof java.sql.Timestamp) {
             return PrimitiveValue.newDatetime(((java.sql.Timestamp) v).toInstant());
         }
-        if (v instanceof Number) {
-            return PrimitiveValue.newDatetime(
-                    Instant.ofEpochMilli(((Number) v).longValue() / 1000L));
+        if (v instanceof Long) {
+            return PrimitiveValue.newDatetime(DateTimeUtils.microsToInstant((Long) v));
         }
         try {
             if (v instanceof String || v instanceof UTF8String) {
