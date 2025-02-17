@@ -49,7 +49,6 @@ public class YdbPartitionReaderFactory implements PartitionReaderFactory {
                 LOG.debug("Preparing scan for table {} at partition {}",
                         options.getTablePath(), partition);
                 scan = new YdbScanReadTable(options, partition.getRange());
-                scan.prepare();
                 LOG.debug("Scan prepared, ready to fetch...");
             }
             return scan.next();
@@ -68,7 +67,6 @@ public class YdbPartitionReaderFactory implements PartitionReaderFactory {
             }
             scan = null;
         }
-
     }
 
 }

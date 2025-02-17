@@ -269,6 +269,7 @@ public class YdbTable implements Table,
     }
 
     @Override
+    @SuppressWarnings("deprecation")
     public StructType schema() {
         if (schema == null) {
             schema = new StructType(mapFields(columns));
