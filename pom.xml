@@ -17,7 +17,11 @@
 
         <scala.version>2.12</scala.version>
         <spark.version>3.5.4</spark.version>
+
         <ydb.sdk.version>2.3.9</ydb.sdk.version>
+        <!-- Must be syncronized with ydb version -->
+        <grpc.version>1.59.1</grpc.version>
+        <protobuf.version>3.24.0</protobuf.version>
     </properties>
 
     <licenses>
@@ -61,6 +65,26 @@
                 <version>${ydb.sdk.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
+            </dependency>
+
+            <dependency>
+                <groupId>io.grpc</groupId>
+                <artifactId>grpc-netty</artifactId>
+                <version>${grpc.version}</version>
+
+                <!-- Spark already provides Netty -->
+                <exclusions>
+                    <exclusion>
+                        <groupId>io.netty</groupId>
+                        <artifactId>*</artifactId>
+                    </exclusion>
+                </exclusions>
+            </dependency>
+
+            <dependency>
+                <groupId>com.google.protobuf</groupId>
+                <artifactId>protobuf-java</artifactId>
+                <version>${protobuf.version}</version>
             </dependency>
 
             <dependency>

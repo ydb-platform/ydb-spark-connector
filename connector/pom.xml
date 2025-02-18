@@ -15,6 +15,16 @@
 
     <dependencies>
         <dependency>
+            <groupId>io.grpc</groupId>
+            <artifactId>grpc-netty</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.google.protobuf</groupId>
+            <artifactId>protobuf-java</artifactId>
+        </dependency>
+
+        <dependency>
             <groupId>tech.ydb</groupId>
             <artifactId>ydb-sdk-core</artifactId>
 
@@ -38,20 +48,6 @@
         <dependency>
             <groupId>tech.ydb.auth</groupId>
             <artifactId>yc-auth-provider</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>io.grpc</groupId>
-            <artifactId>grpc-netty</artifactId>
-            <version>1.59.1</version>
-
-            <!-- Spark already provides Netty -->
-            <exclusions>
-                <exclusion>
-                    <groupId>io.netty</groupId>
-                    <artifactId>*</artifactId>
-                </exclusion>
-            </exclusions>
         </dependency>
 
         <dependency>
