@@ -1,22 +1,42 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version="1.0"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+
     <modelVersion>4.0.0</modelVersion>
     <groupId>tech.ydb.spark</groupId>
-    <artifactId>ydb-spark-connector</artifactId>
+    <artifactId>ydb-spark-parent</artifactId>
     <version>1.4-SNAPSHOT</version>
-    <!-- <version>X.Y[-SNAPSHOT]</version> -->
-    <packaging>jar</packaging>
+
+    <name>YDB Spark Project</name>
+    <description>Apache Spark Connector for YDB</description>
+    <url>https://github.com/ydb-platform/ydb-spark-connector</url>
+
+    <packaging>pom</packaging>
+
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+        <scala.version>2.12</scala.version>
+        <spark.version>3.5.4</spark.version>
+
+        <ydb.sdk.version>2.3.9</ydb.sdk.version>
+        <!-- Must be syncronized with ydb version -->
+        <grpc.version>1.59.1</grpc.version>
+        <protobuf.version>3.24.0</protobuf.version>
+    </properties>
+
     <licenses>
         <license>
             <name>Apache License, Version 2.0</name>
             <url>https://www.apache.org/licenses/LICENSE-2.0</url>
         </license>
     </licenses>
+
     <scm>
         <url>https://github.com/ydb-platform/ydb-spark-connector</url>
         <connection>scm:git:https://github.com/ydb-platform/ydb-spark-connector.git</connection>
         <developerConnection>scm:git:https://github.com/ydb-platform/ydb-spark-connector.git</developerConnection>
     </scm>
+
     <developers>
         <developer>
             <name>Aleksandr Gorshenin</name>
@@ -31,333 +51,229 @@
             <organizationUrl>https://ydb.tech/</organizationUrl>
         </developer>
     </developers>
-    <properties>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <maven.compiler.source>1.8</maven.compiler.source>
-        <maven.compiler.target>1.8</maven.compiler.target>
-        <maven.javadoc.skip>true</maven.javadoc.skip>
-        <maven.source.skip>true</maven.source.skip>
-        <log4j.version>2.17.2</log4j.version>
-        <spark.version>3.3.4</spark.version>
-    </properties>
+
+    <modules>
+        <module>connector</module>
+        <module>connector-shaded</module>
+    </modules>
+
     <dependencyManagement>
         <dependencies>
             <dependency>
                 <groupId>tech.ydb</groupId>
                 <artifactId>ydb-sdk-bom</artifactId>
-                <version>2.3.8-SNAPSHOT</version>
+                <version>${ydb.sdk.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
-            <dependency> <!-- for manual dependency injection in shaded mode -->
+
+            <dependency>
                 <groupId>io.grpc</groupId>
-                <artifactId>grpc-bom</artifactId>
-                <version>1.59.1</version>
-                <type>pom</type>
-                <scope>import</scope>
+                <artifactId>grpc-netty</artifactId>
+                <version>${grpc.version}</version>
+
+                <!-- Spark already provides Netty -->
+                <exclusions>
+                    <exclusion>
+                        <groupId>io.netty</groupId>
+                        <artifactId>*</artifactId>
+                    </exclusion>
+                </exclusions>
+            </dependency>
+
+            <dependency>
+                <groupId>com.google.protobuf</groupId>
+                <artifactId>protobuf-java</artifactId>
+                <version>${protobuf.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.spark</groupId>
+                <artifactId>spark-sql_${scala.version}</artifactId>
+                <version>${spark.version}</version>
             </dependency>
             <dependency>
-                <groupId>org.testcontainers</groupId>
-                <artifactId>testcontainers-bom</artifactId>
-                <version>1.20.1</version>
-                <type>pom</type>
-                <scope>import</scope>
+                <groupId>org.apache.spark</groupId>
+                <artifactId>spark-catalyst_${scala.version}</artifactId>
+                <version>${spark.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>tech.ydb.spark</groupId>
+                <artifactId>ydb-spark-connector</artifactId>
+                <version>${project.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
-    <dependencies>
-        <!-- Manual GPRC dependency to avoid conflicting version coming from Spark. -->
-        <dependency>
-            <groupId>io.grpc</groupId>
-            <artifactId>grpc-stub</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>io.grpc</groupId>
-            <artifactId>grpc-protobuf</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>io.grpc</groupId>
-            <artifactId>grpc-netty-shaded</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>tech.ydb</groupId>
-            <artifactId>ydb-sdk-core</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>tech.ydb</groupId>
-            <artifactId>ydb-sdk-scheme</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>tech.ydb</groupId>
-            <artifactId>ydb-sdk-table</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>tech.ydb.auth</groupId>
-            <artifactId>yc-auth-provider</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-api</artifactId>
-            <version>1.7.32</version>
-            <scope>provided</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.logging.log4j</groupId>
-            <artifactId>log4j-api</artifactId>
-            <version>${log4j.version}</version>
-            <scope>provided</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.logging.log4j</groupId>
-            <artifactId>log4j-core</artifactId>
-            <version>${log4j.version}</version>
-            <scope>provided</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.logging.log4j</groupId>
-            <artifactId>log4j-slf4j-impl</artifactId>
-            <version>${log4j.version}</version>
-            <scope>provided</scope>
-        </dependency>
-        <dependency>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-databind</artifactId>
-            <version>2.13.4.2</version>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.spark</groupId>
-            <artifactId>spark-catalyst_2.12</artifactId>
-            <version>${spark.version}</version>
-            <scope>provided</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.spark</groupId>
-            <artifactId>spark-sql_2.12</artifactId>
-            <version>${spark.version}</version>
-            <scope>provided</scope>
-        </dependency>
-        <dependency>
-            <groupId>junit</groupId>
-            <artifactId>junit</artifactId>
-            <version>4.13.2</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.testcontainers</groupId>
-            <artifactId>testcontainers</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.assertj</groupId>
-            <artifactId>assertj-core</artifactId>
-            <version>3.26.3</version>
-            <scope>test</scope>
-        </dependency>
-    </dependencies>
+
+    <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <version>3.5.2</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-jar-plugin</artifactId>
+                    <version>3.4.2</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-javadoc-plugin</artifactId>
+                    <version>3.11.2</version>
+                    <configuration>
+                        <source>8</source>
+                    </configuration>
+                    <executions>
+                        <execution>
+                            <id>attach-javadocs</id>
+                            <goals>
+                                <goal>jar</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-dependency-plugin</artifactId>
+                    <version>3.8.1</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>3.13.0</version>
+                    <configuration>
+                        <target>1.8</target>
+                        <source>1.8</source>
+                        <compilerArgs>
+                            <arg>-Xlint</arg>
+                            <!-- Silence warning "No processor claimed any of these annotations". One of the
+                            annotations that would trigger it is org.junit.jupiter.api.Test -->
+                            <arg>-Xlint:-processing</arg>
+                        </compilerArgs>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-source-plugin</artifactId>
+                    <version>3.3.1</version>
+                    <executions>
+                        <execution>
+                            <id>attach-sources</id>
+                            <goals>
+                                <goal>jar-no-fork</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-shade-plugin</artifactId>
+                    <version>3.6.0</version>
+                </plugin>
+
+                <!-- YDB Checkstyle -->
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-checkstyle-plugin</artifactId>
+                    <version>3.6.0</version>
+                    <configuration>
+                        <configLocation>config/ydb.checkstyle.xml</configLocation>
+                        <suppressionsFileExpression>config/ydb.suppressions.xml</suppressionsFileExpression>
+                        <consoleOutput>true</consoleOutput>
+                    </configuration>
+                    <executions>
+                        <execution>
+                            <phase>test</phase>
+                            <goals>
+                                <goal>check</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
+
+                <!-- Code Coverage report generation -->
+                <plugin>
+                    <groupId>org.jacoco</groupId>
+                    <artifactId>jacoco-maven-plugin</artifactId>
+                    <version>0.8.12</version>
+                    <executions>
+                        <execution>
+                            <id>jacoco-prepare-agent</id>
+                            <goals>
+                                <goal>prepare-agent</goal>
+                            </goals>
+                        </execution>
+                        <execution>
+                            <id>jacoco-report</id>
+                            <phase>test</phase>
+                            <goals>
+                                <goal>report</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
+
     <profiles>
         <profile>
-            <id>release-profile</id>
+            <id>jdk8-bootstrap</id>
             <activation>
-                <activeByDefault>true</activeByDefault>
+                <jdk>[9</jdk>
             </activation>
             <build>
                 <plugins>
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-dependency-plugin</artifactId>
-                        <version>3.7.1</version>
-                    </plugin>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-compiler-plugin</artifactId>
-                        <version>3.13.0</version>
                         <configuration>
-                            <target>1.8</target>
-                            <source>1.8</source>
-                            <compilerArgs>
-                                <arg>-Xlint</arg>
-                                <!-- Silence warning "No processor claimed any of these annotations". One of the
-                                annotations that would trigger it is org.junit.jupiter.api.Test -->
-                                <arg>-Xlint:-processing</arg>
-                            </compilerArgs>
+                            <release>8</release>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <profile>
+            <id>ossrh-s01</id>
+            <activation>
+                <activeByDefault>false</activeByDefault>
+            </activation>
+
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-gpg-plugin</artifactId>
+                        <version>3.2.7</version>
+                        <executions>
+                            <execution>
+                                <id>sign-artifacts</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>sign</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                        <configuration>
+                            <gpgArguments>
+                                <arg>--pinentry-mode</arg>
+                                <arg>loopback</arg>
+                            </gpgArguments>
                         </configuration>
                     </plugin>
                     <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-source-plugin</artifactId>
-                        <version>3.3.1</version>
-                        <executions>
-                            <execution>
-                                <id>attach-sources</id>
-                                <goals>
-                                    <goal>jar-no-fork</goal>
-                                </goals>
-                            </execution>
-                        </executions>
-                    </plugin>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-checkstyle-plugin</artifactId>
-                        <version>3.5.0</version>
+                        <groupId>org.sonatype.plugins</groupId>
+                        <artifactId>nexus-staging-maven-plugin</artifactId>
+                        <version>1.7.0</version>
+                        <extensions>true</extensions>
                         <configuration>
-                            <configLocation>config/ydb.checkstyle.xml</configLocation>
-                            <suppressionsFileExpression>config/ydb.suppressions.xml</suppressionsFileExpression>
-                            <consoleOutput>true</consoleOutput>
-                        </configuration>
-                        <executions>
-                            <execution>
-                                <phase>test</phase>
-                                <goals>
-                                    <goal>check</goal>
-                                </goals>
-                            </execution>
-                        </executions>
-                    </plugin>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-javadoc-plugin</artifactId>
-                        <version>3.10.0</version>
-                    </plugin>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-deploy-plugin</artifactId>
-                        <version>3.1.3</version>
-                    </plugin>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-shade-plugin</artifactId>
-                        <version>3.6.0</version>
-                        <executions>
-                            <execution>
-                                <phase>package</phase>
-                                <goals>
-                                    <goal>shade</goal>
-                                </goals>
-                                <configuration>
-                                    <minimizeJar>true</minimizeJar>
-                                    <createSourcesJar>false</createSourcesJar>
-
-                                    <promoteTransitiveDependencies>true</promoteTransitiveDependencies>
-                                    <createDependencyReducedPom>true</createDependencyReducedPom>
-                                    <dependencyReducedPomLocation>${project.build.directory}/dependency-reduced-pom.xml</dependencyReducedPomLocation>
-
-                                    <transformers>
-                                        <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheLicenseResourceTransformer" />
-                                        <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheNoticeResourceTransformer" />
-                                        <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer" />
-                                        <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                                            <manifestEntries>
-                                                <Automatic-Module-Name>tech.ydb.spark</Automatic-Module-Name>
-                                                <Specification-Title>${spec.title}</Specification-Title>
-                                                <Specification-Version>${spec.version}</Specification-Version>
-                                            </manifestEntries>
-                                        </transformer>
-                                    </transformers>
-
-                                    <filters>
-                                        <filter>
-                                            <artifact>tech.ydb.spark:ydb-spark-connector</artifact>
-                                            <includes>
-                                                <include>**</include>
-                                            </includes>
-                                        </filter>
-                                        <!-- jjwt-impl and jjwt-jackson have to be explicitly enabled,
-                                        because there is no compiler-visible dependency  -->
-                                        <filter>
-                                            <artifact>io.jsonwebtoken:jjwt-impl</artifact>
-                                            <includes>
-                                                <include>**</include>
-                                            </includes>
-                                        </filter>
-                                        <filter>
-                                            <artifact>io.jsonwebtoken:jjwt-jackson</artifact>
-                                            <includes>
-                                                <include>**</include>
-                                            </includes>
-                                        </filter>
-                                        <filter>
-                                            <artifact>com.fasterxml.jackson.core:jackson-databind</artifact>
-                                            <includes>
-                                                <include>**</include>
-                                            </includes>
-                                        </filter>
-                                        <filter>
-                                            <artifact>*:*</artifact>
-                                            <excludes>
-                                                <exclude>mozilla/**</exclude>
-                                                <exclude>**/darwin/**</exclude>
-                                                <exclude>**/linux/**</exclude>
-                                                <exclude>**/win32/**</exclude>
-                                                <exclude>**/module-info.class</exclude>
-                                                <exclude>.netbeans_automatic_build</exclude>
-
-                                                <exclude>google/**/*.proto</exclude>
-                                                <exclude>grpc/**/*.proto</exclude>
-
-                                                <exclude>META-INF/DEPENDENCIES</exclude>
-                                                <exclude>META-INF/MANIFEST.MF</exclude>
-                                                <exclude>META-INF/maven/**</exclude>
-                                                <exclude>META-INF/native-image/**</exclude>
-                                                <exclude>META-INF/native/**</exclude>
-                                                <exclude>META-INF/services/java.security.Provider</exclude>
-                                                <exclude>META-INF/*.xml</exclude>
-                                                <exclude>META-INF/*.SF</exclude>
-                                                <exclude>META-INF/*.DSA</exclude>
-                                                <exclude>META-INF/*.RSA</exclude>
-                                            </excludes>
-                                        </filter>
-                                    </filters>
-
-                                    <relocations>
-                                        <relocation>
-                                            <pattern>android.annotation</pattern>
-                                            <shadedPattern>tech.ydb.shaded.android.annotation</shadedPattern>
-                                        </relocation>
-                                        <relocation>
-                                            <pattern>org.bouncycastle</pattern>
-                                            <shadedPattern>tech.ydb.shaded.bouncycastle</shadedPattern>
-                                        </relocation>
-                                        <relocation>
-                                            <pattern>org.checkerframework</pattern>
-                                            <shadedPattern>tech.ydb.shaded.checkerframework</shadedPattern>
-                                        </relocation>
-                                        <relocation>
-                                            <pattern>javax.annotation</pattern>
-                                            <shadedPattern>tech.ydb.shaded.javax.annotation</shadedPattern>
-                                        </relocation>
-                                        <relocation>
-                                            <pattern>io.jsonwebtoken</pattern>
-                                            <shadedPattern>tech.ydb.shaded.io.jsonwebtoken</shadedPattern>
-                                        </relocation>
-                                        <relocation>
-                                            <pattern>io.perfmark</pattern>
-                                            <shadedPattern>tech.ydb.shaded.io.perfmark</shadedPattern>
-                                        </relocation>
-                                        <relocation>
-                                            <pattern>com.google</pattern>
-                                            <shadedPattern>tech.ydb.shaded.google</shadedPattern>
-                                        </relocation>
-                                        <relocation>
-                                            <pattern>com.fasterxml.jackson</pattern>
-                                            <shadedPattern>tech.ydb.shaded.jackson</shadedPattern>
-                                        </relocation>
-                                        <relocation>
-                                            <pattern>io.grpc</pattern>
-                                            <shadedPattern>tech.ydb.shaded.grpc</shadedPattern>
-                                        </relocation>
-                                    </relocations>
-                                </configuration>
-                            </execution>
-                        </executions>
-                    </plugin>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-jar-plugin</artifactId>
-                        <version>3.4.2</version>
-                        <configuration>
-                            <archive>
-                                <compress>true</compress>
-                            </archive>
+                            <serverId>ossrh-s01</serverId>
+                            <nexusUrl>https://s01.oss.sonatype.org/</nexusUrl>
+                            <autoReleaseAfterClose>false</autoReleaseAfterClose>
                         </configuration>
                     </plugin>
                 </plugins>
