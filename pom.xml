@@ -121,14 +121,6 @@
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-surefire-plugin</artifactId>
                     <version>3.5.2</version>
-                    <configuration>
-                        <!-- Hide warnings on JDK later 8 -->
-                        <argLine>
-                            @{argLine}
-                            --add-opens java.base/java.nio=ALL-UNNAMED
-                            --add-opens java.base/java.net=ALL-UNNAMED
-                        </argLine>
-                    </configuration>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
@@ -241,6 +233,10 @@
             <activation>
                 <jdk>[9</jdk>
             </activation>
+            <properties>
+                <!-- Hide warnings on JDK later 8 -->
+                <argLine>--add-opens java.base/java.nio=ALL-UNNAMED --add-opens java.base/java.net=ALL-UNNAMED</argLine>
+            </properties>
             <build>
                 <plugins>
                     <plugin>

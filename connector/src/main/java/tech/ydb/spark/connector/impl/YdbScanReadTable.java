@@ -6,8 +6,9 @@ import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 
 import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.types.StructField;
-import scala.collection.JavaConversions;
+import scala.collection.Iterator;
 
 import tech.ydb.core.StatusCode;
 import tech.ydb.core.UnexpectedResultException;
@@ -68,7 +69,8 @@ public class YdbScanReadTable implements AutoCloseable {
         final ReadTableSettings.Builder rtsb = ReadTableSettings.newBuilder();
         // Add all required fields.
         outColumns = new ArrayList<>();
-        scala.collection.Iterator<StructField> sfit = options.readSchema().seq().iterator();
+
+        Iterator<StructField> sfit = options.readSchema().iterator();
         while (sfit.hasNext()) {
             String colname = sfit.next().name();
             rtsb.column(colname);
@@ -184,11 +186,11 @@ public class YdbScanReadTable implements AutoCloseable {
 
     public InternalRow get() {
         final int count = outIndexes.length;
-        final ArrayList<Object> values = new ArrayList<>(count);
+        InternalRow row = new GenericInternalRow(count);
         for (int i = 0; i < count; ++i) {
-            values.add(options.getTypes().convertFromYdb(current.getColumn(outIndexes[i])));
+            options.getTypes().setRowValue(row, i, current.getColumn(outIndexes[i]));
         }
-        return InternalRow.fromSeq(JavaConversions.asScalaBuffer(values));
+        return row;
     }
 
     @Override

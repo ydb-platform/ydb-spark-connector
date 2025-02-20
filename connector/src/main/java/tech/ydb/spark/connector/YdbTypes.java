@@ -11,6 +11,7 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeParseException;
 import java.util.Map;
 
+import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.DataTypes;
@@ -33,9 +34,7 @@ import tech.ydb.table.values.Value;
  */
 public final class YdbTypes implements Serializable {
 
-    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(YdbTypes.class);
-
-    private static final long serialVersionUID = 1L;
+    private static final long serialVersionUID = -8806489193094006210L;
 
     public static final DataType SPARK_DECIMAL = DataTypes.createDecimalType(38, 10);
     public static final DataType SPARK_UINT64 = DataTypes.createDecimalType(22, 0);
@@ -719,4 +718,116 @@ public final class YdbTypes implements Serializable {
         return o2;
     }
 
+    public void setRowValue(InternalRow row, int i, ValueReader vr) {
+        Type type = vr.getType();
+        if (type.getKind() == Type.Kind.OPTIONAL) {
+            if (!vr.isOptionalItemPresent()) {
+                row.setNullAt(i);
+                return;
+            }
+            type = type.unwrapOptional();
+        }
+
+        if (type.getKind() == Type.Kind.DECIMAL) {
+            DecimalType decimal = (DecimalType) type;
+            Decimal.apply(vr.getDecimal().toBigDecimal());
+            row.setDecimal(i, Decimal.apply(vr.getDecimal().toBigDecimal()), decimal.getPrecision());
+            return;
+        }
+
+        if (type.getKind() == Type.Kind.PRIMITIVE) {
+            PrimitiveType primitiveType = (PrimitiveType) type;
+            boolean datesAsString = typeSettings.isDateAsString();
+            switch (primitiveType) {
+                case Bool:
+                    row.setBoolean(i, vr.getBool());
+                    break;
+                case Int8:
+                    row.setByte(i, vr.getInt8());
+                    break;
+                case Int16:
+                    row.setShort(i, vr.getInt16());
+                    break;
+                case Int32:
+                    row.setInt(i, vr.getInt32());
+                    break;
+                case Int64:
+                    row.setLong(i, vr.getInt64());
+                    break;
+                case Uint8:
+                    row.setShort(i, (short) vr.getUint8());
+                    break;
+                case Uint16:
+                    row.setInt(i, vr.getUint16());
+                    break;
+                case Uint32:
+                    row.setLong(i, vr.getUint32());
+                    break;
+                case Uint64:
+                    row.update(i, Decimal.apply(vr.getUint64()));
+                    break;
+                case Float:
+                    row.setFloat(i, vr.getFloat());
+                    break;
+                case Double:
+                    row.setDouble(i, vr.getDouble());
+                    break;
+                case Bytes:
+                    row.update(i, vr.getBytes());
+                    break;
+                case Text:
+                    row.update(i, UTF8String.fromString(vr.getText()));
+                    break;
+                case Yson:
+                    row.update(i, vr.getYson());
+                    break;
+                case Json:
+                    row.update(i, UTF8String.fromString(vr.getJson()));
+                    break;
+                case Uuid:
+                    row.update(i, vr.getUuid());
+                    break;
+                case JsonDocument:
+                    row.update(i, UTF8String.fromString(vr.getJsonDocument()));
+                    break;
+                case Date:
+                    if (datesAsString) {
+                        row.update(i, UTF8String.fromString(vr.getDate().toString()));
+                    } else {
+                        row.setInt(i, (int) vr.getDate().toEpochDay());
+                    }
+                    break;
+                case Datetime:
+                    if (datesAsString) {
+                        row.update(i, UTF8String.fromString(vr.getDatetime().toString()));
+                    } else {
+                        row.setLong(i, vr.getDatetime().toInstant(ZoneOffset.UTC).getEpochSecond());
+                    }
+                    break;
+                case Timestamp:
+                    if (datesAsString) {
+                        row.update(i, UTF8String.fromString(vr.getTimestamp().toString()));
+                    } else {
+                        row.setLong(i, vr.getTimestamp().toEpochMilli());
+                    }
+                    break;
+                case Interval:
+                    if (datesAsString) {
+                        row.update(i, UTF8String.fromString(vr.getInterval().toString()));
+                    } else {
+                        row.update(i, vr.getInterval());
+                    }
+                    break;
+                case TzDate:
+                case TzDatetime:
+                case TzTimestamp:
+                case DyNumber:
+                default:
+                    throw new IllegalArgumentException("Conversion from type " + primitiveType + " is not supported");
+            }
+            return;
+        }
+
+        throw new IllegalArgumentException("Conversion from type " + type + " is not supported");
+    }
 }
