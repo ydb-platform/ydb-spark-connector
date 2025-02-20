@@ -22,6 +22,8 @@ import org.apache.spark.sql.connector.catalog.TableChange;
 import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import tech.ydb.core.Issue;
 import tech.ydb.core.Result;
@@ -45,14 +47,10 @@ import tech.ydb.table.settings.DescribeTableSettings;
  *
  * @author zinal
  */
-public class YdbCatalog extends YdbOptions
-        implements CatalogPlugin, TableCatalog, SupportsNamespaces {
+public class YdbCatalog extends YdbOptions implements CatalogPlugin, TableCatalog, SupportsNamespaces {
 
-    private static final org.slf4j.Logger LOG
-            = org.slf4j.LoggerFactory.getLogger(YdbCatalog.class);
+    private static final Logger logger = LoggerFactory.getLogger(YdbCatalog.class);
 
-    // X.Y[-SNAPSHOT]
-    public static final String VERSION = "1.4-SNAPSHOT";
     public static final String INDEX_PREFIX = "ix/";
     public static final String ENTRY_TYPE = "ydb_entry_type";
     public static final String ENTRY_OWNER = "ydb_entry_owner";
@@ -63,6 +61,7 @@ public class YdbCatalog extends YdbOptions
 
     @Override
     public void initialize(String name, CaseInsensitiveStringMap options) {
+        logger.info("Initialize YDB catalog {}", name);
         this.catalogName = name;
         this.connector = YdbRegistry.getOrCreate(name, options);
         this.listIndexes = options.getBoolean(LIST_INDEXES, false);
@@ -147,7 +146,7 @@ public class YdbCatalog extends YdbOptions
         }).join();
         if (!res.isSuccess()) {
             // Skipping problematic entries.
-            LOG.warn("Skipping index listing for table {} due to failed describe, status {}",
+            logger.warn("Skipping index listing for table {} due to failed describe, status {}",
                     tablePath, res.getStatus());
             return;
         }
@@ -239,7 +238,7 @@ public class YdbCatalog extends YdbOptions
             throw new UnsupportedOperationException("Cannot drop index table " + ident);
         }
         final String tablePath = mergePath(ident);
-        LOG.debug("Dropping table {}", tablePath);
+        logger.debug("Dropping table {}", tablePath);
         Result<TableDescription> res = getRetryCtx().supplyResult(session -> {
             final DescribeTableSettings dts = new DescribeTableSettings();
             dts.setIncludeShardKeyBounds(false);

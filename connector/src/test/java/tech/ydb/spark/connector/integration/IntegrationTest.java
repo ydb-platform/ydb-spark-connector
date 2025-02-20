@@ -16,67 +16,65 @@ import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 import org.junit.After;
-import org.junit.Before;
+import org.junit.AfterClass;
+import org.junit.Assert;
+import org.junit.BeforeClass;
+import org.junit.ClassRule;
 import org.junit.Test;
-import org.testcontainers.containers.GenericContainer;
 
-import tech.ydb.core.Result;
 import tech.ydb.core.Status;
-import tech.ydb.spark.connector.impl.YdbConnector;
-import tech.ydb.spark.connector.impl.YdbRegistry;
-import tech.ydb.table.query.Params;
+import tech.ydb.core.grpc.GrpcTransport;
+import tech.ydb.table.SessionRetryContext;
+import tech.ydb.table.TableClient;
 import tech.ydb.table.transaction.TxControl;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import tech.ydb.test.junit4.YdbHelperRule;
 
 public class IntegrationTest {
+    @ClassRule
+    public static final YdbHelperRule YDB = new YdbHelperRule();
 
-    public static final String CATALOG = "spark.sql.catalog.ydb1";
     public static final String TEST_TABLE = "test_table";
 
-    public static final GenericContainer<?> YDB =
-            new GenericContainer<>("cr.yandex/yc/yandex-docker-local-ydb:latest")
-            .withCreateContainerCmdModifier(cmd -> cmd.withHostName("localhost"))
-            .withNetworkMode("host")
-            .withEnv("GRPC_TLS_PORT", "2135")
-            .withEnv("GRPC_PORT", "2136")
-            .withEnv("MON_PORT", "8765")
-            .withEnv("YDB_USE_IN_MEMORY_PDISKS", "true");
+    private static GrpcTransport transport;
+    private static TableClient tableClient;
+    private static SessionRetryContext retryCtx;
 
-    static {
-        YDB.start();
-    }
+    private static final Map<String, String> options = new HashMap<>();
+    private static SparkSession spark;
 
-    protected SparkSession spark;
-    protected Map<String, String> options;
-    protected YdbConnector connector;
-
-    @Before
-    public void prepare() {
-        options = commonConfigs();
-        spark = SparkSession.builder()
-                .config(getSparkConf())
-                .getOrCreate();
-        connector = YdbRegistry.getOrCreate(options);
-    }
-
-    private SparkConf getSparkConf() {
-        SparkConf conf = new SparkConf()
-                .setMaster("local")
-                .setAppName("test")
-                .set(CATALOG, "tech.ydb.spark.connector.YdbCatalog");
-        for (Map.Entry<String, String> one : options.entrySet()) {
-            conf.set(CATALOG + "." + one.getKey(), one.getValue());
+    @BeforeClass
+    public static void prepare() {
+        options.put("url", (YDB.useTls() ? "grpcs" : "grpc") + "://" + YDB.endpoint() + YDB.database());
+        if (YDB.authToken() != null) {
+            options.put("auth.mode", "TOKEN");
+            options.put("auth.token", YDB.authToken());
+        } else {
+            options.put("auth.mode", "NONE");
         }
-        return conf;
+        options.put("dbtable", TEST_TABLE);
+
+        SparkConf conf = new SparkConf()
+                .setMaster("local[4]")
+                .setAppName("ydb-spark-integration-test")
+                .set("spark.ui.enabled", "false")
+                .set("spark.sql.catalog.ydb", "tech.ydb.spark.connector.YdbCatalog");
+        options.forEach((k, v) -> conf.set("spark.sql.catalog.ydb." + k, v));
+
+        transport = YDB.createTransport();
+        tableClient = TableClient.newClient(transport).build();
+        retryCtx = SessionRetryContext.create(tableClient).build();
+
+        spark = SparkSession.builder()
+                .config(conf)
+                .config(conf)
+                .getOrCreate();
     }
 
-    private Map<String, String> commonConfigs() {
-        HashMap<String, String> result = new HashMap<>();
-        result.put("url", "grpc://127.0.0.1:2136?database=/local");
-        result.put("auth.mode", "NONE");
-        result.put("dbtable", TEST_TABLE);
-        return result;
+    @AfterClass
+    public static void closeAll() {
+        spark.close();
+        tableClient.close();
+        transport.close();
     }
 
     @After
@@ -102,7 +100,8 @@ public class IntegrationTest {
                 .schema(dataFrame.schema())
                 .load()
                 .collectAsList();
-        assertThat(rows1).hasSize(1);
+
+        Assert.assertEquals(1, rows1.size());
     }
 
     @Test
@@ -118,7 +117,7 @@ public class IntegrationTest {
                 .schema(dataFrame.schema())
                 .load()
                 .collectAsList();
-        assertThat(rows1).hasSize(3);
+        Assert.assertEquals(3, rows1.size());
 
         dataFrame.write()
                 .format("ydb")
@@ -132,7 +131,7 @@ public class IntegrationTest {
                 .schema(dataFrame.schema())
                 .load()
                 .collectAsList();
-        assertThat(rows1).hasSize(1);
+        Assert.assertEquals(1, rows1.size());
     }
 
     @Test
@@ -141,11 +140,12 @@ public class IntegrationTest {
         schemaQuery("create table " + original + "(id Uint64, value Text, PRIMARY KEY(id))").expectSuccess();
         dataQuery("upsert into " + original + "(id, value) values (1, 'asdf'), (2, 'zxcv'), (3, 'fghj')");
 
-        spark.sql("create table ydb1." + TEST_TABLE + "(id bigint, value string) ").queryExecution();
-        spark.sql("insert into ydb1." + TEST_TABLE + " select * from ydb1." + original).queryExecution();
-        List<Row> rows = spark.sql("select * from ydb1." + TEST_TABLE)
+        spark.sql("create table ydb." + TEST_TABLE + "(id bigint, value string) ").queryExecution();
+        spark.sql("insert into ydb." + TEST_TABLE + " select * from ydb." + original).queryExecution();
+        List<Row> rows = spark.sql("select * from ydb." + TEST_TABLE)
                 .collectAsList();
-        assertThat(rows).hasSize(3);
+
+        Assert.assertEquals(3, rows.size());
     }
 
     @Test
@@ -154,11 +154,12 @@ public class IntegrationTest {
         schemaQuery("create table " + original + "(id Uint64, value Text, PRIMARY KEY(id))").expectSuccess();
         dataQuery("upsert into " + original + "(id, value) values (1, 'asdf'), (2, 'zxcv'), (3, 'fghj')");
 
-        spark.sql("create table ydb1." + TEST_TABLE + " as select * from ydb1." + original)
+        spark.sql("create table ydb." + TEST_TABLE + " as select * from ydb." + original)
                 .queryExecution();
-        List<Row> rows = spark.sql("select * from ydb1." + TEST_TABLE)
+        List<Row> rows = spark.sql("select * from ydb." + TEST_TABLE)
                 .collectAsList();
-        assertThat(rows).hasSize(3);
+
+        Assert.assertEquals(3, rows.size());
     }
 
     @Test
@@ -223,9 +224,10 @@ public class IntegrationTest {
 
         dataQuery(upsertToster);
 
-        List<Row> rows = spark.sql("SELECT * FROM ydb1.toster")
+        List<Row> rows = spark.sql("SELECT * FROM ydb.toster")
                 .collectAsList();
-        assertThat(rows).hasSize(2);
+
+        Assert.assertEquals(2, rows.size());
     }
 
     private Dataset<Row> sampleDataset() {
@@ -238,17 +240,11 @@ public class IntegrationTest {
     }
 
     private void dataQuery(String query) {
-        connector.getRetryCtx().supplyStatus(session -> session.executeDataQuery(
-                query,
-                TxControl.serializableRw().setCommitTx(true),
-                Params.empty())
-                .thenApply(Result::getStatus))
-                .join().expectSuccess();
+        retryCtx.supplyResult(session -> session.executeDataQuery(query, TxControl.serializableRw()))
+                .join().getStatus().expectSuccess();
     }
 
-    private Status schemaQuery(String query) {
-        return connector.getRetryCtx().supplyStatus(
-                session -> session.executeSchemeQuery(query)).join();
+    private static Status schemaQuery(String query) {
+        return retryCtx.supplyStatus(session -> session.executeSchemeQuery(query)).join();
     }
-
 }
