@@ -15,7 +15,7 @@ public abstract class YdbOptions {
 
     /**
      * YDB connection URL. Typically in the following form:
-     * grpcs://host:port/?database=/Domain/dbname
+     * grpcs://host:port/Domain/dbname
      */
     public static final String URL = "url";
 
