@@ -85,24 +85,20 @@ public class YdbScanReadTable implements AutoCloseable {
         while (true) {
             if (readStatus.isDone()) {
                 readStatus.join().expectSuccess("Scan failed.");
-                return false;
-            }
-
-            if (currentItem == null) {
-                try {
-                    currentItem = queue.poll(100, TimeUnit.MILLISECONDS);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    throw new RuntimeException("Scan was interrupted", e);
+                if (currentItem == null && queue.isEmpty()) {
+                    return false;
                 }
             }
 
-            if (currentItem != null) {
-                if (currentItem.reader.next()) {
-                    return true;
-                } else {
-                    currentItem = null;
-                }
+            if (currentItem != null && currentItem.reader.next()) {
+                return true;
+            }
+
+            try {
+                currentItem = queue.poll(100, TimeUnit.MILLISECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException("Scan was interrupted", e);
             }
         }
     }
