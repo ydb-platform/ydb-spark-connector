@@ -180,6 +180,7 @@ public class YdbCatalog extends YdbOptions implements CatalogPlugin, TableCatalo
     }
 
     @Override
+    @SuppressWarnings("deprecation")
     public Table createTable(Identifier ident, StructType schema, Transform[] partitions,
             Map<String, String> properties) throws TableAlreadyExistsException, NoSuchNamespaceException {
         if (ident.name().startsWith(INDEX_PREFIX)) {

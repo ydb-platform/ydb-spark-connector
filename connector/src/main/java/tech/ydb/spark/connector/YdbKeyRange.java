@@ -20,8 +20,7 @@ import tech.ydb.table.values.Value;
  * @author zinal
  */
 public class YdbKeyRange implements Serializable {
-
-    private static final long serialVersionUID = 1L;
+    private static final long serialVersionUID = -2462075148040903635L;
 
     public static final Limit NO_LIMIT = new Limit(new ArrayList<>(), true);
     public static final YdbKeyRange UNRESTRICTED = new YdbKeyRange(NO_LIMIT, NO_LIMIT);

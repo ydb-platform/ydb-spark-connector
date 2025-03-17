@@ -4,14 +4,17 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.types.StructField;
-import scala.collection.Iterator;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import tech.ydb.core.StatusCode;
-import tech.ydb.core.UnexpectedResultException;
+import tech.ydb.core.Result;
+import tech.ydb.core.Status;
 import tech.ydb.core.grpc.GrpcReadStream;
 import tech.ydb.spark.connector.YdbFieldType;
 import tech.ydb.spark.connector.YdbKeyRange;
@@ -31,236 +34,131 @@ import tech.ydb.table.values.Value;
  */
 public class YdbScanReadTable implements AutoCloseable {
 
-    private static final org.slf4j.Logger LOG
-            = org.slf4j.LoggerFactory.getLogger(YdbScanReadTable.class);
-
-    private static final QueueItem END_OF_SCAN = new QueueItem(null);
+    private static final Logger LOG = LoggerFactory.getLogger(YdbScanReadTable.class);
 
     private final YdbScanOptions options;
-    private final YdbKeyRange keyRange;
+
+    private final List<String> outColumns;
+    private final GrpcReadStream<ReadTablePart> stream;
+    private final CompletableFuture<Status> readStatus;
+
     private final ArrayBlockingQueue<QueueItem> queue;
-    private final String tablePath;
-    private List<String> outColumns;
-    private int[] outIndexes;
-    private Thread worker;
-    private volatile State state;
-    private volatile Exception firstIssue;
-    private volatile Session session;
-    private volatile GrpcReadStream<ReadTablePart> stream;
-    private ResultSetReader current;
+    private volatile QueueItem currentItem = null;
 
     public YdbScanReadTable(YdbScanOptions options, YdbKeyRange keyRange) {
         this.options = options;
-        this.keyRange = keyRange;
         this.queue = new ArrayBlockingQueue<>(options.getScanQueueDepth());
-        this.tablePath = options.getTablePath();
-        this.state = State.CREATED;
-    }
 
-    public void prepare() {
-        if (getState() != State.CREATED) {
+        ReadTableSettings settings = prepareReadTableSettings(options, keyRange);
+        this.outColumns = settings.getColumns();
+
+        // Create or acquire the connector object.
+        Duration sessionTimeout = Duration.ofSeconds(options.getScanSessionSeconds());
+        Result<Session> session = options.grabConnector().getTableClient().createSession(sessionTimeout).join();
+        if (!session.isSuccess()) {
+            this.stream = null;
+            this.readStatus = CompletableFuture.completedFuture(session.getStatus());
             return;
         }
 
-        LOG.debug("Configuring scan for table {}, range {}, columns {}, types {}",
-                tablePath, keyRange, options.getKeyColumns(), options.getKeyTypes());
+        this.stream = session.getValue().executeReadTable(options.getTablePath(), settings);
+        this.readStatus = this.stream.start(this::onNextPart);
+        // Read table is not using session, so we can close it
+        session.getValue().close();
+    }
 
-        // Configuring settings for the table scan.
-        final ReadTableSettings.Builder rtsb = ReadTableSettings.newBuilder();
-        // Add all required fields.
-        outColumns = new ArrayList<>();
-
-        Iterator<StructField> sfit = options.readSchema().iterator();
-        while (sfit.hasNext()) {
-            String colname = sfit.next().name();
-            rtsb.column(colname);
-            outColumns.add(colname);
-        }
-        if (outColumns.isEmpty()) {
-            // In case no fields are required, add the first field of the primary key.
-            String colname = options.getKeyColumns().get(0);
-            rtsb.column(colname);
-            outColumns.add(colname);
-        }
-        outIndexes = new int[outColumns.size()];
-        configureRanges(rtsb);
-        if (options.getRowLimit() > 0) {
-            LOG.debug("Setting row limit to {}", options.getRowLimit());
-            rtsb.rowLimit(options.getRowLimit());
-        }
-        // TODO: add setting for the maximum scan duration.
-        rtsb.withRequestTimeout(Duration.ofHours(8));
-
-        // Create or acquire the connector object.
-        YdbConnector c = options.grabConnector();
-        // Obtain the session (will be a long running one).
-        session = c.getTableClient().createSession(
-                Duration.ofSeconds(options.getScanSessionSeconds())).join().getValue();
+    private void onNextPart(ReadTablePart part) {
+        QueueItem nextItem = new QueueItem(part.getResultSetReader());
         try {
-            // Opening the stream - which can be canceled.
-            stream = session.executeReadTable(tablePath, rtsb.build());
-            current = null;
-            state = State.PREPARED;
-            Thread t = new Thread(new Worker());
-            t.setDaemon(true);
-            t.setName("YdbReadTable:" + tablePath);
-            t.start();
-            worker = t;
-        } catch (Exception ex) {
-            setIssue(ex);
-            LOG.warn("Failed to initiate scan for table {}", tablePath, ex);
-            try {
-                if (stream != null) {
-                    stream.cancel();
+            while (!readStatus.isDone()) {
+                if (queue.offer(nextItem, 100, TimeUnit.MILLISECONDS)) {
+                    return;
                 }
-            } catch (Exception tmp) {
             }
-            try {
-                session.close();
-            } catch (Exception tmp) {
-            }
-            throw new RuntimeException("Failed to initiate scan for table " + tablePath, ex);
+        } catch (InterruptedException ex) {
+            LOG.warn("Scan read of table {} was interrupted", options.getTablePath());
+            Thread.currentThread().interrupt();
         }
     }
 
     public boolean next() {
-        // If we have a row block, return its rows before checking any state.
-        if (current != null && current.next()) {
-            return true; // we have the current row
-        }        // no block, or end of rows in the block
-        switch (getState()) {
-            case PREPARED:
-                return doNext();
-            case FAILED:
-                throw new RuntimeException("Scan failed.", getIssue());
-            case CREATED:
-                throw new IllegalStateException("Scan has not been prepared.");
-            default:
-                return false;
-        }
-    }
-
-    private boolean doNext() {
         while (true) {
-            if (current != null && current.next()) {
-                return true; // have next row in the current block
-            }            // end of rows or no block - need next
-            QueueItem qi;
-            while (true) {
-                try {
-                    qi = queue.take();
-                    break;
-                } catch (InterruptedException ix) {
+            if (readStatus.isDone()) {
+                readStatus.join().expectSuccess("Scan failed.");
+                if (currentItem == null && queue.isEmpty()) {
+                    return false;
                 }
             }
-            final Exception issue = getIssue();
-            if (issue != null) {
-                current = null;
-                setState(State.FAILED);
-                throw new RuntimeException("Scan failed.", issue);
+
+            if (currentItem != null && currentItem.reader.next()) {
+                return true;
             }
-            if (qi == null || qi.reader == null) {
-                current = null;
-                setState(State.FINISHED);
-                LOG.debug("No more blocks in queue for table {}", tablePath);
-                return false;
+
+            try {
+                currentItem = queue.poll(100, TimeUnit.MILLISECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException("Scan was interrupted", e);
             }
-            current = qi.reader;
-            // Rebuild column indexes each block, because API allows
-            // the server to change the column ordering.
-            if (outIndexes.length != current.getColumnCount()) {
-                throw new RuntimeException("Expected columns count "
-                        + outIndexes.length + ", but got " + current.getColumnCount());
-            }
-            for (int i = 0; i < outIndexes.length; ++i) {
-                outIndexes[i] = current.getColumnIndex(outColumns.get(i));
-                if (outIndexes[i] < 0) {
-                    throw new RuntimeException("Lost column [" + outColumns.get(i)
-                            + "] in the result set");
-                }
-            }
-            LOG.debug("Fetched the block of {} rows from the queue for table {}",
-                    current.getRowCount(), tablePath);
         }
     }
 
     public InternalRow get() {
-        final int count = outIndexes.length;
-        InternalRow row = new GenericInternalRow(count);
-        for (int i = 0; i < count; ++i) {
-            options.getTypes().setRowValue(row, i, current.getColumn(outIndexes[i]));
+        if (currentItem == null) {
+            throw new IllegalStateException("Nothing to read");
         }
-        return row;
+        return currentItem.get();
     }
 
     @Override
     public void close() {
-        setState(State.FINISHED);
-        if (stream != null) {
-            try {
-                stream.cancel();
-            } catch (Exception tmp) {
+        if (!readStatus.isDone()) {
+            stream.cancel();
+        }
+    }
+
+    private class QueueItem {
+        final ResultSetReader reader;
+        final int[] columnIndexes;
+
+        QueueItem(ResultSetReader reader) {
+            this.reader = reader;
+            this.columnIndexes = new int[outColumns.size()];
+            int idx = 0;
+            for (String column: outColumns) {
+                columnIndexes[idx++] = reader.getColumnIndex(column);
             }
         }
-        if (worker != null) {
-            while (worker.isAlive()) {
-                queue.clear();
-                try {
-                    Thread.sleep(100L);
-                } catch (InterruptedException ix) {
-                }
+
+        public InternalRow get() {
+            InternalRow row = new GenericInternalRow(columnIndexes.length);
+            for (int i = 0; i < columnIndexes.length; ++i) {
+                options.getTypes().setRowValue(row, i, reader.getColumn(columnIndexes[i]));
+            }
+            return row;
+        }
+   }
+
+    private static ReadTableSettings prepareReadTableSettings(YdbScanOptions opts, YdbKeyRange keyRange) {
+        LOG.debug("Configuring scan for table {}, range {}, columns {}, types {}",
+                opts.getTablePath(), keyRange, opts.getKeyColumns(), opts.getKeyTypes());
+
+        final ReadTableSettings.Builder rtsb = ReadTableSettings.newBuilder();
+
+        scala.collection.Iterator<StructField> sfit = opts.readSchema().toIterator();
+        if (sfit.isEmpty()) {
+            // In case no fields are required, add the first field of the primary key.
+            rtsb.column(opts.getKeyColumns().get(0));
+        } else {
+            while (sfit.hasNext()) {
+                rtsb.column(sfit.next().name());
             }
         }
-        if (session != null) {
-            try {
-                session.close();
-            } catch (Exception ex) {
-            }
-        }
-        stream = null;
-        session = null;
-        worker = null;
-        current = null;
-    }
 
-    private synchronized void setIssue(Exception issue) {
-        if (firstIssue == null) {
-            firstIssue = issue;
-            state = State.FAILED;
-        }
-    }
-
-    private synchronized Exception getIssue() {
-        return firstIssue;
-    }
-
-    private synchronized State getState() {
-        return state;
-    }
-
-    private synchronized void setState(State state) {
-        this.state = state;
-    }
-
-    @SuppressWarnings("unchecked")
-    private TupleValue makeRange(List<Object> values) {
-        final List<YdbFieldType> keyTypes = options.getKeyTypes();
-        final List<Value<?>> l = new ArrayList<>(values.size());
-        for (int i = 0; i < values.size(); ++i) {
-            Value<?> v = options.getTypes().convertToYdb(values.get(i), keyTypes.get(i));
-            if (!v.getType().getKind().equals(Type.Kind.OPTIONAL)) {
-                v = v.makeOptional();
-            }
-            l.add(v);
-        }
-        return TupleValue.of(l);
-    }
-
-    private void configureRanges(ReadTableSettings.Builder rtsb) {
         final YdbKeyRange.Limit realLeft = keyRange.getFrom();
         final YdbKeyRange.Limit realRight = keyRange.getTo();
         if (!realLeft.isUnrestricted()) {
-            TupleValue tv = makeRange(realLeft.getValue());
+            TupleValue tv = makeRange(opts, realLeft.getValue());
             if (realLeft.isInclusive()) {
                 rtsb.fromKeyInclusive(tv);
             } else {
@@ -269,7 +167,7 @@ public class YdbScanReadTable implements AutoCloseable {
             LOG.debug("fromKey: {} -> {}", realLeft, tv);
         }
         if (!realRight.isUnrestricted()) {
-            TupleValue tv = makeRange(realRight.getValue());
+            TupleValue tv = makeRange(opts, realRight.getValue());
             if (realRight.isInclusive()) {
                 rtsb.toKeyInclusive(tv);
             } else {
@@ -277,68 +175,30 @@ public class YdbScanReadTable implements AutoCloseable {
             }
             LOG.debug("toKey: {} -> {}", realRight, tv);
         }
+
+        if (opts.getRowLimit() > 0) {
+            LOG.debug("Setting row limit to {}", opts.getRowLimit());
+            rtsb.rowLimit(opts.getRowLimit());
+        }
+
+        // TODO: add setting for the maximum scan duration.
+        rtsb.withRequestTimeout(Duration.ofHours(8));
+
+        return rtsb.build();
     }
 
-    private void putToQueue(QueueItem qi) {
-        while (true) {
-            try {
-                queue.add(qi);
-                break; // exit the "queue put" retry loop
-            } catch (IllegalStateException ise) {
-                // The unlikely case of thread interrupt should not prevent us
-                // from putting an item into the queue
-                try {
-                    Thread.sleep(35L);
-                } catch (InterruptedException ix) {
-                }
+
+
+    private static TupleValue makeRange(YdbScanOptions opts, List<Object> values) {
+        final List<YdbFieldType> keyTypes = opts.getKeyTypes();
+        final List<Value<?>> l = new ArrayList<>(values.size());
+        for (int i = 0; i < values.size(); ++i) {
+            Value<?> v = opts.getTypes().convertToYdb(values.get(i), keyTypes.get(i));
+            if (!v.getType().getKind().equals(Type.Kind.OPTIONAL)) {
+                v = v.makeOptional();
             }
+            l.add(v);
         }
+        return TupleValue.of(l);
     }
-
-    static final class QueueItem {
-
-        final ResultSetReader reader;
-
-        QueueItem(ResultSetReader reader) {
-            this.reader = reader;
-        }
-    }
-
-    enum State {
-        CREATED,
-        PREPARED,
-        FINISHED,
-        FAILED
-    }
-
-    class Worker implements Runnable {
-
-        @Override
-        public void run() {
-            LOG.debug("Started background scan for table {}, range {}", tablePath, keyRange);
-            try {
-                stream.start(part -> {
-                    final ResultSetReader rsr = part.getResultSetReader();
-                    putToQueue(new QueueItem(rsr));
-                    LOG.debug("Added portion of {} rows for table {} to the queue.",
-                            rsr.getRowCount(), tablePath);
-                }).join().expectSuccess();
-            } catch (Exception ex) {
-                boolean needReport = true;
-                if (ex instanceof UnexpectedResultException) {
-                    UnexpectedResultException ure = (UnexpectedResultException) ex;
-                    if (ure.getStatus().getCode() == StatusCode.CLIENT_CANCELLED) {
-                        needReport = false;
-                    }
-                }
-                if (needReport) {
-                    LOG.warn("Background scan failed for table {}, range {}", tablePath, keyRange, ex);
-                    setIssue(ex);
-                }
-            }
-            putToQueue(END_OF_SCAN);
-            LOG.debug("Completed background scan for table {}, range {}", tablePath, keyRange);
-        }
-    }
-
 }

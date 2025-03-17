@@ -14,6 +14,8 @@ import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.connector.write.DataWriter;
 import org.apache.spark.sql.connector.write.WriterCommitMessage;
 import org.apache.spark.sql.types.StructField;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import scala.collection.JavaConverters;
 
 import tech.ydb.core.Status;
@@ -39,7 +41,7 @@ import tech.ydb.table.values.Value;
  */
 public class YdbWriterImpl implements DataWriter<InternalRow> {
 
-    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(YdbWriterImpl.class);
+    private static final Logger LOG = LoggerFactory.getLogger(YdbWriterImpl.class);
 
     private final int partitionId;
     private final long taskId;
