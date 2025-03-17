@@ -7,6 +7,7 @@ import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.Map;
 
+import tech.ydb.auth.TokenAuthProvider;
 import tech.ydb.auth.iam.CloudAuthHelper;
 import tech.ydb.auth.iam.CloudAuthIdentity;
 import tech.ydb.core.auth.StaticCredentials;
@@ -136,9 +137,7 @@ public class YdbConnector extends YdbOptions implements AutoCloseable {
                 break;
             case TOKEN:
                 final String authToken = props.get(AUTH_TOKEN);
-                builder = builder.withAuthProvider((opt) -> {
-                    return CloudAuthIdentity.iamTokenIdentity(authToken);
-                });
+                builder = builder.withAuthProvider(new TokenAuthProvider(authToken));
                 break;
             case NONE:
                 break;

@@ -33,7 +33,7 @@ public class IntegrationTest {
     @ClassRule
     public static final YdbHelperRule YDB = new YdbHelperRule();
 
-    public static final String TEST_TABLE = "test_table";
+    public static final String TEST_TABLE = "spark_test_table";
 
     private static GrpcTransport transport;
     private static TableClient tableClient;
