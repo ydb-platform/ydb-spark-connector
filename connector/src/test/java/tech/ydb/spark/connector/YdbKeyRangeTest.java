@@ -1,6 +1,9 @@
 package tech.ydb.spark.connector;
 
+import tech.ydb.spark.connector.common.YdbKeyRange;
+
 import java.util.Arrays;
+
 import org.junit.Assert;
 import org.junit.Test;
 

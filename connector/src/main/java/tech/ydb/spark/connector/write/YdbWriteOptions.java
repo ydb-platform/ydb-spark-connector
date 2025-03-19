@@ -1,10 +1,17 @@
-package tech.ydb.spark.connector;
+package tech.ydb.spark.connector.write;
 
 import java.io.Serializable;
 import java.util.HashMap;
 import java.util.Map;
 
 import org.apache.spark.sql.types.StructType;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import tech.ydb.spark.connector.YdbOptions;
+import tech.ydb.spark.connector.YdbTable;
+import tech.ydb.spark.connector.common.YdbIngestMethod;
+import tech.ydb.spark.connector.common.YdbTableOperationOptions;
 
 /**
  * All settings for YDB upsert operations, shared between partition writers.
@@ -12,10 +19,9 @@ import org.apache.spark.sql.types.StructType;
  * @author zinal
  */
 public class YdbWriteOptions extends YdbTableOperationOptions implements Serializable {
+    private static final long serialVersionUID = 8780674928826518238L;
 
-    private static final long serialVersionUID = 1L;
-
-    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(YdbWriteOptions.class);
+    private static final Logger LOG = LoggerFactory.getLogger(YdbWriteOptions.class);
 
     private final StructType tableType;
     private final StructType inputType;

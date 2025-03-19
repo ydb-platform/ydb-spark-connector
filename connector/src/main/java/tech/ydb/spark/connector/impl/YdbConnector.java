@@ -7,6 +7,9 @@ import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import tech.ydb.auth.TokenAuthProvider;
 import tech.ydb.auth.iam.CloudAuthHelper;
 import tech.ydb.auth.iam.CloudAuthIdentity;
@@ -15,9 +18,9 @@ import tech.ydb.core.grpc.GrpcTransport;
 import tech.ydb.core.grpc.GrpcTransportBuilder;
 import tech.ydb.scheme.SchemeClient;
 import tech.ydb.spark.connector.YdbAuthMode;
-import tech.ydb.spark.connector.YdbIngestMethod;
+import tech.ydb.spark.connector.common.YdbIngestMethod;
 import tech.ydb.spark.connector.YdbOptions;
-import tech.ydb.spark.connector.YdbTypes;
+import tech.ydb.spark.connector.common.YdbTypes;
 import tech.ydb.table.SessionRetryContext;
 import tech.ydb.table.TableClient;
 
@@ -29,7 +32,7 @@ import tech.ydb.table.TableClient;
  */
 public class YdbConnector extends YdbOptions implements AutoCloseable {
 
-    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(YdbConnector.class);
+    private static final Logger LOG = LoggerFactory.getLogger(YdbConnector.class);
 
     private final String catalogName;
     private final Map<String, String> connectOptions;
@@ -49,8 +52,7 @@ public class YdbConnector extends YdbOptions implements AutoCloseable {
             this.connectOptions.put(me.getKey().toLowerCase(), me.getValue());
         }
         this.defaultTypes = new YdbTypes(this.connectOptions);
-        this.defaultIngestMethod = YdbIngestMethod.fromString(
-                this.connectOptions.get(YdbOptions.INGEST_METHOD));
+        this.defaultIngestMethod = YdbIngestMethod.fromString(this.connectOptions.get(YdbOptions.INGEST_METHOD));
         this.singlePartitionScans = Boolean.parseBoolean(props.getOrDefault(SCAN_SINGLE, "false"));
         int poolSize = getPoolSize(props);
         GrpcTransportBuilder builder = GrpcTransport.forConnectionString(props.get(URL));

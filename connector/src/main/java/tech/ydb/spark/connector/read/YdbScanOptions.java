@@ -1,4 +1,4 @@
-package tech.ydb.spark.connector;
+package tech.ydb.spark.connector.read;
 
 import java.io.Serializable;
 import java.util.ArrayList;
@@ -12,8 +12,12 @@ import org.apache.spark.sql.connector.expressions.filter.And;
 import org.apache.spark.sql.connector.expressions.filter.Predicate;
 import org.apache.spark.sql.types.StructType;
 
-import static tech.ydb.spark.connector.YdbTypes.max;
-import static tech.ydb.spark.connector.YdbTypes.min;
+import tech.ydb.spark.connector.common.YdbFieldType;
+import tech.ydb.spark.connector.common.YdbKeyRange;
+import tech.ydb.spark.connector.YdbTable;
+import tech.ydb.spark.connector.common.YdbTableOperationOptions;
+import static tech.ydb.spark.connector.common.YdbTypes.max;
+import static tech.ydb.spark.connector.common.YdbTypes.min;
 
 /**
  * All settings for the scan operations, shared between the partition readers.

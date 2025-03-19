@@ -8,12 +8,14 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 import org.apache.spark.sql.connector.catalog.TableChange;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import tech.ydb.core.Status;
-import tech.ydb.spark.connector.YdbFieldInfo;
-import tech.ydb.spark.connector.YdbFieldType;
 import tech.ydb.spark.connector.YdbOptions;
-import tech.ydb.spark.connector.YdbTypes;
+import tech.ydb.spark.connector.common.YdbFieldInfo;
+import tech.ydb.spark.connector.common.YdbFieldType;
+import tech.ydb.spark.connector.common.YdbTypes;
 import tech.ydb.table.Session;
 import tech.ydb.table.description.TableColumn;
 import tech.ydb.table.description.TableDescription;
@@ -28,8 +30,7 @@ import tech.ydb.table.settings.PartitioningSettings;
  */
 public class YdbAlterTable extends YdbPropertyHelper {
 
-    private static final org.slf4j.Logger LOG
-            = org.slf4j.LoggerFactory.getLogger(YdbAlterTable.class);
+    private static final Logger LOG = LoggerFactory.getLogger(YdbAlterTable.class);
 
     final YdbTypes types;
     final String tablePath;

@@ -1,4 +1,4 @@
-package tech.ydb.spark.connector;
+package tech.ydb.spark.connector.common;
 
 import java.io.Serializable;
 import java.util.ArrayList;
@@ -6,6 +6,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import tech.ydb.spark.connector.YdbTable;
+import tech.ydb.spark.connector.common.YdbFieldInfo;
+import tech.ydb.spark.connector.common.YdbTypes;
 import tech.ydb.spark.connector.impl.YdbConnector;
 import tech.ydb.spark.connector.impl.YdbRegistry;
 
@@ -16,7 +19,7 @@ import tech.ydb.spark.connector.impl.YdbRegistry;
  */
 public abstract class YdbTableOperationOptions implements Serializable {
 
-    private static final long serialVersionUID = 1L;
+    private static final long serialVersionUID = -6388661896591271131L;
 
     // catalog name and connection options to obtain the YdbConnector instance
     private final String catalogName;

@@ -8,14 +8,16 @@ import java.util.concurrent.CompletableFuture;
 
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import scala.collection.JavaConverters;
 
 import tech.ydb.core.Status;
-import tech.ydb.spark.connector.YdbFieldInfo;
-import tech.ydb.spark.connector.YdbFieldType;
 import tech.ydb.spark.connector.YdbOptions;
-import tech.ydb.spark.connector.YdbStoreType;
-import tech.ydb.spark.connector.YdbTypes;
+import tech.ydb.spark.connector.common.YdbFieldInfo;
+import tech.ydb.spark.connector.common.YdbFieldType;
+import tech.ydb.spark.connector.common.YdbStoreType;
+import tech.ydb.spark.connector.common.YdbTypes;
 import tech.ydb.table.Session;
 import tech.ydb.table.description.TableDescription;
 import tech.ydb.table.settings.PartitioningSettings;
@@ -27,8 +29,7 @@ import tech.ydb.table.settings.PartitioningSettings;
  */
 public class YdbCreateTable extends YdbPropertyHelper {
 
-    private static final org.slf4j.Logger LOG
-            = org.slf4j.LoggerFactory.getLogger(YdbCreateTable.class);
+    private static final Logger LOG = LoggerFactory.getLogger(YdbCreateTable.class);
 
     private final String tablePath;
     private final List<YdbFieldInfo> fields;

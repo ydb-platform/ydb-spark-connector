@@ -19,12 +19,12 @@ import org.slf4j.LoggerFactory;
 import scala.collection.JavaConverters;
 
 import tech.ydb.core.Status;
-import tech.ydb.spark.connector.YdbFieldInfo;
-import tech.ydb.spark.connector.YdbFieldType;
-import tech.ydb.spark.connector.YdbIngestMethod;
-import tech.ydb.spark.connector.YdbTypes;
-import tech.ydb.spark.connector.YdbWriteCommit;
-import tech.ydb.spark.connector.YdbWriteOptions;
+import tech.ydb.spark.connector.common.YdbFieldInfo;
+import tech.ydb.spark.connector.common.YdbFieldType;
+import tech.ydb.spark.connector.common.YdbIngestMethod;
+import tech.ydb.spark.connector.common.YdbTypes;
+import tech.ydb.spark.connector.write.YdbWriteCommit;
+import tech.ydb.spark.connector.write.YdbWriteOptions;
 import tech.ydb.table.query.Params;
 import tech.ydb.table.settings.BulkUpsertSettings;
 import tech.ydb.table.transaction.TxControl;

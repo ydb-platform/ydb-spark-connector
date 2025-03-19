@@ -1,5 +1,8 @@
 package tech.ydb.spark.connector;
 
+import tech.ydb.spark.connector.common.YdbKeyRange;
+import tech.ydb.spark.connector.common.YdbStoreType;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -28,6 +31,8 @@ import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import tech.ydb.core.Issue;
 import tech.ydb.core.Result;
@@ -35,6 +40,12 @@ import tech.ydb.core.Status;
 import tech.ydb.core.StatusCode;
 import tech.ydb.spark.connector.impl.YdbConnector;
 import tech.ydb.spark.connector.impl.YdbTruncateTable;
+import tech.ydb.spark.connector.read.YdbScanBuilder;
+import tech.ydb.spark.connector.common.YdbFieldInfo;
+import tech.ydb.spark.connector.common.YdbFieldType;
+import tech.ydb.spark.connector.common.YdbTypes;
+import tech.ydb.spark.connector.write.YdbRowLevelBuilder;
+import tech.ydb.spark.connector.write.YdbWriteBuilder;
 import tech.ydb.table.description.KeyRange;
 import tech.ydb.table.description.TableColumn;
 import tech.ydb.table.description.TableDescription;
@@ -50,8 +61,7 @@ import tech.ydb.table.settings.PartitioningSettings;
 public class YdbTable implements Table,
         SupportsRead, SupportsWrite, SupportsDelete, SupportsRowLevelOperations {
 
-    private static final org.slf4j.Logger LOG
-            = org.slf4j.LoggerFactory.getLogger(YdbTable.class);
+    private static final Logger LOG = LoggerFactory.getLogger(YdbTable.class);
 
     private final YdbConnector connector;
     private final YdbTypes types;

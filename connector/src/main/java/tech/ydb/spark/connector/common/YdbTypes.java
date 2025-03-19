@@ -1,4 +1,7 @@
-package tech.ydb.spark.connector;
+package tech.ydb.spark.connector.common;
+
+import tech.ydb.spark.connector.common.YdbTypeSettings;
+import tech.ydb.spark.connector.common.YdbFieldType;
 
 import java.io.Serializable;
 import java.math.BigDecimal;
