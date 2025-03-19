@@ -1,8 +1,5 @@
 package tech.ydb.spark.connector;
 
-import tech.ydb.spark.connector.common.YdbKeyRange;
-import tech.ydb.spark.connector.common.YdbStoreType;
-
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -38,12 +35,14 @@ import tech.ydb.core.Issue;
 import tech.ydb.core.Result;
 import tech.ydb.core.Status;
 import tech.ydb.core.StatusCode;
+import tech.ydb.spark.connector.common.YdbFieldInfo;
+import tech.ydb.spark.connector.common.YdbFieldType;
+import tech.ydb.spark.connector.common.YdbKeyRange;
+import tech.ydb.spark.connector.common.YdbStoreType;
+import tech.ydb.spark.connector.common.YdbTypes;
 import tech.ydb.spark.connector.impl.YdbConnector;
 import tech.ydb.spark.connector.impl.YdbTruncateTable;
 import tech.ydb.spark.connector.read.YdbScanBuilder;
-import tech.ydb.spark.connector.common.YdbFieldInfo;
-import tech.ydb.spark.connector.common.YdbFieldType;
-import tech.ydb.spark.connector.common.YdbTypes;
 import tech.ydb.spark.connector.write.YdbRowLevelBuilder;
 import tech.ydb.spark.connector.write.YdbWriteBuilder;
 import tech.ydb.table.description.KeyRange;

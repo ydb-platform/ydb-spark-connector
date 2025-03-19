@@ -10,7 +10,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import tech.ydb.spark.connector.impl.YdbScanReadTable;
-import tech.ydb.spark.connector.read.YdbScanOptions;
 
 /**
  * Partition reader factory delivers the scan options to partition reader instances.
