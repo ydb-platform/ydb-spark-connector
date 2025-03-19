@@ -1,4 +1,4 @@
-package tech.ydb.spark.connector;
+package tech.ydb.spark.connector.common;
 
 import java.io.Serializable;
 
@@ -8,8 +8,7 @@ import java.io.Serializable;
  * @author zinal
  */
 public class YdbFieldInfo implements Serializable {
-
-    private static final long serialVersionUID = 1L;
+    private static final long serialVersionUID = -4901495186649569832L;
 
     private final String name;
     private final YdbFieldType type;
@@ -37,5 +36,4 @@ public class YdbFieldInfo implements Serializable {
     public String toString() {
         return name + ":" + type + (nullable ? "?" : "");
     }
-
 }

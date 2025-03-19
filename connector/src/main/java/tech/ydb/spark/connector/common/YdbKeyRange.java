@@ -1,4 +1,4 @@
-package tech.ydb.spark.connector;
+package tech.ydb.spark.connector.common;
 
 import java.io.Serializable;
 import java.util.ArrayList;

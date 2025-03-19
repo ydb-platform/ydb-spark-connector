@@ -1,4 +1,4 @@
-package tech.ydb.spark.connector;
+package tech.ydb.spark.connector.common;
 
 import tech.ydb.table.values.DecimalType;
 import tech.ydb.table.values.PrimitiveType;

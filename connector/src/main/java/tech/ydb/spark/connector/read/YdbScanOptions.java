@@ -1,4 +1,4 @@
-package tech.ydb.spark.connector;
+package tech.ydb.spark.connector.read;
 
 import java.io.Serializable;
 import java.util.ArrayList;
@@ -12,8 +12,11 @@ import org.apache.spark.sql.connector.expressions.filter.And;
 import org.apache.spark.sql.connector.expressions.filter.Predicate;
 import org.apache.spark.sql.types.StructType;
 
-import static tech.ydb.spark.connector.YdbTypes.max;
-import static tech.ydb.spark.connector.YdbTypes.min;
+import tech.ydb.spark.connector.YdbTable;
+import tech.ydb.spark.connector.common.YdbFieldType;
+import tech.ydb.spark.connector.common.YdbKeyRange;
+import tech.ydb.spark.connector.common.YdbTableOperationOptions;
+import tech.ydb.spark.connector.common.YdbTypes;
 
 /**
  * All settings for the scan operations, shared between the partition readers.
@@ -170,36 +173,36 @@ public class YdbScanOptions extends YdbTableOperationOptions implements Serializ
                     Lyzer lyzer = new Lyzer(keyColumn, p.children());
                     if (lyzer.success) {
                         if (lyzer.revert) {
-                            rangeEnd.set(pos, min(rangeEnd.get(pos), lyzer.value));
+                            rangeEnd.set(pos, YdbTypes.min(rangeEnd.get(pos), lyzer.value));
                         } else {
-                            rangeBegin.set(pos, max(rangeBegin.get(pos), lyzer.value));
+                            rangeBegin.set(pos, YdbTypes.max(rangeBegin.get(pos), lyzer.value));
                         }
                     }
                 } else if (">=".equalsIgnoreCase(pname)) {
                     Lyzer lyzer = new Lyzer(keyColumn, p.children());
                     if (lyzer.success) {
                         if (lyzer.revert) {
-                            rangeEnd.set(pos, min(rangeEnd.get(pos), lyzer.value));
+                            rangeEnd.set(pos, YdbTypes.min(rangeEnd.get(pos), lyzer.value));
                         } else {
-                            rangeBegin.set(pos, max(rangeBegin.get(pos), lyzer.value));
+                            rangeBegin.set(pos, YdbTypes.max(rangeBegin.get(pos), lyzer.value));
                         }
                     }
                 } else if ("<".equalsIgnoreCase(pname)) {
                     Lyzer lyzer = new Lyzer(keyColumn, p.children());
                     if (lyzer.success) {
                         if (lyzer.revert) {
-                            rangeBegin.set(pos, max(rangeBegin.get(pos), lyzer.value));
+                            rangeBegin.set(pos, YdbTypes.max(rangeBegin.get(pos), lyzer.value));
                         } else {
-                            rangeEnd.set(pos, min(rangeEnd.get(pos), lyzer.value));
+                            rangeEnd.set(pos, YdbTypes.min(rangeEnd.get(pos), lyzer.value));
                         }
                     }
                 } else if ("<=".equalsIgnoreCase(pname)) {
                     Lyzer lyzer = new Lyzer(keyColumn, p.children());
                     if (lyzer.success) {
                         if (lyzer.revert) {
-                            rangeBegin.set(pos, max(rangeBegin.get(pos), lyzer.value));
+                            rangeBegin.set(pos, YdbTypes.max(rangeBegin.get(pos), lyzer.value));
                         } else {
-                            rangeEnd.set(pos, min(rangeEnd.get(pos), lyzer.value));
+                            rangeEnd.set(pos, YdbTypes.min(rangeEnd.get(pos), lyzer.value));
                         }
                     }
                 } else if ("STARTS_WITH".equalsIgnoreCase(pname)) {
@@ -212,8 +215,8 @@ public class YdbScanOptions extends YdbTableOperationOptions implements Serializ
                                     .append(lvalue, 0, lastCharPos)
                                     .append((char) (1 + lvalue.charAt(lastCharPos)))
                                     .toString();
-                            rangeBegin.set(pos, max(rangeBegin.get(pos), lvalue));
-                            rangeEnd.set(pos, min(rangeEnd.get(pos), rvalue));
+                            rangeBegin.set(pos, YdbTypes.max(rangeBegin.get(pos), lvalue));
+                            rangeEnd.set(pos, YdbTypes.min(rangeEnd.get(pos), rvalue));
                         }
                     }
                 }

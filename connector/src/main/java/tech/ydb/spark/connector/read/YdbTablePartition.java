@@ -1,6 +1,8 @@
-package tech.ydb.spark.connector;
+package tech.ydb.spark.connector.read;
 
 import org.apache.spark.sql.connector.read.InputPartition;
+
+import tech.ydb.spark.connector.common.YdbKeyRange;
 
 /**
  * YDB scan partition is defined by the key range.
@@ -11,7 +13,7 @@ import org.apache.spark.sql.connector.read.InputPartition;
  */
 public class YdbTablePartition implements InputPartition {
 
-    private static final long serialVersionUID = 2L;
+    private static final long serialVersionUID = -529216835125843329L;
 
     private final int orderingKey;
     private final YdbKeyRange range;

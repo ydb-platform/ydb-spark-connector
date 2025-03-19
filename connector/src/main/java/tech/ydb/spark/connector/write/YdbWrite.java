@@ -1,4 +1,4 @@
-package tech.ydb.spark.connector;
+package tech.ydb.spark.connector.write;
 
 import java.io.Serializable;
 
@@ -10,7 +10,10 @@ import org.apache.spark.sql.connector.write.LogicalWriteInfo;
 import org.apache.spark.sql.connector.write.PhysicalWriteInfo;
 import org.apache.spark.sql.connector.write.Write;
 import org.apache.spark.sql.connector.write.WriterCommitMessage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import tech.ydb.spark.connector.YdbTable;
 import tech.ydb.spark.connector.impl.YdbTruncateTable;
 import tech.ydb.spark.connector.impl.YdbWriterImpl;
 
@@ -20,10 +23,9 @@ import tech.ydb.spark.connector.impl.YdbWriterImpl;
  * @author zinal
  */
 public class YdbWrite implements Serializable, Write, BatchWrite, DataWriterFactory {
+    private static final long serialVersionUID = 3457488224723758266L;
 
-    private static final long serialVersionUID = 1L;
-
-    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(YdbWrite.class);
+    private static final Logger LOG = LoggerFactory.getLogger(YdbWrite.class);
 
     private final YdbWriteOptions options;
 

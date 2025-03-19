@@ -7,7 +7,7 @@ import tech.ydb.core.Status;
 import tech.ydb.core.StatusCode;
 import tech.ydb.spark.connector.YdbOptions;
 import tech.ydb.spark.connector.YdbTable;
-import tech.ydb.spark.connector.YdbTypes;
+import tech.ydb.spark.connector.common.YdbTypes;
 import tech.ydb.table.SessionRetryContext;
 
 /**

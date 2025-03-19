@@ -1,4 +1,4 @@
-package tech.ydb.spark.connector;
+package tech.ydb.spark.connector.write;
 
 import org.apache.spark.sql.connector.write.WriterCommitMessage;
 

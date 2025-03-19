@@ -1,4 +1,4 @@
-package tech.ydb.spark.connector;
+package tech.ydb.spark.connector.read;
 
 import java.io.IOException;
 
@@ -6,6 +6,8 @@ import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.connector.read.InputPartition;
 import org.apache.spark.sql.connector.read.PartitionReader;
 import org.apache.spark.sql.connector.read.PartitionReaderFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import tech.ydb.spark.connector.impl.YdbScanReadTable;
 
@@ -15,11 +17,10 @@ import tech.ydb.spark.connector.impl.YdbScanReadTable;
  * @author zinal
  */
 public class YdbPartitionReaderFactory implements PartitionReaderFactory {
+    private static final long serialVersionUID = -3117498545638305126L;
 
-    private static final org.slf4j.Logger LOG =
-            org.slf4j.LoggerFactory.getLogger(YdbPartitionReaderFactory.class);
+    private static final Logger LOG = LoggerFactory.getLogger(YdbPartitionReaderFactory.class);
 
-    private static final long serialVersionUID = 1L;
 
     private final YdbScanOptions options;
 
