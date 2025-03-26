@@ -8,7 +8,10 @@ import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.sources.DataSourceRegister;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import tech.ydb.spark.connector.common.FieldInfo;
 import tech.ydb.spark.connector.impl.YdbCreateTable;
 import tech.ydb.spark.connector.impl.YdbIntrospectTable;
 
@@ -18,12 +21,14 @@ import tech.ydb.spark.connector.impl.YdbIntrospectTable;
  *
  * @author zinal
  */
-public class YdbTableProvider extends YdbOptions implements TableProvider, DataSourceRegister {
+public class YdbTableProvider implements TableProvider, DataSourceRegister {
+    private static final Logger logger = LoggerFactory.getLogger(YdbTableProvider.class);
 
     /**
      * "Implementations must have a public, 0-arg constructor".
      */
     public YdbTableProvider() {
+        logger.debug("created ydb table provider");
     }
 
     @Override
@@ -38,6 +43,7 @@ public class YdbTableProvider extends YdbOptions implements TableProvider, DataS
 
     @Override
     public StructType inferSchema(CaseInsensitiveStringMap options) {
+        logger.info("get inferSchema");
         return new YdbIntrospectTable(options).load(false).schema();
     }
 
@@ -48,7 +54,8 @@ public class YdbTableProvider extends YdbOptions implements TableProvider, DataS
 
     @Override
     public Table getTable(StructType schema, Transform[] partitioning, Map<String, String> properties) {
-        final YdbIntrospectTable intro = new YdbIntrospectTable(properties);
+        logger.debug("get table");
+        final YdbIntrospectTable intro = new YdbIntrospectTable(new CaseInsensitiveStringMap(properties));
         if (schema == null) {
             // No schema provided, so the table must exist.
             return intro.load(false);
@@ -60,9 +67,11 @@ public class YdbTableProvider extends YdbOptions implements TableProvider, DataS
             return table;
         }
         // No such table - creating it.
-        final YdbCreateTable action = new YdbCreateTable(intro.getTablePath(),
-                YdbCreateTable.convert(intro.getTypes(), schema),
-                properties);
+        final YdbCreateTable action = new YdbCreateTable(
+                intro.getTablePath(),
+                FieldInfo.fromSchema(intro.getTypes(), schema),
+                properties
+        );
         intro.getRetryCtx().supplyStatus(session -> action.createTable(session)).join()
                 .expectSuccess("Failed to create table: " + intro.getInputTable());
         // Trying to load one once again.

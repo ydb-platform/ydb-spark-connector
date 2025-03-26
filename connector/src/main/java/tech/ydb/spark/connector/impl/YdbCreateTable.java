@@ -1,23 +1,18 @@
 package tech.ydb.spark.connector.impl;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
-import org.apache.spark.sql.types.StructField;
-import org.apache.spark.sql.types.StructType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import scala.collection.JavaConverters;
 
 import tech.ydb.core.Status;
-import tech.ydb.spark.connector.YdbOptions;
-import tech.ydb.spark.connector.common.YdbFieldInfo;
-import tech.ydb.spark.connector.common.YdbFieldType;
-import tech.ydb.spark.connector.common.YdbStoreType;
-import tech.ydb.spark.connector.common.YdbTypes;
+import tech.ydb.spark.connector.common.FieldInfo;
+import tech.ydb.spark.connector.common.FieldType;
+import tech.ydb.spark.connector.common.OperationOption;
+import tech.ydb.spark.connector.common.PartitionOption;
 import tech.ydb.table.Session;
 import tech.ydb.table.description.TableDescription;
 import tech.ydb.table.settings.PartitioningSettings;
@@ -27,41 +22,37 @@ import tech.ydb.table.settings.PartitioningSettings;
  *
  * @author zinal
  */
-public class YdbCreateTable extends YdbPropertyHelper {
+public class YdbCreateTable {
 
     private static final Logger LOG = LoggerFactory.getLogger(YdbCreateTable.class);
 
     private final String tablePath;
-    private final List<YdbFieldInfo> fields;
+    private final List<FieldInfo> fields;
     private final List<String> primaryKey;
-    private final YdbStoreType storeType;
+    private final PartitioningSettings partitioningSettings;
 
-    public YdbCreateTable(String tablePath, List<YdbFieldInfo> fields,
-            List<String> primaryKey, Map<String, String> properties) {
-        super(properties);
+    public YdbCreateTable(String tablePath, List<FieldInfo> fields, List<String> primaryKey,
+            Map<String, String> options) {
         this.tablePath = tablePath;
         this.fields = fields;
         this.primaryKey = primaryKey;
-        this.storeType = getStoreType(properties);
+        this.partitioningSettings = PartitionOption.readAll(options);
     }
 
-    public YdbCreateTable(String tablePath, List<YdbFieldInfo> fields,
-            Map<String, String> properties) {
-        super(properties);
+    public YdbCreateTable(String tablePath, List<FieldInfo> fields, Map<String, String> options) {
         this.tablePath = tablePath;
         this.fields = fields;
-        this.primaryKey = makePrimaryKey(fields, properties);
-        this.storeType = getStoreType(properties);
+        this.primaryKey = makePrimaryKey(options, fields);
+        this.partitioningSettings = PartitionOption.readAll(options);
     }
 
     public CompletableFuture<Status> createTable(Session session) {
         if (LOG.isDebugEnabled()) {
-            LOG.debug("Creating table {} with fields {} and PK {}",
-                    tablePath, fields, primaryKey);
+            LOG.debug("Creating table {} with fields {} and PK {}", tablePath, fields, primaryKey);
         }
 
         TableDescription.Builder tdb = TableDescription.newBuilder();
-        for (YdbFieldInfo yfi : fields) {
+        for (FieldInfo yfi : fields) {
             if (yfi.isNullable()) {
                 tdb.addNullableColumn(yfi.getName(), yfi.getType().toSdkType());
             } else {
@@ -70,25 +61,7 @@ public class YdbCreateTable extends YdbPropertyHelper {
         }
         tdb.setPrimaryKeys(primaryKey);
 
-        final PartitioningSettings ps = new PartitioningSettings();
-        ps.setPartitioningBySize(getBooleanOption(YdbOptions.AP_BY_SIZE, true));
-        ps.setPartitioningByLoad(getBooleanOption(YdbOptions.AP_BY_LOAD, true));
-        long minPartitions = getLongOption(YdbOptions.AP_MIN_PARTS, 1L);
-        if (minPartitions < 1) {
-            minPartitions = 1L;
-        }
-        long maxPartitions = getLongOption(YdbOptions.AP_MAX_PARTS, 50L);
-        if (maxPartitions < minPartitions) {
-            maxPartitions = minPartitions + 49L + (minPartitions / 100L);
-        }
-        ps.setMinPartitionsCount(minPartitions);
-        ps.setMaxPartitionsCount(maxPartitions);
-        long minSizeMb = getLongOption(YdbOptions.AP_PART_SIZE_MB, 1000L);
-        if (minSizeMb < 1L) {
-            minSizeMb = 10L;
-        }
-        ps.setPartitionSize(minSizeMb);
-        tdb.setPartitioningSettings(ps);
+        tdb.setPartitioningSettings(partitioningSettings);
 
         /* TODO: implement store type configuration
         switch (storeType) {
@@ -106,44 +79,23 @@ public class YdbCreateTable extends YdbPropertyHelper {
         return session.createTable(tablePath, tdb.build());
     }
 
-    public static List<YdbFieldInfo> convert(YdbTypes types, StructType st) {
-        final List<YdbFieldInfo> fields = new ArrayList<>(st.size());
-        for (StructField sf : JavaConverters.asJavaCollection(st)) {
-            YdbFieldType yft = types.mapTypeSpark2Ydb(sf.dataType());
-            if (yft == null) {
-                throw new IllegalArgumentException("Unsupported type for table column: "
-                        + sf.dataType());
-            }
-            fields.add(new YdbFieldInfo(sf.name(), yft, sf.nullable()));
-        }
-        return fields;
-    }
-
-    static List<String> makePrimaryKey(List<YdbFieldInfo> fields, Map<String, String> properties) {
-        String value = properties.get(YdbOptions.PRIMARY_KEY);
+    private static List<String> makePrimaryKey(Map<String, String> options, List<FieldInfo> fields) {
+        String value = OperationOption.PRIMARY_KEY.read(options);
         if (value == null) {
-            String autoPk = grabAutoPk(fields);
-            return Arrays.asList(new String[]{autoPk});
+            String autoPk = grabAutoPk(options, fields);
+            return Arrays.asList(new String[] {autoPk});
         }
         return Arrays.asList(value.split("[,]"));
     }
 
-    static String grabAutoPk(List<YdbFieldInfo> fields) {
-        for (YdbFieldInfo yfi : fields) {
-            if (YdbOptions.AUTO_PK.equalsIgnoreCase(yfi.getName())) {
+    private static String grabAutoPk(Map<String, String> options, List<FieldInfo> fields) {
+        String autoPkName = OperationOption.AUTO_PK.read(options, OperationOption.DEFAULT_AUTO_PK);
+        for (FieldInfo yfi : fields) {
+            if (autoPkName.equalsIgnoreCase(yfi.getName())) {
                 return yfi.getName();
             }
         }
-        fields.add(new YdbFieldInfo(YdbOptions.AUTO_PK, YdbFieldType.Text, false));
-        return YdbOptions.AUTO_PK;
+        fields.add(new FieldInfo(autoPkName, FieldType.Text, false));
+        return autoPkName;
     }
-
-    private YdbStoreType getStoreType(Map<String, String> properties) {
-        String value = properties.get(YdbOptions.TABLE_TYPE);
-        if (value == null) {
-            return YdbStoreType.UNSPECIFIED;
-        }
-        return YdbStoreType.valueOf(value.toUpperCase());
-    }
-
 }

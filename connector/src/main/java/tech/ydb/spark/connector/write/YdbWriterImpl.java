@@ -1,4 +1,4 @@
-package tech.ydb.spark.connector.impl;
+package tech.ydb.spark.connector.write;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -19,12 +19,11 @@ import org.slf4j.LoggerFactory;
 import scala.collection.JavaConverters;
 
 import tech.ydb.core.Status;
-import tech.ydb.spark.connector.common.YdbFieldInfo;
-import tech.ydb.spark.connector.common.YdbFieldType;
-import tech.ydb.spark.connector.common.YdbIngestMethod;
-import tech.ydb.spark.connector.common.YdbTypes;
-import tech.ydb.spark.connector.write.YdbWriteCommit;
-import tech.ydb.spark.connector.write.YdbWriteOptions;
+import tech.ydb.spark.connector.common.FieldInfo;
+import tech.ydb.spark.connector.common.FieldType;
+import tech.ydb.spark.connector.common.IngestMethod;
+import tech.ydb.spark.connector.impl.YdbConnector;
+import tech.ydb.spark.connector.impl.YdbTypes;
 import tech.ydb.table.query.Params;
 import tech.ydb.table.settings.BulkUpsertSettings;
 import tech.ydb.table.transaction.TxControl;
@@ -46,34 +45,34 @@ public class YdbWriterImpl implements DataWriter<InternalRow> {
     private final int partitionId;
     private final long taskId;
 
-    private final YdbTypes types;
     private final List<StructField> inputFields;
-    private final List<YdbFieldInfo> statementFields;
+    private final List<FieldInfo> statementFields;
     private final String sqlStatement;
     private final String tablePath;
+    private final IngestMethod ingestMethod;
+
     private final tech.ydb.table.values.StructType inputType;
     private final tech.ydb.table.values.ListType listType;
-    private final YdbIngestMethod ingestMethod;
     private final int maxBulkRows;
 
     private final YdbConnector connector;
+    private final YdbTypes types;
     private final List<Value<?>> currentInput;
     private CompletableFuture<Status> currentStatus;
 
     public YdbWriterImpl(YdbWriteOptions options, int partitionId, long taskId) {
+        this.connector = options.getTable().getConnector();
+        this.types = options.getTable().getTypes();
         this.partitionId = partitionId;
         this.taskId = taskId;
-        this.types = options.getTypes();
-        this.inputFields = new ArrayList<>(JavaConverters.asJavaCollection(
-                options.getInputType().toList()));
-        this.statementFields = makeStatementFields(options, this.inputFields);
+        this.inputFields = new ArrayList<>(JavaConverters.asJavaCollection(options.getInputType().toList()));
+        this.statementFields = makeStatementFields(options.getTable().getTypes(), options, this.inputFields);
         this.sqlStatement = makeSql(options, this.statementFields);
-        this.tablePath = options.getTablePath();
+        this.tablePath = options.getTable().getTablePath();
         this.inputType = makeInputType(this.statementFields);
         this.listType = tech.ydb.table.values.ListType.of(this.inputType);
         this.ingestMethod = options.getIngestMethod();
-        this.maxBulkRows = options.getMaxBulkRows();
-        this.connector = options.grabConnector();
+        this.maxBulkRows = options.getMaxBatchSize();
         this.currentInput = new ArrayList<>();
         this.currentStatus = null;
         if (LOG.isDebugEnabled()) {
@@ -100,20 +99,20 @@ public class YdbWriterImpl implements DataWriter<InternalRow> {
         }
         Map<String, Value<?>> currentRow = new HashMap<>();
         for (int i = 0; i < numFields; ++i) {
-            YdbFieldInfo yfi = statementFields.get(i);
+            FieldInfo yfi = statementFields.get(i);
             final Object value = record.get(i, inputFields.get(i).dataType());
             currentRow.put(yfi.getName(), convertValue(value, yfi));
         }
         if (statementFields.size() > numFields) {
             // The last field should be the auto-generated PK.
-            YdbFieldInfo yfi = statementFields.get(numFields);
+            FieldInfo yfi = statementFields.get(numFields);
             currentRow.put(yfi.getName(), convertValue(randomPk(), yfi));
         }
         // LOG.debug("Converted input row: {}", currentRow);
         return currentRow;
     }
 
-    private Value<?> convertValue(Object value, YdbFieldInfo yfi) {
+    private Value<?> convertValue(Object value, FieldInfo yfi) {
         Value<?> conv = types.convertToYdb(value, yfi.getType());
         if (yfi.isNullable()) {
             if (conv.getType().getKind() != Type.Kind.OPTIONAL) {
@@ -143,7 +142,7 @@ public class YdbWriterImpl implements DataWriter<InternalRow> {
         // The list is being copied here.
         // DO NOT move this call into the async methods below.
         ListValue value = listType.newValue(input);
-        if (YdbIngestMethod.BULK.equals(ingestMethod)) {
+        if (IngestMethod.BULK_UPSERT.equals(ingestMethod)) {
             currentStatus = connector.getRetryCtx().supplyStatus(
                     session -> session.executeBulkUpsert(
                             tablePath, value, new BulkUpsertSettings()));
@@ -203,35 +202,34 @@ public class YdbWriterImpl implements DataWriter<InternalRow> {
         }
     }
 
-    private static List<YdbFieldInfo> makeStatementFields(YdbWriteOptions options,
+    private static List<FieldInfo> makeStatementFields(YdbTypes types, YdbWriteOptions options,
             List<StructField> inputFields) {
-        final List<YdbFieldInfo> out = new ArrayList<>(inputFields.size());
-        if (options.isMapByNames()) {
-            for (StructField sf : inputFields) {
-                final String name = sf.name();
-                YdbFieldInfo yfi = options.getFieldsMap().get(name);
-                if (yfi != null) {
-                    out.add(yfi);
-                }
-            }
-        } else {
+        final List<FieldInfo> out = new ArrayList<>(inputFields.size());
+//        if (options.isMapByNames()) {
+//            for (StructField sf : inputFields) {
+//                final String name = sf.name();
+//                FieldInfo yfi = options.getFieldsMap().get(name);
+//                if (yfi != null) {
+//                    out.add(yfi);
+//                }
+//            }
+//        } else {
             for (int pos = 0; pos < inputFields.size(); ++pos) {
-                YdbFieldInfo yfi = options.getFieldsList().get(pos);
-                out.add(yfi);
+                out.add(FieldInfo.fromSchema(types, inputFields.get(pos)));
             }
-        }
-        if (options.getGeneratedPk() != null) {
+//        }
+        if (options.getAddtitionalPk() != null) {
             // Generated PK is the last column, if one is presented at all.
-            out.add(new YdbFieldInfo(options.getGeneratedPk(), YdbFieldType.Text, false));
+            out.add(new FieldInfo(options.getAddtitionalPk(), FieldType.Text, false));
         }
         return out;
     }
 
-    private static String makeSql(YdbWriteOptions options, List<YdbFieldInfo> fields) {
+    private static String makeSql(YdbWriteOptions options, List<FieldInfo> fields) {
         final StringBuilder sb = new StringBuilder();
         sb.append("DECLARE $input AS List<Struct<");
         boolean comma = false;
-        for (YdbFieldInfo f : fields) {
+        for (FieldInfo f : fields) {
             if (comma) {
                 sb.append(", ");
             } else {
@@ -246,7 +244,7 @@ public class YdbWriterImpl implements DataWriter<InternalRow> {
         }
         sb.append(">>;\n");
         switch (options.getIngestMethod()) {
-            case BULK:
+            case BULK_UPSERT:
             /* unused sql statement, so use UPSERT to generate it */
             case UPSERT:
                 sb.append("UPSERT INTO ");
@@ -257,7 +255,7 @@ public class YdbWriterImpl implements DataWriter<InternalRow> {
             default: // unreached
                 throw new UnsupportedOperationException();
         }
-        sb.append("`").append(escape(options.getTablePath())).append("`");
+        sb.append("`").append(escape(options.getTable().getTablePath())).append("`");
         sb.append(" SELECT * FROM AS_TABLE($input);");
         return sb.toString();
     }
@@ -275,13 +273,13 @@ public class YdbWriterImpl implements DataWriter<InternalRow> {
         return id;
     }
 
-    private static StructType makeInputType(List<YdbFieldInfo> statementFields) {
+    private static StructType makeInputType(List<FieldInfo> statementFields) {
         if (statementFields.isEmpty()) {
             throw new IllegalArgumentException("Empty input field list specified for writing");
         }
         final Map<String, Type> m = new HashMap<>();
-        for (YdbFieldInfo yfi : statementFields) {
-            m.put(yfi.getName(), YdbFieldType.toSdkType(yfi.getType(), yfi.isNullable()));
+        for (FieldInfo yfi : statementFields) {
+            m.put(yfi.getName(), FieldType.toSdkType(yfi.getType(), yfi.isNullable()));
         }
         return StructType.of(m);
     }

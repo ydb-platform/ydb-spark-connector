@@ -72,9 +72,15 @@ public class IntegrationTest {
 
     @AfterClass
     public static void closeAll() {
-        spark.close();
-        tableClient.close();
-        transport.close();
+        if (spark != null) {
+            spark.close();
+        }
+        if (tableClient != null) {
+            tableClient.close();
+        }
+        if (transport != null) {
+            transport.close();
+        }
     }
 
     @After

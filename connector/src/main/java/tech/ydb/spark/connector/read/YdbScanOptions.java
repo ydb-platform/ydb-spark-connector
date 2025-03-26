@@ -1,6 +1,5 @@
 package tech.ydb.spark.connector.read;
 
-import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -11,47 +10,60 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
 import org.apache.spark.sql.connector.expressions.filter.And;
 import org.apache.spark.sql.connector.expressions.filter.Predicate;
 import org.apache.spark.sql.types.StructType;
+import org.apache.spark.sql.util.CaseInsensitiveStringMap;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import tech.ydb.spark.connector.YdbTable;
-import tech.ydb.spark.connector.common.YdbFieldType;
-import tech.ydb.spark.connector.common.YdbKeyRange;
-import tech.ydb.spark.connector.common.YdbTableOperationOptions;
-import tech.ydb.spark.connector.common.YdbTypes;
+import tech.ydb.spark.connector.common.FieldType;
+import tech.ydb.spark.connector.common.KeysRange;
+import tech.ydb.spark.connector.common.OperationOption;
+import tech.ydb.spark.connector.impl.YdbTypes;
 
 /**
  * All settings for the scan operations, shared between the partition readers.
  *
  * @author zinal
  */
-public class YdbScanOptions extends YdbTableOperationOptions implements Serializable {
+public class YdbScanOptions {
+    private static final Logger logger = LoggerFactory.getLogger(YdbScanOptions.class);
 
-    private static final long serialVersionUID = 1L;
-
-    private static final org.slf4j.Logger LOG
-            = org.slf4j.LoggerFactory.getLogger(YdbScanOptions.class);
-
+    private final String tablePath;
+    private final CaseInsensitiveStringMap options;
     private final StructType actualSchema;
     private final ArrayList<String> keyColumns;
-    private final ArrayList<YdbFieldType> keyTypes;
+    private final ArrayList<FieldType> keyTypes;
     private final ArrayList<Object> rangeBegin;
     private final ArrayList<Object> rangeEnd;
-    private final ArrayList<YdbKeyRange> partitions;
+    private final ArrayList<KeysRange> partitions;
     private final int scanQueueDepth;
-    private final int scanSessionSeconds;
+    private final YdbTypes types;
+
     private int rowLimit;
     private StructType requiredSchema;
 
-    public YdbScanOptions(YdbTable table) {
-        super(table);
+    public YdbScanOptions(YdbTable table, CaseInsensitiveStringMap options) {
+        this.tablePath = table.getTablePath();
+        this.options = options;
+        this.types = new YdbTypes(options);
+
         this.actualSchema = table.schema();
         this.keyColumns = new ArrayList<>(table.getKeyColumns()); // ensure serializable list
         this.keyTypes = table.getKeyTypes();
         this.rangeBegin = new ArrayList<>();
         this.rangeEnd = new ArrayList<>();
         this.partitions = table.getPartitions();
-        this.scanQueueDepth = table.getConnector().getScanQueueDepth();
-        this.scanSessionSeconds = table.getConnector().getScanSessionSeconds();
+
+        this.scanQueueDepth = getScanQueueDepth(options);
         this.rowLimit = -1;
+    }
+
+    public YdbTypes getTypes() {
+        return types;
+    }
+
+    public CaseInsensitiveStringMap getOptions() {
+        return options;
     }
 
     public void setupPredicates(Predicate[] predicates) {
@@ -73,11 +85,15 @@ public class YdbScanOptions extends YdbTableOperationOptions implements Serializ
         return requiredSchema;
     }
 
+    public String getTablePath() {
+        return tablePath;
+    }
+
     public List<String> getKeyColumns() {
         return keyColumns;
     }
 
-    public List<YdbFieldType> getKeyTypes() {
+    public List<FieldType> getKeyTypes() {
         return keyTypes;
     }
 
@@ -89,16 +105,12 @@ public class YdbScanOptions extends YdbTableOperationOptions implements Serializ
         return rangeEnd;
     }
 
-    public List<YdbKeyRange> getPartitions() {
+    public List<KeysRange> getPartitions() {
         return partitions;
     }
 
     public int getScanQueueDepth() {
         return scanQueueDepth;
-    }
-
-    public int getScanSessionSeconds() {
-        return scanSessionSeconds;
     }
 
     public int getRowLimit() {
@@ -107,6 +119,23 @@ public class YdbScanOptions extends YdbTableOperationOptions implements Serializ
 
     public void setRowLimit(int rowLimit) {
         this.rowLimit = rowLimit;
+    }
+
+    private static int getScanQueueDepth(CaseInsensitiveStringMap options) {
+        try {
+            int scanQueueDepth = OperationOption.SCAN_QUEUE_DEPTH.readInt(options, 3);
+            if (scanQueueDepth < 2) {
+                logger.warn("Value of {} property too low, reverting to minimum of 2.",
+                        OperationOption.SCAN_QUEUE_DEPTH);
+                return 2;
+            }
+
+            return scanQueueDepth;
+        } catch (NumberFormatException nfe) {
+            logger.warn("Illegal value of {} property, reverting to default of 3.",
+                    OperationOption.SCAN_QUEUE_DEPTH, nfe);
+            return 3;
+        }
     }
 
     /**
@@ -149,13 +178,14 @@ public class YdbScanOptions extends YdbTableOperationOptions implements Serializ
         if (predicates == null || predicates.isEmpty()) {
             return;
         }
-        LOG.debug("Calculating scan ranges for predicates {}", predicates);
+        logger.debug("Calculating scan ranges for predicates {}", predicates);
         rangeBegin.clear();
         rangeEnd.clear();
-        for (String x : keyColumns) {
+        for (int pos = 0; pos < keyColumns.size(); ++pos) {
             rangeBegin.add(null);
             rangeEnd.add(null);
         }
+
         for (int pos = 0; pos < keyColumns.size(); ++pos) {
             final String keyColumn = keyColumns.get(pos);
             boolean hasEquality = false;
@@ -243,7 +273,7 @@ public class YdbScanOptions extends YdbTableOperationOptions implements Serializ
                 break;
             }
         }
-        LOG.debug("Calculated scan ranges {} -> {}", rangeBegin, rangeEnd);
+        logger.debug("Calculated scan ranges {} -> {}", rangeBegin, rangeEnd);
     }
 
     /**

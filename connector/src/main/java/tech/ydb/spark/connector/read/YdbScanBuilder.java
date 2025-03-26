@@ -7,6 +7,9 @@ import org.apache.spark.sql.connector.read.SupportsPushDownLimit;
 import org.apache.spark.sql.connector.read.SupportsPushDownRequiredColumns;
 import org.apache.spark.sql.connector.read.SupportsPushDownV2Filters;
 import org.apache.spark.sql.types.StructType;
+import org.apache.spark.sql.util.CaseInsensitiveStringMap;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import tech.ydb.spark.connector.YdbTable;
 
@@ -20,15 +23,14 @@ public class YdbScanBuilder implements ScanBuilder,
         SupportsPushDownRequiredColumns,
         SupportsPushDownLimit {
 
-    private static final org.slf4j.Logger LOG
-            = org.slf4j.LoggerFactory.getLogger(YdbScanBuilder.class);
+    private static final Logger LOG = LoggerFactory.getLogger(YdbScanBuilder.class);
 
     private final YdbTable table;
     private final YdbScanOptions options;
 
-    public YdbScanBuilder(YdbTable table) {
+    public YdbScanBuilder(YdbTable table, CaseInsensitiveStringMap options) {
         this.table = table;
-        this.options = new YdbScanOptions(table);
+        this.options = new YdbScanOptions(table, options);
         LOG.debug("Preparing scan for table {}", table);
     }
 

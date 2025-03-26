@@ -1,13 +1,14 @@
 package tech.ydb.spark.connector.impl;
 
-import java.util.Map;
+import org.apache.spark.sql.util.CaseInsensitiveStringMap;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import tech.ydb.core.Result;
 import tech.ydb.core.Status;
 import tech.ydb.core.StatusCode;
-import tech.ydb.spark.connector.YdbOptions;
 import tech.ydb.spark.connector.YdbTable;
-import tech.ydb.spark.connector.common.YdbTypes;
+import tech.ydb.spark.connector.common.OperationOption;
 import tech.ydb.table.SessionRetryContext;
 
 /**
@@ -16,10 +17,9 @@ import tech.ydb.table.SessionRetryContext;
  * @author VVBondarenko
  * @author zinal
  */
-public class YdbIntrospectTable extends YdbOptions {
+public class YdbIntrospectTable {
 
-    private static final org.slf4j.Logger LOG
-            = org.slf4j.LoggerFactory.getLogger(YdbIntrospectTable.class);
+    private static final Logger LOG = LoggerFactory.getLogger(YdbIntrospectTable.class);
 
     private final YdbConnector connector;
     private final YdbTypes types;
@@ -29,16 +29,16 @@ public class YdbIntrospectTable extends YdbOptions {
     private final String logicalName;
     private final String indexName;
 
-    public YdbIntrospectTable(Map<String, String> props) {
-        this.connector = YdbRegistry.getOrCreate(props);
-        this.types = new YdbTypes(props);
+    public YdbIntrospectTable(CaseInsensitiveStringMap options) {
+        this.connector = YdbRegistry.getOrCreate(options);
+        this.types = new YdbTypes(options);
 
         // Check that table path is provided
-        this.inputTable = props.get(DBTABLE);
+        this.inputTable = OperationOption.DBTABLE.read(options);
         if (inputTable == null || inputTable.length() == 0) {
-            throw new IllegalArgumentException("Missing property: " + DBTABLE);
+            throw new IllegalArgumentException("Missing property: " + OperationOption.DBTABLE);
         }
-        final String database = this.connector.getDatabase();
+        final String database = this.connector.getTransport().getDatabase();
 
         LOG.debug("Locating table {} in database {}", inputTable, database);
 

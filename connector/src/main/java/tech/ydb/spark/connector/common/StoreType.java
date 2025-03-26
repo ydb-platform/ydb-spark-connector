@@ -4,7 +4,7 @@ package tech.ydb.spark.connector.common;
  *
  * @author zinal
  */
-public enum YdbStoreType {
+public enum StoreType {
     UNSPECIFIED,
     ROW,
     COLUMN,

@@ -1,4 +1,4 @@
-package tech.ydb.spark.connector.common;
+package tech.ydb.spark.connector.impl;
 
 import java.io.Serializable;
 import java.math.BigDecimal;
@@ -9,15 +9,17 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeParseException;
-import java.util.Map;
 
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.Decimal;
+import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 import org.apache.spark.unsafe.types.UTF8String;
 
+import tech.ydb.spark.connector.common.FieldType;
+import tech.ydb.spark.connector.common.OperationOption;
 import tech.ydb.table.result.ValueReader;
 import tech.ydb.table.values.DecimalType;
 import tech.ydb.table.values.DecimalValue;
@@ -39,14 +41,10 @@ public final class YdbTypes implements Serializable {
     public static final DataType SPARK_DECIMAL = DataTypes.createDecimalType(38, 10);
     public static final DataType SPARK_UINT64 = DataTypes.createDecimalType(22, 0);
 
-    private final YdbTypeSettings typeSettings;
+    private final boolean dateAsString;
 
-    public YdbTypes(YdbTypeSettings typeSettings) {
-        this.typeSettings = typeSettings;
-    }
-
-    public YdbTypes(Map<String, String> props) {
-        this(new YdbTypeSettings(props));
+    public YdbTypes(CaseInsensitiveStringMap options) {
+        this.dateAsString = OperationOption.DATE_AS_STRING.readBoolean(options, false);
     }
 
     public boolean mapNullable(tech.ydb.table.values.Type yt) {
@@ -115,37 +113,37 @@ public final class YdbTypes implements Serializable {
             case Uuid:
                 return DataTypes.StringType;
             case Date:
-                if (typeSettings.isDateAsString()) {
+                if (dateAsString) {
                     return DataTypes.StringType;
                 }
                 return DataTypes.DateType;
             case Datetime:
-                if (typeSettings.isDateAsString()) {
+                if (dateAsString) {
                     return DataTypes.StringType;
                 }
                 return DataTypes.TimestampType;
             case Timestamp:
-                if (typeSettings.isDateAsString()) {
+                if (dateAsString) {
                     return DataTypes.StringType;
                 }
                 return DataTypes.TimestampType;
             case Interval:
-                if (typeSettings.isDateAsString()) {
+                if (dateAsString) {
                     return DataTypes.StringType;
                 }
                 return DataTypes.CalendarIntervalType;
             case TzDate:
-                if (typeSettings.isDateAsString()) {
+                if (dateAsString) {
                     return DataTypes.StringType;
                 }
                 return DataTypes.DateType;
             case TzDatetime:
-                if (typeSettings.isDateAsString()) {
+                if (dateAsString) {
                     return DataTypes.StringType;
                 }
                 return DataTypes.TimestampType;
             case TzTimestamp:
-                if (typeSettings.isDateAsString()) {
+                if (dateAsString) {
                     return DataTypes.StringType;
                 }
                 return DataTypes.TimestampType;
@@ -158,54 +156,54 @@ public final class YdbTypes implements Serializable {
         return null;
     }
 
-    public YdbFieldType mapTypeSpark2Ydb(org.apache.spark.sql.types.DataType type) {
+    public FieldType mapTypeSpark2Ydb(org.apache.spark.sql.types.DataType type) {
         if (type instanceof org.apache.spark.sql.types.DecimalType) {
             org.apache.spark.sql.types.DecimalType x = (org.apache.spark.sql.types.DecimalType) type;
             if (x.scale() == 0) {
                 if (x.precision() <= 21) {
-                    return YdbFieldType.Int64;
+                    return FieldType.Int64;
                 }
             }
             if (x.scale() == 38 && x.precision() == 10) {
-                return YdbFieldType.DyNumber;
+                return FieldType.DyNumber;
             }
-            return YdbFieldType.Decimal;
+            return FieldType.Decimal;
         }
         if (type instanceof org.apache.spark.sql.types.VarcharType) {
-            return YdbFieldType.Text;
+            return FieldType.Text;
         }
         if (DataTypes.BooleanType.sameType(type)) {
-            return YdbFieldType.Bool;
+            return FieldType.Bool;
         }
         if (DataTypes.ByteType.sameType(type)) {
-            return YdbFieldType.Int8;
+            return FieldType.Int8;
         }
         if (DataTypes.ShortType.sameType(type)) {
-            return YdbFieldType.Int16;
+            return FieldType.Int16;
         }
         if (DataTypes.IntegerType.sameType(type)) {
-            return YdbFieldType.Int32;
+            return FieldType.Int32;
         }
         if (DataTypes.LongType.sameType(type)) {
-            return YdbFieldType.Int64;
+            return FieldType.Int64;
         }
         if (DataTypes.FloatType.sameType(type)) {
-            return YdbFieldType.Float;
+            return FieldType.Float;
         }
         if (DataTypes.DoubleType.sameType(type)) {
-            return YdbFieldType.Double;
+            return FieldType.Double;
         }
         if (DataTypes.BinaryType.sameType(type)) {
-            return YdbFieldType.Bytes;
+            return FieldType.Bytes;
         }
         if (DataTypes.StringType.sameType(type)) {
-            return YdbFieldType.Text;
+            return FieldType.Text;
         }
         if (DataTypes.DateType.sameType(type)) {
-            return YdbFieldType.Date;
+            return FieldType.Date;
         }
         if (DataTypes.TimestampType.sameType(type)) {
-            return YdbFieldType.Timestamp;
+            return FieldType.Timestamp;
         }
         return null;
     }
@@ -229,17 +227,17 @@ public final class YdbTypes implements Serializable {
                     case Bytes:
                         return vr.getBytes();
                     case Date:
-                        if (typeSettings.isDateAsString()) {
+                        if (dateAsString) {
                             return UTF8String.fromString(vr.getDate().toString());
                         }
                         return (int) vr.getDate().toEpochDay();
                     case Datetime:
-                        if (typeSettings.isDateAsString()) {
+                        if (dateAsString) {
                             return UTF8String.fromString(vr.getDatetime().toString());
                         }
                         return vr.getDatetime().toInstant(ZoneOffset.UTC).toEpochMilli() * 1000L;
                     case Timestamp:
-                        if (typeSettings.isDateAsString()) {
+                        if (dateAsString) {
                             return UTF8String.fromString(vr.getTimestamp().toString());
                         }
                         return vr.getTimestamp().toEpochMilli() * 1000L;
@@ -311,18 +309,18 @@ public final class YdbTypes implements Serializable {
                     case Bytes:
                         return v.asData().getBytes();
                     case Date:
-                        if (typeSettings.isDateAsString()) {
+                        if (dateAsString) {
                             return UTF8String.fromString(v.asData().getDate().toString());
                         }
                         return (int) v.asData().getDate().toEpochDay();
                     case Datetime:
-                        if (typeSettings.isDateAsString()) {
+                        if (dateAsString) {
                             return UTF8String.fromString(v.asData().getDatetime().toString());
                         }
                         return v.asData().getDatetime()
                                 .toInstant(ZoneOffset.UTC).toEpochMilli() * 1000L;
                     case Timestamp:
-                        if (typeSettings.isDateAsString()) {
+                        if (dateAsString) {
                             return UTF8String.fromString(v.asData().getTimestamp().toString());
                         }
                         return v.asData().getTimestamp().toEpochMilli() * 1000L;
@@ -368,7 +366,7 @@ public final class YdbTypes implements Serializable {
         return null;
     }
 
-    public Value<?> convertToYdb(Object v, YdbFieldType t) {
+    public Value<?> convertToYdb(Object v, FieldType t) {
         switch (t) {
             case Bool:
                 return convertBoolToYdb(v, t);
@@ -416,7 +414,7 @@ public final class YdbTypes implements Serializable {
         return PrimitiveValue.newText(v.toString());
     }
 
-    private Value<?> convertUint8ToYdb(Object v, YdbFieldType t) {
+    private Value<?> convertUint8ToYdb(Object v, FieldType t) {
         if (v == null) {
             return PrimitiveType.Uint8.makeOptional().emptyValue();
         }
@@ -432,7 +430,7 @@ public final class YdbTypes implements Serializable {
         throw badConversion(v, t);
     }
 
-    private Value<?> convertUint64ToYdb(Object v, YdbFieldType t) {
+    private Value<?> convertUint64ToYdb(Object v, FieldType t) {
         if (v == null) {
             return PrimitiveType.Uint64.makeOptional().emptyValue();
         }
@@ -452,7 +450,7 @@ public final class YdbTypes implements Serializable {
         throw badConversion(v, t);
     }
 
-    private Value<?> convertUint32ToYdb(Object v, YdbFieldType t) {
+    private Value<?> convertUint32ToYdb(Object v, FieldType t) {
         if (v == null) {
             return PrimitiveType.Uint32.makeOptional().emptyValue();
         }
@@ -468,7 +466,7 @@ public final class YdbTypes implements Serializable {
         throw badConversion(v, t);
     }
 
-    private Value<?> convertUint16ToYdb(Object v, YdbFieldType t) {
+    private Value<?> convertUint16ToYdb(Object v, FieldType t) {
         if (v == null) {
             return PrimitiveType.Uint16.makeOptional().emptyValue();
         }
@@ -484,7 +482,7 @@ public final class YdbTypes implements Serializable {
         throw badConversion(v, t);
     }
 
-    private Value<?> convertInt8ToYdb(Object v, YdbFieldType t) {
+    private Value<?> convertInt8ToYdb(Object v, FieldType t) {
         if (v == null) {
             return PrimitiveType.Int8.makeOptional().emptyValue();
         }
@@ -500,7 +498,7 @@ public final class YdbTypes implements Serializable {
         throw badConversion(v, t);
     }
 
-    private Value<?> convertInt64ToYdb(Object v, YdbFieldType t) {
+    private Value<?> convertInt64ToYdb(Object v, FieldType t) {
         if (v == null) {
             return PrimitiveType.Int64.makeOptional().emptyValue();
         }
@@ -516,7 +514,7 @@ public final class YdbTypes implements Serializable {
         throw badConversion(v, t);
     }
 
-    private Value<?> convertInt32ToYdb(Object v, YdbFieldType t) {
+    private Value<?> convertInt32ToYdb(Object v, FieldType t) {
         if (v == null) {
             return PrimitiveType.Int32.makeOptional().emptyValue();
         }
@@ -532,7 +530,7 @@ public final class YdbTypes implements Serializable {
         throw badConversion(v, t);
     }
 
-    private Value<?> convertInt16ToYdb(Object v, YdbFieldType t) {
+    private Value<?> convertInt16ToYdb(Object v, FieldType t) {
         if (v == null) {
             return PrimitiveType.Int16.makeOptional().emptyValue();
         }
@@ -548,7 +546,7 @@ public final class YdbTypes implements Serializable {
         throw badConversion(v, t);
     }
 
-    private Value<?> convertFloatToYdb(Object v, YdbFieldType t) {
+    private Value<?> convertFloatToYdb(Object v, FieldType t) {
         if (v == null) {
             return PrimitiveType.Float.makeOptional().emptyValue();
         }
@@ -564,7 +562,7 @@ public final class YdbTypes implements Serializable {
         throw badConversion(v, t);
     }
 
-    private Value<?> convertDoubleToYdb(Object v, YdbFieldType t) {
+    private Value<?> convertDoubleToYdb(Object v, FieldType t) {
         if (v == null) {
             return PrimitiveType.Double.makeOptional().emptyValue();
         }
@@ -580,7 +578,7 @@ public final class YdbTypes implements Serializable {
         throw badConversion(v, t);
     }
 
-    private Value<?> convertDecimalToYdb(Object v, YdbFieldType t) {
+    private Value<?> convertDecimalToYdb(Object v, FieldType t) {
         if (v == null) {
             return DecimalType.getDefault().makeOptional().emptyValue();
         }
@@ -602,7 +600,7 @@ public final class YdbTypes implements Serializable {
         throw badConversion(v, t);
     }
 
-    private Value<?> convertTimestampToYdb(Object v, YdbFieldType t) {
+    private Value<?> convertTimestampToYdb(Object v, FieldType t) {
         if (v == null) {
             return PrimitiveType.Timestamp.makeOptional().emptyValue();
         }
@@ -618,7 +616,7 @@ public final class YdbTypes implements Serializable {
         throw badConversion(v, t);
     }
 
-    private Value<?> convertDatetimeToYdb(Object v, YdbFieldType t) {
+    private Value<?> convertDatetimeToYdb(Object v, FieldType t) {
         if (v == null) {
             return PrimitiveType.Datetime.makeOptional().emptyValue();
         }
@@ -637,7 +635,7 @@ public final class YdbTypes implements Serializable {
         throw badConversion(v, t);
     }
 
-    private Value<?> convertDateToYdb(Object v, YdbFieldType t) {
+    private Value<?> convertDateToYdb(Object v, FieldType t) {
         if (v == null) {
             return PrimitiveType.Date.makeOptional().emptyValue();
         }
@@ -656,7 +654,7 @@ public final class YdbTypes implements Serializable {
         throw badConversion(v, t);
     }
 
-    private Value<?> convertBytesToYdb(Object v, YdbFieldType t) {
+    private Value<?> convertBytesToYdb(Object v, FieldType t) {
         if (v == null) {
             return PrimitiveType.Bytes.makeOptional().emptyValue();
         }
@@ -672,7 +670,7 @@ public final class YdbTypes implements Serializable {
         throw badConversion(v, t);
     }
 
-    private Value<?> convertBoolToYdb(Object v, YdbFieldType t) {
+    private Value<?> convertBoolToYdb(Object v, FieldType t) {
         if (v == null) {
             return PrimitiveType.Bool.makeOptional().emptyValue();
         }
@@ -685,7 +683,7 @@ public final class YdbTypes implements Serializable {
         throw badConversion(v, t);
     }
 
-    private static UnsupportedOperationException badConversion(Object v, YdbFieldType t) {
+    private static UnsupportedOperationException badConversion(Object v, FieldType t) {
         throw new UnsupportedOperationException("Cannot convert value [" + v + "] of class "
                 + v.getClass().getName() + " to type " + t);
     }
@@ -737,7 +735,7 @@ public final class YdbTypes implements Serializable {
 
         if (type.getKind() == Type.Kind.PRIMITIVE) {
             PrimitiveType primitiveType = (PrimitiveType) type;
-            boolean datesAsString = typeSettings.isDateAsString();
+            boolean datesAsString = dateAsString;
             switch (primitiveType) {
                 case Bool:
                     row.setBoolean(i, vr.getBool());

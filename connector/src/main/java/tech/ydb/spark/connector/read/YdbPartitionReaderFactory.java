@@ -21,7 +21,6 @@ public class YdbPartitionReaderFactory implements PartitionReaderFactory {
 
     private static final Logger LOG = LoggerFactory.getLogger(YdbPartitionReaderFactory.class);
 
-
     private final YdbScanOptions options;
 
     public YdbPartitionReaderFactory(YdbScanOptions options) {
@@ -30,25 +29,21 @@ public class YdbPartitionReaderFactory implements PartitionReaderFactory {
 
     @Override
     public PartitionReader<InternalRow> createReader(InputPartition partition) {
-        return new YdbReader(options, (YdbTablePartition) partition);
+        return new LazyReader((YdbTablePartition) partition);
     }
 
-    static class YdbReader implements PartitionReader<InternalRow> {
-
-        private final YdbScanOptions options;
+    class LazyReader implements PartitionReader<InternalRow> {
         private final YdbTablePartition partition;
-        private YdbScanReadTable scan;
+        private YdbScanReadTable scan = null;
 
-        YdbReader(YdbScanOptions options, YdbTablePartition partition) {
-            this.options = options;
+        LazyReader(YdbTablePartition partition) {
             this.partition = partition;
         }
 
         @Override
         public boolean next() throws IOException {
             if (scan == null) {
-                LOG.debug("Preparing scan for table {} at partition {}",
-                        options.getTablePath(), partition);
+                LOG.debug("Preparing scan for table {} at partition {}", options.getTablePath(), partition);
                 scan = new YdbScanReadTable(options, partition.getRange());
                 LOG.debug("Scan prepared, ready to fetch...");
             }

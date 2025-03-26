@@ -8,8 +8,11 @@ import java.util.Random;
 import org.apache.spark.sql.connector.read.Batch;
 import org.apache.spark.sql.connector.read.InputPartition;
 import org.apache.spark.sql.connector.read.PartitionReaderFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import tech.ydb.spark.connector.common.YdbKeyRange;
+import tech.ydb.spark.connector.common.KeysRange;
+
 
 /**
  * Per-partition scan planning, including the partition elimination logic.
@@ -18,8 +21,7 @@ import tech.ydb.spark.connector.common.YdbKeyRange;
  */
 public class YdbScanBatch implements Batch {
 
-    private static final org.slf4j.Logger LOG =
-            org.slf4j.LoggerFactory.getLogger(YdbScanBatch.class);
+    private static final Logger LOG = LoggerFactory.getLogger(YdbScanBatch.class);
 
     private final YdbScanOptions options;
 
@@ -29,18 +31,18 @@ public class YdbScanBatch implements Batch {
 
     @Override
     public InputPartition[] planInputPartitions() {
-        List<YdbKeyRange> partitions = options.getPartitions();
+        List<KeysRange> partitions = options.getPartitions();
         if (partitions == null || partitions.isEmpty()) {
             // Single partition with possible limits taken from the predicates.
             partitions = new ArrayList<>(1);
-            partitions.add(YdbKeyRange.UNRESTRICTED);
+            partitions.add(KeysRange.UNRESTRICTED);
             LOG.warn("Missing partitioning information for table {}", options.getTablePath());
         }
         LOG.debug("Input table partitions: {}", partitions);
         // Predicates restriction
-        YdbKeyRange predicates = new YdbKeyRange(
-                new YdbKeyRange.Limit(options.getRangeBegin(), true),
-                new YdbKeyRange.Limit(options.getRangeEnd(), true)
+        KeysRange predicates = new KeysRange(
+                new KeysRange.Limit(options.getRangeBegin(), true),
+                new KeysRange.Limit(options.getRangeEnd(), true)
         );
         final Random random = new Random();
         YdbTablePartition[] out = partitions.stream()

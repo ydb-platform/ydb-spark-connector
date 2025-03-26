@@ -16,8 +16,8 @@ import org.slf4j.LoggerFactory;
 import tech.ydb.core.Result;
 import tech.ydb.core.Status;
 import tech.ydb.core.grpc.GrpcReadStream;
-import tech.ydb.spark.connector.common.YdbFieldType;
-import tech.ydb.spark.connector.common.YdbKeyRange;
+import tech.ydb.spark.connector.common.FieldType;
+import tech.ydb.spark.connector.common.KeysRange;
 import tech.ydb.spark.connector.read.YdbScanOptions;
 import tech.ydb.table.Session;
 import tech.ydb.table.query.ReadTablePart;
@@ -45,7 +45,7 @@ public class YdbScanReadTable implements AutoCloseable {
     private final ArrayBlockingQueue<QueueItem> queue;
     private volatile QueueItem currentItem = null;
 
-    public YdbScanReadTable(YdbScanOptions options, YdbKeyRange keyRange) {
+    public YdbScanReadTable(YdbScanOptions options, KeysRange keyRange) {
         this.options = options;
         this.queue = new ArrayBlockingQueue<>(options.getScanQueueDepth());
 
@@ -53,8 +53,8 @@ public class YdbScanReadTable implements AutoCloseable {
         this.outColumns = settings.getColumns();
 
         // Create or acquire the connector object.
-        Duration sessionTimeout = Duration.ofSeconds(options.getScanSessionSeconds());
-        Result<Session> session = options.grabConnector().getTableClient().createSession(sessionTimeout).join();
+        YdbConnector connector = YdbRegistry.getOrCreate(options.getOptions());
+        Result<Session> session = connector.getTableClient().createSession(Duration.ofSeconds(5)).join();
         if (!session.isSuccess()) {
             this.stream = null;
             this.readStatus = CompletableFuture.completedFuture(session.getStatus());
@@ -139,7 +139,7 @@ public class YdbScanReadTable implements AutoCloseable {
         }
    }
 
-    private static ReadTableSettings prepareReadTableSettings(YdbScanOptions opts, YdbKeyRange keyRange) {
+    private static ReadTableSettings prepareReadTableSettings(YdbScanOptions opts, KeysRange keyRange) {
         LOG.debug("Configuring scan for table {}, range {}, columns {}, types {}",
                 opts.getTablePath(), keyRange, opts.getKeyColumns(), opts.getKeyTypes());
 
@@ -155,8 +155,8 @@ public class YdbScanReadTable implements AutoCloseable {
             }
         }
 
-        final YdbKeyRange.Limit realLeft = keyRange.getFrom();
-        final YdbKeyRange.Limit realRight = keyRange.getTo();
+        final KeysRange.Limit realLeft = keyRange.getFrom();
+        final KeysRange.Limit realRight = keyRange.getTo();
         if (!realLeft.isUnrestricted()) {
             TupleValue tv = makeRange(opts, realLeft.getValue());
             if (realLeft.isInclusive()) {
@@ -190,7 +190,7 @@ public class YdbScanReadTable implements AutoCloseable {
 
 
     private static TupleValue makeRange(YdbScanOptions opts, List<Object> values) {
-        final List<YdbFieldType> keyTypes = opts.getKeyTypes();
+        final List<FieldType> keyTypes = opts.getKeyTypes();
         final List<Value<?>> l = new ArrayList<>(values.size());
         for (int i = 0; i < values.size(); ++i) {
             Value<?> v = opts.getTypes().convertToYdb(values.get(i), keyTypes.get(i));

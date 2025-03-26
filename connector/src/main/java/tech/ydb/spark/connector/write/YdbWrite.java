@@ -15,7 +15,6 @@ import org.slf4j.LoggerFactory;
 
 import tech.ydb.spark.connector.YdbTable;
 import tech.ydb.spark.connector.impl.YdbTruncateTable;
-import tech.ydb.spark.connector.impl.YdbWriterImpl;
 
 /**
  * YDB table writer: orchestration and partition writer factory.
@@ -29,17 +28,13 @@ public class YdbWrite implements Serializable, Write, BatchWrite, DataWriterFact
 
     private final YdbWriteOptions options;
 
-    YdbWrite(YdbWriteOptions options) {
-        this.options = options;
-    }
-
-    YdbWrite(YdbTable table, LogicalWriteInfo lwi, boolean mapByNames, boolean truncate) {
-        this(new YdbWriteOptions(table, mapByNames, lwi.schema(), lwi.queryId(), lwi.options(), truncate));
+    public YdbWrite(YdbTable table, LogicalWriteInfo lwi, boolean mapByNames, boolean truncate) {
+        this.options = new YdbWriteOptions(table, mapByNames, lwi.schema(), lwi.queryId(), lwi.options(), truncate);
     }
 
     @Override
     public BatchWrite toBatch() {
-        LOG.debug("YdbWrite converted to BatchWrite for table {}", options.getTablePath());
+        LOG.debug("YdbWrite converted to BatchWrite for table {}", options.getTable().getTablePath());
         return this;
     }
 
@@ -49,11 +44,11 @@ public class YdbWrite implements Serializable, Write, BatchWrite, DataWriterFact
 
     @Override
     public DataWriterFactory createBatchWriterFactory(PhysicalWriteInfo info) {
-        LOG.debug("YdbWrite converted to DataWriterFactory for table {}", options.getTablePath());
+        LOG.debug("YdbWrite converted to DataWriterFactory for table {}", options.getTable().getTablePath());
         // TODO: create the COW copy of the destination table
         if (options.isTruncate()) {
-            YdbTruncateTable action = new YdbTruncateTable(options.getTablePath());
-            options.grabConnector().getRetryCtx()
+            YdbTruncateTable action = new YdbTruncateTable(options.getTable().getTablePath());
+            options.getTable().getConnector().getRetryCtx()
                     .supplyStatus(session -> action.run(session))
                     .join()
                     .expectSuccess();
@@ -74,7 +69,7 @@ public class YdbWrite implements Serializable, Write, BatchWrite, DataWriterFact
     @Override
     public DataWriter<InternalRow> createWriter(int partitionId, long taskId) {
         LOG.debug("YdbWriterImpl created for table {}, partition {}, task {}",
-                options.getTablePath(), partitionId, taskId);
+                options.getTable().getTablePath(), partitionId, taskId);
         return new YdbWriterImpl(options, partitionId, taskId);
     }
 

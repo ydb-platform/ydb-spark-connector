@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
+import tech.ydb.spark.connector.impl.YdbTypes;
 import tech.ydb.table.description.KeyBound;
 import tech.ydb.table.description.KeyRange;
 import tech.ydb.table.values.TupleValue;
@@ -19,33 +20,33 @@ import tech.ydb.table.values.Value;
  *
  * @author zinal
  */
-public class YdbKeyRange implements Serializable {
-    private static final long serialVersionUID = -2462075148040903635L;
+public class KeysRange implements Serializable {
+    private static final long serialVersionUID = 5756661733369903758L;
 
     public static final Limit NO_LIMIT = new Limit(new ArrayList<>(), true);
-    public static final YdbKeyRange UNRESTRICTED = new YdbKeyRange(NO_LIMIT, NO_LIMIT);
+    public static final KeysRange UNRESTRICTED = new KeysRange(NO_LIMIT, NO_LIMIT);
 
     private final Limit from;
     private final Limit to;
 
-    public YdbKeyRange(Limit from, Limit to) {
+    public KeysRange(Limit from, Limit to) {
         this.from = (from == null) ? NO_LIMIT : cleanup(from);
         this.to = (to == null) ? NO_LIMIT : cleanup(to);
     }
 
-    public YdbKeyRange(KeyRange kr, YdbTypes types) {
+    public KeysRange(KeyRange kr, YdbTypes types) {
         this(convert(kr.getFrom(), types), convert(kr.getTo(), types));
     }
 
-    public YdbKeyRange(ArrayList<Object> from, ArrayList<Object> to) {
+    public KeysRange(ArrayList<Object> from, ArrayList<Object> to) {
         this(new Limit(from, true), new Limit(to, false));
     }
 
-    public YdbKeyRange(List<Object> from, List<Object> to) {
+    public KeysRange(List<Object> from, List<Object> to) {
         this(new Limit(from, true), new Limit(to, false));
     }
 
-    public YdbKeyRange(Object[] from, Object[] to) {
+    public KeysRange(Object[] from, Object[] to) {
         this(new Limit(Arrays.asList(from), true), new Limit(Arrays.asList(to), false));
     }
 
@@ -137,7 +138,7 @@ public class YdbKeyRange implements Serializable {
                 + (to.isInclusive() ? " *]" : " *)");
     }
 
-    public YdbKeyRange intersect(YdbKeyRange other) {
+    public KeysRange intersect(KeysRange other) {
         if (other == null
                 || (other.from.isUnrestricted() && other.to.isUnrestricted())) {
             return this;
@@ -147,7 +148,7 @@ public class YdbKeyRange implements Serializable {
         }
         Limit outFrom = (from.compareTo(other.from, true) > 0) ? from : other.from;
         Limit outTo = (to.compareTo(other.to, false) > 0) ? other.to : to;
-        YdbKeyRange retval = new YdbKeyRange(outFrom, outTo);
+        KeysRange retval = new KeysRange(outFrom, outTo);
         return retval;
     }
 
@@ -230,8 +231,7 @@ public class YdbKeyRange implements Serializable {
     }
 
     public static class Limit implements Serializable {
-
-        private static final long serialVersionUID = 1L;
+        private static final long serialVersionUID = -3278687786440323269L;
 
         private final ArrayList<Object> value;
         private final boolean inclusive;

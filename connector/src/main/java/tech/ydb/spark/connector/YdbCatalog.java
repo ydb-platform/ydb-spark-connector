@@ -33,10 +33,13 @@ import tech.ydb.proto.scheme.SchemeOperationProtos;
 import tech.ydb.scheme.SchemeClient;
 import tech.ydb.scheme.description.DescribePathResult;
 import tech.ydb.scheme.description.ListDirectoryResult;
+import tech.ydb.spark.connector.common.FieldInfo;
+import tech.ydb.spark.connector.common.OperationOption;
 import tech.ydb.spark.connector.impl.YdbAlterTable;
 import tech.ydb.spark.connector.impl.YdbConnector;
 import tech.ydb.spark.connector.impl.YdbCreateTable;
 import tech.ydb.spark.connector.impl.YdbRegistry;
+import tech.ydb.spark.connector.impl.YdbTypes;
 import tech.ydb.table.SessionRetryContext;
 import tech.ydb.table.description.TableDescription;
 import tech.ydb.table.description.TableIndex;
@@ -47,7 +50,7 @@ import tech.ydb.table.settings.DescribeTableSettings;
  *
  * @author zinal
  */
-public class YdbCatalog extends YdbOptions implements CatalogPlugin, TableCatalog, SupportsNamespaces {
+public class YdbCatalog implements CatalogPlugin, TableCatalog, SupportsNamespaces {
 
     private static final Logger logger = LoggerFactory.getLogger(YdbCatalog.class);
 
@@ -57,6 +60,7 @@ public class YdbCatalog extends YdbOptions implements CatalogPlugin, TableCatalo
 
     private String catalogName;
     private YdbConnector connector;
+    private YdbTypes types;
     private boolean listIndexes;
 
     @Override
@@ -64,7 +68,8 @@ public class YdbCatalog extends YdbOptions implements CatalogPlugin, TableCatalo
         logger.info("Initialize YDB catalog {}", name);
         this.catalogName = name;
         this.connector = YdbRegistry.getOrCreate(name, options);
-        this.listIndexes = options.getBoolean(LIST_INDEXES, false);
+        this.types = new YdbTypes(options);
+        this.listIndexes = OperationOption.LIST_INDEXES.readBoolean(options, false);
     }
 
     @Override
@@ -118,8 +123,7 @@ public class YdbCatalog extends YdbOptions implements CatalogPlugin, TableCatalo
     @Override
     public Identifier[] listTables(String[] namespace) throws NoSuchNamespaceException {
         try {
-            Result<ListDirectoryResult> res = getSchemeClient()
-                    .listDirectory(mergePath(namespace)).join();
+            Result<ListDirectoryResult> res = getSchemeClient().listDirectory(mergePath(namespace)).join();
             ListDirectoryResult ldr = checkStatus(res, namespace);
             List<Identifier> retval = new ArrayList<>();
             for (SchemeOperationProtos.Entry e : ldr.getChildren()) {
@@ -141,9 +145,9 @@ public class YdbCatalog extends YdbOptions implements CatalogPlugin, TableCatalo
     private void listIndexes(String[] namespace, List<Identifier> retval,
             SchemeOperationProtos.Entry tableEntry) {
         String tablePath = mergePath(namespace, tableEntry.getName());
-        Result<TableDescription> res = getRetryCtx().supplyResult(session -> {
-            return session.describeTable(tablePath, new DescribeTableSettings());
-        }).join();
+        Result<TableDescription> res = getRetryCtx().supplyResult(
+                session -> session.describeTable(tablePath, new DescribeTableSettings())
+        ).join();
         if (!res.isSuccess()) {
             // Skipping problematic entries.
             logger.warn("Skipping index listing for table {} due to failed describe, status {}",
@@ -170,13 +174,11 @@ public class YdbCatalog extends YdbOptions implements CatalogPlugin, TableCatalo
             String tabName = tabParts[1];
             String ixName = tabParts[2];
             String tablePath = mergePath(ident.namespace(), tabName);
-            return checkStatus(YdbTable.lookup(connector, connector.getDefaultTypes(),
-                    tablePath, mergeLocal(ident), ixName), ident);
+            return checkStatus(YdbTable.lookup(connector, types, tablePath, mergeLocal(ident), ixName), ident);
         }
         // Processing for regular tables.
         String tablePath = mergePath(ident);
-        return checkStatus(YdbTable.lookup(connector, connector.getDefaultTypes(),
-                tablePath, mergeLocal(ident), null), ident);
+        return checkStatus(YdbTable.lookup(connector, types, tablePath, mergeLocal(ident), null), ident);
     }
 
     @Override
@@ -190,14 +192,13 @@ public class YdbCatalog extends YdbOptions implements CatalogPlugin, TableCatalo
         String tablePath = mergePath(ident);
         // Actual table creation logic is moved to a separate class.
         final YdbCreateTable action = new YdbCreateTable(tablePath,
-                YdbCreateTable.convert(getConnector().getDefaultTypes(), schema),
+                FieldInfo.fromSchema(types, schema),
                 properties);
         getRetryCtx().supplyStatus(session -> action.createTable(session)).join()
                 .expectSuccess("Failed to create table " + ident);
         // Load the description for the table created.
         try {
-            return checkStatus(YdbTable.lookup(connector, connector.getDefaultTypes(),
-                    tablePath, mergeLocal(ident), null), ident);
+            return checkStatus(YdbTable.lookup(connector, types, tablePath, mergeLocal(ident), null), ident);
         } catch (NoSuchTableException nste) {
             throw new RuntimeException("Lost table after creation on id " + ident);
         }
@@ -229,8 +230,7 @@ public class YdbCatalog extends YdbOptions implements CatalogPlugin, TableCatalo
         // Implement the desired changes.
         getRetryCtx().supplyStatus(session -> operation.run(session)).join().expectSuccess();
         // Load the description for the modified table.
-        return checkStatus(YdbTable.lookup(connector, connector.getDefaultTypes(),
-                tablePath, mergeLocal(ident), null), ident);
+        return checkStatus(YdbTable.lookup(connector, types, tablePath, mergeLocal(ident), null), ident);
     }
 
     @Override
@@ -355,10 +355,6 @@ public class YdbCatalog extends YdbOptions implements CatalogPlugin, TableCatalo
         }
     }
 
-    private String getDatabase() {
-        return connector.getDatabase();
-    }
-
     private static String safeName(String v) {
         if (v == null) {
             return "";
@@ -399,10 +395,10 @@ public class YdbCatalog extends YdbOptions implements CatalogPlugin, TableCatalo
 
     private String mergePath(String[] items) {
         if (items == null || items.length == 0) {
-            return getDatabase();
+            return connector.getTransport().getDatabase();
         }
         final StringBuilder sb = new StringBuilder();
-        sb.append(getDatabase());
+        sb.append(connector.getTransport().getDatabase());
         mergeLocal(items, sb);
         return sb.toString();
     }
@@ -422,7 +418,7 @@ public class YdbCatalog extends YdbOptions implements CatalogPlugin, TableCatalo
 
     private String mergePath(Identifier id) {
         final StringBuilder sb = new StringBuilder();
-        sb.append(getDatabase());
+        sb.append(connector.getTransport().getDatabase());
         mergeLocal(id, sb);
         return sb.toString();
     }

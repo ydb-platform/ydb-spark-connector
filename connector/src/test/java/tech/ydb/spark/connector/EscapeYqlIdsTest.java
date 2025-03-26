@@ -3,7 +3,7 @@ package tech.ydb.spark.connector;
 import org.junit.Assert;
 import org.junit.Test;
 
-import tech.ydb.spark.connector.impl.YdbWriterImpl;
+import tech.ydb.spark.connector.write.YdbWriterImpl;
 
 /**
  *
