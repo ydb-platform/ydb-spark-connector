@@ -5,6 +5,9 @@ import java.util.Base64;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import tech.ydb.core.Result;
 import tech.ydb.core.Status;
 import tech.ydb.table.Session;
@@ -20,9 +23,7 @@ import tech.ydb.table.settings.DescribeTableSettings;
  * @author zinal
  */
 public class YdbTruncateTable {
-
-    private static final org.slf4j.Logger LOG
-            = org.slf4j.LoggerFactory.getLogger(YdbTruncateTable.class);
+    private static final Logger logger = LoggerFactory.getLogger(YdbTruncateTable.class);
 
     private final String tablePath;
 
@@ -31,29 +32,29 @@ public class YdbTruncateTable {
     }
 
     public CompletableFuture<Status> run(Session session) {
-        LOG.debug("Truncating table {} ...", tablePath);
+        logger.debug("Truncating table {} ...", tablePath);
         DescribeTableSettings dts = new DescribeTableSettings();
         Result<TableDescription> dtr = session.describeTable(tablePath, dts).join();
         if (!dtr.isSuccess()) {
-            LOG.debug("Cannot describe {} - {}", tablePath, dtr.getStatus());
+            logger.debug("Cannot describe {} - {}", tablePath, dtr.getStatus());
             return CompletableFuture.completedFuture(dtr.getStatus());
         }
         TableDescription td = undressDescription(dtr.getValue());
         String tempPath = tablePath + "_" + randomSuffix();
         Status status = session.createTable(tempPath, td).join();
         if (!status.isSuccess()) {
-            LOG.debug("Cannot create temporary table {} - {}", tempPath, status);
+            logger.debug("Cannot create temporary table {} - {}", tempPath, status);
             return CompletableFuture.completedFuture(status);
         }
-        LOG.debug("Created temporary table {} ...", tempPath);
+        logger.debug("Created temporary table {} ...", tempPath);
         status = session.renameTable(tempPath, tablePath, true).join();
         if (status.isSuccess()) {
-            LOG.debug("Truncation successful for {}.", tablePath);
+            logger.debug("Truncation successful for {}.", tablePath);
         } else {
-            LOG.debug("Failed to replace {} with {} - {}", tablePath, tempPath, status);
+            logger.debug("Failed to replace {} with {} - {}", tablePath, tempPath, status);
             Status tempStatus = session.dropTable(tempPath).join();
             if (!tempStatus.isSuccess()) {
-                LOG.warn("Failed to drop temporary table {} - {}", tempPath, tempStatus);
+                logger.warn("Failed to drop temporary table {} - {}", tempPath, tempStatus);
             }
         }
         return CompletableFuture.completedFuture(status);
@@ -108,7 +109,7 @@ public class YdbTruncateTable {
                 }
                 break;
             default:
-                LOG.warn("Unknown index type: {}, index {}, table {}",
+                logger.warn("Unknown index type: {}, index {}, table {}",
                         ti.getType(), ti.getName(), tablePath);
         }
     }

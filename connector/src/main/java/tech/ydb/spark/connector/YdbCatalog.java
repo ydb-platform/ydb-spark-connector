@@ -29,21 +29,14 @@ import tech.ydb.core.Issue;
 import tech.ydb.core.Result;
 import tech.ydb.core.Status;
 import tech.ydb.core.StatusCode;
-import tech.ydb.proto.scheme.SchemeOperationProtos;
-import tech.ydb.scheme.SchemeClient;
 import tech.ydb.scheme.description.DescribePathResult;
+import tech.ydb.scheme.description.Entry;
+import tech.ydb.scheme.description.EntryType;
 import tech.ydb.scheme.description.ListDirectoryResult;
-import tech.ydb.spark.connector.common.FieldInfo;
 import tech.ydb.spark.connector.common.OperationOption;
-import tech.ydb.spark.connector.impl.YdbAlterTable;
-import tech.ydb.spark.connector.impl.YdbConnector;
-import tech.ydb.spark.connector.impl.YdbCreateTable;
-import tech.ydb.spark.connector.impl.YdbRegistry;
-import tech.ydb.spark.connector.impl.YdbTypes;
-import tech.ydb.table.SessionRetryContext;
+import tech.ydb.spark.connector.impl.AlterTableBuilder;
 import tech.ydb.table.description.TableDescription;
 import tech.ydb.table.description.TableIndex;
-import tech.ydb.table.settings.DescribeTableSettings;
 
 /**
  * YDB Catalog implements Spark table catalog for YDB data sources.
@@ -58,42 +51,26 @@ public class YdbCatalog implements CatalogPlugin, TableCatalog, SupportsNamespac
     public static final String ENTRY_TYPE = "ydb_entry_type";
     public static final String ENTRY_OWNER = "ydb_entry_owner";
 
-    private String catalogName;
-    private YdbConnector connector;
+    private String name;
+    private YdbContext ctx;
     private YdbTypes types;
     private boolean listIndexes;
 
     @Override
     public void initialize(String name, CaseInsensitiveStringMap options) {
         logger.info("Initialize YDB catalog {}", name);
-        this.catalogName = name;
-        this.connector = YdbRegistry.getOrCreate(name, options);
+        this.name = name;
+        this.ctx = new YdbContext(options);
         this.types = new YdbTypes(options);
         this.listIndexes = OperationOption.LIST_INDEXES.readBoolean(options, false);
     }
 
     @Override
     public String name() {
-        return catalogName;
+        return name;
     }
 
-    private YdbConnector getConnector() {
-        if (connector == null) {
-            throw new IllegalStateException("Catalog " + catalogName + " not initialized");
-        }
-        return connector;
-    }
-
-    private SchemeClient getSchemeClient() {
-        return getConnector().getSchemeClient();
-    }
-
-    private SessionRetryContext getRetryCtx() {
-        return getConnector().getRetryCtx();
-    }
-
-    public static <T> T checkStatus(Result<T> res, String[] namespace)
-            throws NoSuchNamespaceException {
+    public static <T> T checkStatus(Result<T> res, String[] namespace) throws NoSuchNamespaceException {
         if (!res.isSuccess()) {
             final Status status = res.getStatus();
             if (StatusCode.SCHEME_ERROR.equals(status.getCode())) {
@@ -108,8 +85,7 @@ public class YdbCatalog implements CatalogPlugin, TableCatalog, SupportsNamespac
         return res.getValue();
     }
 
-    public static <T> T checkStatus(Result<T> res, Identifier id)
-            throws NoSuchTableException {
+    public static <T> T checkStatus(Result<T> res, Identifier id) throws NoSuchTableException {
         if (!res.isSuccess()) {
             Status status = res.getStatus();
             if (StatusCode.SCHEME_ERROR.equals(status.getCode())) {
@@ -122,43 +98,32 @@ public class YdbCatalog implements CatalogPlugin, TableCatalog, SupportsNamespac
 
     @Override
     public Identifier[] listTables(String[] namespace) throws NoSuchNamespaceException {
-        try {
-            Result<ListDirectoryResult> res = getSchemeClient().listDirectory(mergePath(namespace)).join();
-            ListDirectoryResult ldr = checkStatus(res, namespace);
-            List<Identifier> retval = new ArrayList<>();
-            for (SchemeOperationProtos.Entry e : ldr.getChildren()) {
-                if (SchemeOperationProtos.Entry.Type.TABLE.equals(e.getType())) {
-                    retval.add(Identifier.of(namespace, e.getName()));
-                    if (listIndexes) {
-                        listIndexes(namespace, retval, e);
+        String path = String.join("/", namespace);
+        ListDirectoryResult list = ctx.getExecutor().listDirectory(path);
+        if (list == null) {
+            throw new NoSuchNamespaceException(namespace);
+        }
+
+        List<Identifier> retval = new ArrayList<>();
+        for (Entry e : list.getEntryChildren()) {
+            if (e.getType() == EntryType.TABLE) {
+                retval.add(Identifier.of(namespace, e.getName()));
+                if (listIndexes) {
+                    String tablePath = path + "/" + e.getName();
+                    TableDescription td = ctx.getExecutor().describeTable(tablePath, false);
+                    if (td != null) {
+                        for (TableIndex ix : td.getIndexes()) {
+                            String ixname = INDEX_PREFIX + e.getName() + "/" + ix.getName();
+                            retval.add(Identifier.of(namespace, ixname));
+                        }
                     }
-                } else if (SchemeOperationProtos.Entry.Type.COLUMN_TABLE.equals(e.getType())) {
-                    retval.add(Identifier.of(namespace, e.getName()));
                 }
             }
-            return retval.toArray(new Identifier[0]);
-        } catch (Exception ex) {
-            throw new RuntimeException(ex);
+            if (e.getType() == EntryType.COLUMN_TABLE) {
+                retval.add(Identifier.of(namespace, e.getName()));
+            }
         }
-    }
-
-    private void listIndexes(String[] namespace, List<Identifier> retval,
-            SchemeOperationProtos.Entry tableEntry) {
-        String tablePath = mergePath(namespace, tableEntry.getName());
-        Result<TableDescription> res = getRetryCtx().supplyResult(
-                session -> session.describeTable(tablePath, new DescribeTableSettings())
-        ).join();
-        if (!res.isSuccess()) {
-            // Skipping problematic entries.
-            logger.warn("Skipping index listing for table {} due to failed describe, status {}",
-                    tablePath, res.getStatus());
-            return;
-        }
-        TableDescription td = res.getValue();
-        for (TableIndex ix : td.getIndexes()) {
-            String ixname = INDEX_PREFIX + tableEntry.getName() + "/" + ix.getName();
-            retval.add(Identifier.of(namespace, ixname));
-        }
+        return retval.toArray(new Identifier[0]);
     }
 
     @Override
@@ -171,14 +136,22 @@ public class YdbCatalog implements CatalogPlugin, TableCatalog, SupportsNamespac
                 // Illegal name format - so "no such table".
                 throw new NoSuchTableException(ident);
             }
-            String tabName = tabParts[1];
-            String ixName = tabParts[2];
-            String tablePath = mergePath(ident.namespace(), tabName);
-            return checkStatus(YdbTable.lookup(connector, types, tablePath, mergeLocal(ident), ixName), ident);
+            String realName = tabParts[1] + "/" + tabParts[2] + YdbTable.INDEX_TABLE_NAME;
+            String tablePath = ctx.getExecutor().extractPath(toPath(Identifier.of(ident.namespace(), realName)));
+            TableDescription td = ctx.getExecutor().describeTable(tablePath, true);
+            if (td == null) {
+                throw new NoSuchTableException(ident);
+            }
+            return new YdbTable(ctx, types, toPath(ident), tablePath, td);
         }
         // Processing for regular tables.
-        String tablePath = mergePath(ident);
-        return checkStatus(YdbTable.lookup(connector, types, tablePath, mergeLocal(ident), null), ident);
+        String tablePath = ctx.getExecutor().extractPath(toPath(ident));
+        TableDescription td = ctx.getExecutor().describeTable(tablePath, true);
+        if (td == null) {
+            throw new NoSuchTableException(ident);
+        }
+
+        return new YdbTable(ctx, types, tablePath, tablePath, td);
     }
 
     @Override
@@ -189,19 +162,15 @@ public class YdbCatalog implements CatalogPlugin, TableCatalog, SupportsNamespac
             throw new UnsupportedOperationException("Direct index table creation is not possible,"
                     + "identifier " + ident);
         }
-        String tablePath = mergePath(ident);
-        // Actual table creation logic is moved to a separate class.
-        final YdbCreateTable action = new YdbCreateTable(tablePath,
-                FieldInfo.fromSchema(types, schema),
-                properties);
-        getRetryCtx().supplyStatus(session -> action.createTable(session)).join()
-                .expectSuccess("Failed to create table " + ident);
-        // Load the description for the table created.
-        try {
-            return checkStatus(YdbTable.lookup(connector, types, tablePath, mergeLocal(ident), null), ident);
-        } catch (NoSuchTableException nste) {
-            throw new RuntimeException("Lost table after creation on id " + ident);
-        }
+
+        CaseInsensitiveStringMap options = new CaseInsensitiveStringMap(properties);
+        String tablePath = ctx.getExecutor().extractPath(toPath(ident));
+        TableDescription td = YdbTable.buildTableDesctiption(types.fromSparkSchema(schema), options);
+        ctx.getExecutor().createTable(tablePath, td);
+
+        // describe table to get information about shards
+        TableDescription created = ctx.getExecutor().describeTable(tablePath, true);
+        return new YdbTable(ctx, types, tablePath, tablePath, created);
     }
 
     @Override
@@ -210,27 +179,34 @@ public class YdbCatalog implements CatalogPlugin, TableCatalog, SupportsNamespac
             throw new UnsupportedOperationException("Index table alteration is not possible, "
                     + "identifier " + ident);
         }
-        final String tablePath = mergePath(ident);
-        // Load the current table description and set up the operation.
-        final YdbAlterTable operation = new YdbAlterTable(connector, tablePath);
-        // Prepare for processing and ensure that all changes are of supported types.
+
+        String tablePath = ctx.getExecutor().extractPath(toPath(ident));
+        TableDescription td = ctx.getExecutor().describeTable(tablePath, false);
+
+        if (td == null) {
+            throw new NoSuchTableException(ident);
+        }
+
+        AlterTableBuilder builder = new AlterTableBuilder(types, td);
         for (TableChange change : changes) {
             if (change instanceof TableChange.AddColumn) {
-                operation.prepare((TableChange.AddColumn) change);
+                builder.prepare((TableChange.AddColumn) change);
             } else if (change instanceof TableChange.DeleteColumn) {
-                operation.prepare((TableChange.DeleteColumn) change);
+                builder.prepare((TableChange.DeleteColumn) change);
             } else if (change instanceof TableChange.SetProperty) {
-                operation.prepare((TableChange.SetProperty) change);
+                builder.prepare((TableChange.SetProperty) change);
             } else if (change instanceof TableChange.RemoveProperty) {
-                operation.prepare((TableChange.RemoveProperty) change);
+                builder.prepare((TableChange.RemoveProperty) change);
             } else {
                 throw new UnsupportedOperationException("YDB table alter operation not supported: " + change);
             }
         }
-        // Implement the desired changes.
-        getRetryCtx().supplyStatus(session -> operation.run(session)).join().expectSuccess();
-        // Load the description for the modified table.
-        return checkStatus(YdbTable.lookup(connector, types, tablePath, mergeLocal(ident), null), ident);
+
+        ctx.getExecutor().alterTable(tablePath, builder.build());
+
+        // describe table to get information about shards
+        TableDescription update = ctx.getExecutor().describeTable(tablePath, true);
+        return new YdbTable(ctx, types, tablePath, tablePath, update);
     }
 
     @Override
@@ -238,24 +214,10 @@ public class YdbCatalog implements CatalogPlugin, TableCatalog, SupportsNamespac
         if (ident.name().startsWith(INDEX_PREFIX)) {
             throw new UnsupportedOperationException("Cannot drop index table " + ident);
         }
-        final String tablePath = mergePath(ident);
+
+        final String tablePath = toPath(ident);
         logger.debug("Dropping table {}", tablePath);
-        Result<TableDescription> res = getRetryCtx().supplyResult(session -> {
-            final DescribeTableSettings dts = new DescribeTableSettings();
-            dts.setIncludeShardKeyBounds(false);
-            return session.describeTable(tablePath, dts);
-        }).join();
-        try {
-            checkStatus(res, ident);
-        } catch (NoSuchTableException nste) {
-            return false;
-        }
-        Status status = connector.getRetryCtx().supplyStatus(
-                session -> session.dropTable(tablePath)).join();
-        if (!status.isSuccess()) {
-            status.expectSuccess("Failed to drop table " + ident);
-        }
-        return true;
+        return ctx.getExecutor().dropTable(tablePath);
     }
 
     @Override
@@ -267,13 +229,9 @@ public class YdbCatalog implements CatalogPlugin, TableCatalog, SupportsNamespac
         if (newIdent.name().startsWith(INDEX_PREFIX)) {
             throw new UnsupportedOperationException("Cannot rename table to index " + newIdent);
         }
-        final String oldPath = mergePath(oldIdent);
-        final String newPath = mergePath(newIdent);
-        Status status = getRetryCtx().supplyStatus(
-                session -> session.renameTable(oldPath, newPath, false)).join();
-        if (!status.isSuccess()) {
-            status.expectSuccess("Failed to rename table [" + oldIdent + "] to [" + newIdent + "]");
-        }
+        final String oldPath = toPath(oldIdent);
+        final String newPath = toPath(newIdent);
+        ctx.getExecutor().renameTable(oldPath, newPath);
     }
 
     @Override
@@ -286,60 +244,49 @@ public class YdbCatalog implements CatalogPlugin, TableCatalog, SupportsNamespac
         if (namespace == null) {
             namespace = new String[0];
         }
-        try {
-            Result<ListDirectoryResult> res = getSchemeClient()
-                    .listDirectory(mergePath(namespace)).get();
-            ListDirectoryResult ldr = checkStatus(res, namespace);
-            List<String[]> retval = new ArrayList<>();
-            for (SchemeOperationProtos.Entry e : ldr.getChildren()) {
-                if (SchemeOperationProtos.Entry.Type.DIRECTORY.equals(e.getType())) {
-                    final String[] x = new String[namespace.length + 1];
-                    System.arraycopy(namespace, 0, x, 0, namespace.length);
-                    x[namespace.length] = e.getName();
-                    retval.add(x);
-                }
-            }
-            return retval.toArray(new String[0][0]);
-        } catch (Exception ex) {
-            throw new RuntimeException(ex);
+        ListDirectoryResult res = ctx.getExecutor().listDirectory(toPath(namespace));
+        if (res == null) {
+            throw new NoSuchNamespaceException(namespace);
         }
+
+        List<String[]> retval = new ArrayList<>();
+        for (Entry e : res.getEntryChildren()) {
+            if (e.getType() == EntryType.DIRECTORY) {
+                final String[] x = new String[namespace.length + 1];
+                System.arraycopy(namespace, 0, x, 0, namespace.length);
+                x[namespace.length] = e.getName();
+                retval.add(x);
+            }
+        }
+        return retval.toArray(new String[0][0]);
     }
 
     @Override
-    public Map<String, String> loadNamespaceMetadata(String[] namespace)
-            throws NoSuchNamespaceException {
+    public Map<String, String> loadNamespaceMetadata(String[] namespace) throws NoSuchNamespaceException {
         if (namespace == null || namespace.length == 0) {
             return Collections.emptyMap();
         }
+        DescribePathResult res = ctx.getExecutor().describeDirectory(toPath(namespace));
+        if (res == null) {
+            throw new NoSuchNamespaceException(namespace);
+        }
+
         final Map<String, String> m = new HashMap<>();
-        Result<DescribePathResult> res = getSchemeClient()
-                .describePath(mergePath(namespace)).join();
-        DescribePathResult dpr = checkStatus(res, namespace);
-        m.put(ENTRY_TYPE, dpr.getSelf().getType().name());
-        m.put(ENTRY_OWNER, dpr.getSelf().getOwner());
+        m.put(ENTRY_TYPE, res.getEntry().getType().name());
+        m.put(ENTRY_OWNER, res.getEntry().getOwner());
         return m;
     }
 
     @Override
     public void createNamespace(String[] namespace, Map<String, String> metadata)
             throws NamespaceAlreadyExistsException {
-        Status status = getSchemeClient().makeDirectory(mergePath(namespace)).join();
-        if (status.isSuccess()
-                && status.getIssues() != null
-                && status.getIssues().length > 0) {
-            for (Issue i : status.getIssues()) {
-                String msg = i.getMessage();
-                if (msg != null && msg.contains(" path exist, request accepts it")) {
-                    throw new NamespaceAlreadyExistsException(namespace);
-                }
-            }
+        if (!ctx.getExecutor().makeDirectory(toPath(namespace))) {
+            throw new NamespaceAlreadyExistsException(namespace);
         }
-        status.expectSuccess();
     }
 
     @Override
-    public void alterNamespace(String[] namespace, NamespaceChange... changes)
-            throws NoSuchNamespaceException {
+    public void alterNamespace(String[] namespace, NamespaceChange... changes) throws NoSuchNamespaceException {
         throw new UnsupportedOperationException("Not supported yet.");
     }
 
@@ -347,8 +294,7 @@ public class YdbCatalog implements CatalogPlugin, TableCatalog, SupportsNamespac
     public boolean dropNamespace(String[] namespace, boolean recursive)
             throws NoSuchNamespaceException, NonEmptyNamespaceException {
         if (!recursive) {
-            Status status = getSchemeClient().removeDirectory(mergePath(namespace)).join();
-            return status.isSuccess();
+            return ctx.getExecutor().removeDirectory(toPath(namespace));
         } else {
             // TODO: recursive removal
             throw new UnsupportedOperationException("Recursive namespace removal is not implemented");
@@ -368,59 +314,25 @@ public class YdbCatalog implements CatalogPlugin, TableCatalog, SupportsNamespac
         return v;
     }
 
-    private void mergeLocal(String[] items, StringBuilder sb) {
-        if (items != null) {
-            for (String i : items) {
-                if (sb.length() > 0) {
-                    sb.append("/");
-                }
-                sb.append(safeName(i));
+    private static String toPath(Identifier id) {
+        StringBuilder sb = new StringBuilder();
+        addToPath(sb, id.namespace());
+        addToPath(sb, id.name());
+        return sb.toString();
+    }
+
+    private static String toPath(String[] namespace) {
+        StringBuilder sb = new StringBuilder();
+        addToPath(sb, namespace);
+        return sb.toString();
+    }
+
+    private static void addToPath(StringBuilder sb, String... items) {
+        for (String item: items) {
+            if (sb.length() > 0) {
+                sb.append("/");
             }
+            sb.append(safeName(item));
         }
     }
-
-    private void mergeLocal(Identifier id, StringBuilder sb) {
-        mergeLocal(id.namespace(), sb);
-        if (sb.length() > 0) {
-            sb.append("/");
-        }
-        sb.append(safeName(id.name()));
-    }
-
-    private String mergeLocal(Identifier id) {
-        final StringBuilder sb = new StringBuilder();
-        mergeLocal(id, sb);
-        return sb.toString();
-    }
-
-    private String mergePath(String[] items) {
-        if (items == null || items.length == 0) {
-            return connector.getTransport().getDatabase();
-        }
-        final StringBuilder sb = new StringBuilder();
-        sb.append(connector.getTransport().getDatabase());
-        mergeLocal(items, sb);
-        return sb.toString();
-    }
-
-    private String mergePath(String[] items, String extra) {
-        if (extra == null) {
-            return mergePath(items);
-        }
-        if (items == null) {
-            return mergePath(new String[]{extra});
-        }
-        String[] work = new String[1 + items.length];
-        System.arraycopy(items, 0, work, 0, items.length);
-        work[items.length] = extra;
-        return mergePath(work);
-    }
-
-    private String mergePath(Identifier id) {
-        final StringBuilder sb = new StringBuilder();
-        sb.append(connector.getTransport().getDatabase());
-        mergeLocal(id, sb);
-        return sb.toString();
-    }
-
 }

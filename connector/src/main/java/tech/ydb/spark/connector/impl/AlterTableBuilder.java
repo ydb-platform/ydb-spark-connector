@@ -5,21 +5,16 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
 
 import org.apache.spark.sql.connector.catalog.TableChange;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-import tech.ydb.core.Status;
+import tech.ydb.spark.connector.YdbTypes;
 import tech.ydb.spark.connector.common.FieldInfo;
 import tech.ydb.spark.connector.common.FieldType;
 import tech.ydb.spark.connector.common.PartitionOption;
-import tech.ydb.table.Session;
 import tech.ydb.table.description.TableColumn;
 import tech.ydb.table.description.TableDescription;
 import tech.ydb.table.settings.AlterTableSettings;
-import tech.ydb.table.settings.DescribeTableSettings;
 import tech.ydb.table.settings.PartitioningSettings;
 
 /**
@@ -27,11 +22,9 @@ import tech.ydb.table.settings.PartitioningSettings;
  *
  * @author zinal
  */
-public class YdbAlterTable {
-    private static final Logger logger = LoggerFactory.getLogger(YdbAlterTable.class);
+public class AlterTableBuilder {
 
     private final YdbTypes types;
-    private final String tablePath;
     private final TableDescription td;
     private final PartitioningSettings partitionsSettings;
 
@@ -39,16 +32,10 @@ public class YdbAlterTable {
     private final Map<String, FieldInfo> addColumns = new HashMap<>();
     private final Set<String> removeColumns = new HashSet<>();
 
-    public YdbAlterTable(YdbConnector connector, String tablePath) {
-        this.types = new YdbTypes(connector.getOptions());
-        this.tablePath = tablePath;
-
-        this.td = connector.getRetryCtx().supplyResult(session -> {
-            return session.describeTable(tablePath, new DescribeTableSettings());
-        }).join().getValue();
-
+    public AlterTableBuilder(YdbTypes types, TableDescription td) {
+        this.types = types;
+        this.td = td;
         this.partitionsSettings = td.getPartitioningSettings();
-
         for (TableColumn tc : this.td.getColumns()) {
             this.knownNames.add(tc.getName());
         }
@@ -112,9 +99,8 @@ public class YdbAlterTable {
         }
     }
 
-    public CompletableFuture<Status> run(Session session) {
-        logger.debug("Altering table {}", tablePath);
-        final AlterTableSettings settings = new AlterTableSettings();
+    public AlterTableSettings build() {
+        AlterTableSettings settings = new AlterTableSettings();
         for (FieldInfo yfi : addColumns.values()) {
             if (yfi.isNullable()) {
                 settings.addNullableColumn(yfi.getName(), yfi.getType().toSdkType(false));
@@ -126,7 +112,6 @@ public class YdbAlterTable {
             settings.dropColumn(name);
         }
         settings.setPartitioningSettings(partitionsSettings);
-        return session.alterTable(tablePath, settings);
+        return settings;
     }
-
 }

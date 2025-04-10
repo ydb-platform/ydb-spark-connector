@@ -12,11 +12,6 @@ public enum ConnectionOption implements SparkOption {
     URL("url"),
 
     /**
-     * Session pool size limit. Default is 4x number of cores available.
-     */
-    POOL_SIZE("pool.size"),
-
-    /**
      * CA certificates in the file.
      */
     CA_FILE("ca.file"),
@@ -59,7 +54,12 @@ public enum ConnectionOption implements SparkOption {
     /**
      * Token value for the TOKEN authentication mode.
      */
-    AUTH_TOKEN("auth.token");
+    AUTH_TOKEN("auth.token"),
+
+    /**
+     * Session pool size limit. Default is 4x number of cores available.
+     */
+    POOL_SIZE("pool.size");
 
     private final String code;
 

@@ -1,13 +1,9 @@
 package tech.ydb.spark.connector.common;
 
 import java.io.Serializable;
-import java.util.ArrayList;
-import java.util.List;
 
-import org.apache.spark.sql.types.StructField;
-import org.apache.spark.sql.types.StructType;
-
-import tech.ydb.spark.connector.impl.YdbTypes;
+import tech.ydb.table.description.TableColumn;
+import tech.ydb.table.values.Type;
 
 /**
  * YDB table field information.
@@ -27,12 +23,21 @@ public class FieldInfo implements Serializable {
         this.nullable = nullable;
     }
 
+    public FieldInfo(TableColumn tc) {
+        this(tc.getName(), FieldType.fromSdkType(tc.getType()), tc.getType().getKind() == Type.Kind.OPTIONAL);
+    }
+
+
     public String getName() {
         return name;
     }
 
     public FieldType getType() {
         return type;
+    }
+
+    public Type toYdbType() {
+        return type.toSdkType(nullable);
     }
 
     public boolean isNullable() {
@@ -43,25 +48,4 @@ public class FieldInfo implements Serializable {
     public String toString() {
         return name + ":" + type + (nullable ? "?" : "");
     }
-
-    public static FieldInfo fromSchema(YdbTypes types, StructField field) {
-        FieldType type = types.mapTypeSpark2Ydb(field.dataType());
-        if (type == null) {
-            throw new IllegalArgumentException("Unsupported type for table column: " + field.dataType());
-        }
-        return new FieldInfo(field.name(), type, field.nullable());
-    }
-
-    public static List<FieldInfo> fromSchema(YdbTypes types, StructType schema) {
-        final List<FieldInfo> fields = new ArrayList<>(schema.size());
-        for (StructField field : schema.fields()) {
-            FieldType type = types.mapTypeSpark2Ydb(field.dataType());
-            if (type == null) {
-                throw new IllegalArgumentException("Unsupported type for table column: " + field.dataType());
-            }
-            fields.add(new FieldInfo(field.name(), type, field.nullable()));
-        }
-        return fields;
-    }
-
 }

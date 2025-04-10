@@ -1,12 +1,12 @@
 package tech.ydb.spark.connector;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 import org.apache.spark.sql.connector.catalog.SupportsDelete;
@@ -23,255 +23,158 @@ import org.apache.spark.sql.connector.write.RowLevelOperationBuilder;
 import org.apache.spark.sql.connector.write.RowLevelOperationInfo;
 import org.apache.spark.sql.connector.write.WriteBuilder;
 import org.apache.spark.sql.sources.Filter;
-import org.apache.spark.sql.types.DataType;
-import org.apache.spark.sql.types.Metadata;
-import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import tech.ydb.core.Issue;
-import tech.ydb.core.Result;
-import tech.ydb.core.Status;
-import tech.ydb.core.StatusCode;
 import tech.ydb.spark.connector.common.FieldInfo;
 import tech.ydb.spark.connector.common.FieldType;
 import tech.ydb.spark.connector.common.KeysRange;
 import tech.ydb.spark.connector.common.OperationOption;
 import tech.ydb.spark.connector.common.PartitionOption;
-import tech.ydb.spark.connector.common.StoreType;
-import tech.ydb.spark.connector.impl.YdbConnector;
-import tech.ydb.spark.connector.impl.YdbTruncateTable;
-import tech.ydb.spark.connector.impl.YdbTypes;
 import tech.ydb.spark.connector.read.YdbScanBuilder;
 import tech.ydb.spark.connector.write.YdbRowLevelBuilder;
-import tech.ydb.spark.connector.write.YdbWriteBuilder;
+import tech.ydb.spark.connector.write.YdbWrite;
+import tech.ydb.table.description.KeyRange;
 import tech.ydb.table.description.TableColumn;
 import tech.ydb.table.description.TableDescription;
-import tech.ydb.table.description.TableIndex;
-import tech.ydb.table.settings.DescribeTableSettings;
 import tech.ydb.table.settings.PartitioningSettings;
-import tech.ydb.table.values.Type;
 
 /**
  * YDB table metadata representation for Spark.
  *
  * @author zinal
  */
-public class YdbTable implements Table, SupportsRead, SupportsWrite, SupportsDelete, SupportsRowLevelOperations {
+public class YdbTable implements Serializable, Table, SupportsRead, SupportsWrite, SupportsDelete,
+        SupportsRowLevelOperations {
 
-    private static final Logger LOG = LoggerFactory.getLogger(YdbTable.class);
+    private static final long serialVersionUID = -7889575077751922731L;
 
-    private final YdbConnector connector;
-    private final YdbTypes types;
-    private final String logicalName;
-    private final String tablePath;
+    private static final Logger logger = LoggerFactory.getLogger(YdbTable.class);
 
-    private final List<TableColumn> columns;
-    private final List<String> keyColumns;
-    private final ArrayList<FieldType> keyTypes;
-    private final ArrayList<KeysRange> partitions;
-    private final CaseInsensitiveStringMap options;
-    private final StoreType storeType;
+    public static final String INDEX_TABLE_NAME = "/indexImplTable";
 
-    private StructType schema;
-
-    /**
-     * Create table provider for the real YDB table.
-     *
-     * @param connector YDB connector
-     * @param types YDB type convertor
-     * @param logicalName Table logical name
-     * @param tablePath Table path
-     * @param td Table description object obtained from YDB
-     */
-    YdbTable(YdbConnector connector, YdbTypes types, String logicalName, String tablePath, TableDescription td) {
-        this.connector = connector;
-        this.types = types;
-        this.logicalName = logicalName;
-        this.tablePath = tablePath;
-        this.columns = td.getColumns();
-        this.keyColumns = td.getPrimaryKeys();
-        this.keyTypes = new ArrayList<>();
-        this.partitions = new ArrayList<>();
-        this.storeType = convertStoreType(td);
-        this.options = createOptions(tablePath, storeType, keyColumns, td);
-
-        Map<String, TableColumn> cm = buildColumnsMap(td);
-        for (String cname : td.getPrimaryKeys()) {
-            TableColumn tc = cm.get(cname);
-            this.keyTypes.add(FieldType.fromSdkType(tc.getType()));
-        }
-//        if (!connector.isSinglePartitionScans() && td.getKeyRanges() != null) {
-//            for (KeyRange kr : td.getKeyRanges()) {
-//                KeysRange ykr = new KeysRange(kr, types);
-//                if (ykr.isUnrestricted() && !partitions.isEmpty()) {
-//                    LOG.warn("Unrestricted partition for table {}, ignoring partition metadata", this.tablePath);
-//                    partitions.clear();
-//                    break;
-//                } else {
-//                    partitions.add(ykr);
-//                }
-//            }
-//        }
-
-        LOG.debug("Loaded table {} with {} columns and {} partitions",
-                this.tablePath, this.columns.size(), this.partitions.size());
+    public enum Type {
+        ROW,
+        COLUMN,
+        INDEX,
     }
 
-    /**
-     * Create table provider for YDB index.
-     *
-     * @param connector YDB connector
-     * @param types YDB type convertor
-     * @param logicalName Index table logical name
-     * @param tablePath Table path for the actual table (not index)
-     * @param tdMain Table description object for the actual table
-     * @param ix Index information entry
-     * @param tdIx Table description object for the index table
-     */
-    YdbTable(YdbConnector connector, YdbTypes types,
-            String logicalName, String tablePath,
-            TableDescription tdMain, TableIndex ix, TableDescription tdIx) {
-        this.connector = connector;
-        this.types = types;
-        this.logicalName = logicalName;
-        this.tablePath = tablePath + "/" + ix.getName() + "/indexImplTable";
-        this.columns = new ArrayList<>();
-        this.keyColumns = ix.getColumns();
-        this.keyTypes = new ArrayList<>();
-        this.partitions = new ArrayList<>();
-        this.storeType = StoreType.INDEX;
-        this.options = createOptions(tablePath, storeType, keyColumns, tdIx);
-        HashSet<String> known = new HashSet<>();
-        Map<String, TableColumn> cm = buildColumnsMap(tdMain);
+    private final YdbContext ctx;
 
-        // Add index key columns
-        for (String cname : ix.getColumns()) {
-            TableColumn tc = cm.get(cname);
-            this.columns.add(tc);
-            this.keyTypes.add(FieldType.fromSdkType(tc.getType()));
-            known.add(cname);
+    private final String name;
+    private final String path;
+    private final Type type;
+
+    private final StructType schema;
+    private final FieldInfo[] columns;
+    private final FieldInfo[] keyColumns;
+    private final KeysRange[] partitions;
+
+    private final HashMap<String, String> properties;
+
+    public YdbTable(YdbContext ctx, YdbTypes types, String name, String path, TableDescription td) {
+        this.ctx = ctx;
+        this.name = name;
+        this.path = path;
+
+        this.type = mapType(path, td);
+        this.schema = types.toSparkSchema(td.getColumns());
+
+        this.columns = new FieldInfo[td.getColumns().size()];
+        Map<String, FieldInfo> columnsByName = new HashMap<>();
+        int idx = 0;
+        for (TableColumn column: td.getColumns()) {
+            FieldInfo field = new FieldInfo(column);
+            this.columns[idx++] = field;
+            columnsByName.put(column.getName(), field);
         }
-        // Add index extra columns
-        if (ix.getDataColumns() != null) {
-            for (String cname : ix.getDataColumns()) {
-                TableColumn tc = cm.get(cname);
-                this.columns.add(tc);
-                known.add(cname);
-            }
+
+        this.keyColumns = new FieldInfo[td.getPrimaryKeys().size()];
+        idx = 0;
+        for (String keyColumn: td.getPrimaryKeys()) {
+            keyColumns[idx++] = columnsByName.get(keyColumn);
         }
-        // Add main table's PK columns, as they are in the index too.
-        for (String cname : tdMain.getPrimaryKeys()) {
-            if (known.add(cname)) {
-                TableColumn tc = cm.get(cname);
-                this.columns.add(tc);
-            }
-        }
-//        if (!connector.isSinglePartitionScans() && tdIx.getKeyRanges() != null) {
-//            for (KeyRange kr : tdIx.getKeyRanges()) {
-//                partitions.add(new KeysRange(kr, connector.getDefaultTypes()));
-//            }
-//        }
 
-        LOG.debug("Loaded index {} with {} columns and {} partitions",
-                this.tablePath, this.columns.size(), this.partitions.size());
-    }
+        this.partitions = parsePartitions(types, this.path, td.getKeyRanges());
 
-    public static Result<YdbTable> lookup(YdbConnector connector, YdbTypes types,
-            String tablePath, String logicalName, String indexName) {
-        return connector.getRetryCtx().supplyResult(session -> {
-            // Describe the main table
-            DescribeTableSettings dts = new DescribeTableSettings();
-            // Need key bounds for the main table only
-            dts.setIncludeShardKeyBounds(indexName == null);
-            Result<TableDescription> tdRes = session.describeTable(tablePath, dts).join();
-            if (!tdRes.isSuccess()) {
-                return CompletableFuture.completedFuture(Result.fail(tdRes.getStatus()));
-            }
-            TableDescription td = tdRes.getValue();
-            if (indexName == null) {
-                // No index name - construct the YdbTable for the main table
-                return CompletableFuture.completedFuture(Result.success(
-                        new YdbTable(connector, types, logicalName, tablePath, td)));
-            }
-            for (TableIndex ix : td.getIndexes()) {
-                if (indexName.equals(ix.getName())) {
-                    // Grab the description for the secondary index table.
-                    String indexPath = tablePath + "/" + ix.getName() + "/indexImplTable";
-                    dts.setIncludeShardKeyBounds(true);
-                    tdRes = session.describeTable(indexPath, dts).join();
-                    if (!tdRes.isSuccess()) {
-                        return CompletableFuture.completedFuture(Result.fail(tdRes.getStatus()));
-                    }
-                    TableDescription tdIx = tdRes.getValue();
-                    // Construct the YdbTable object for the index
-                    return CompletableFuture.completedFuture(Result.success(
-                            new YdbTable(connector, types, logicalName, tablePath, td, ix, tdIx)));
-                }
-            }
-            return CompletableFuture.completedFuture(
-                    Result.fail(Status.of(StatusCode.SCHEME_ERROR)
-                            .withIssues(Issue.of("Path not found", Issue.Severity.ERROR))));
-        }).join();
-    }
-
-    static StoreType convertStoreType(TableDescription td) {
-        /* TODO: implement store type detection
-        switch (td.getStoreType()) {
-            case COLUMN:
-                return YdbStoreType.COLUMN;
-            case ROW:
-                return YdbStoreType.ROW;
-            default:
-                return YdbStoreType.UNSPECIFIED;
-        }
-        */
-        return StoreType.ROW;
-    }
-
-    private static CaseInsensitiveStringMap createOptions(String tablePath, StoreType storeType,
-            List<String> keyColumns, TableDescription td) {
-        Map<String, String> options = new HashMap<>();
-
-        OperationOption.TABLE_PATH.write(options, tablePath);
-        OperationOption.TABLE_TYPE.write(options, storeType.name());
-        OperationOption.PRIMARY_KEY.write(options, keyColumns.stream().collect(Collectors.joining(",")));
-
+        this.properties = new HashMap<>();
+        OperationOption.TABLE_PATH.write(properties, path);
+        OperationOption.TABLE_TYPE.write(properties, type.name());
+        OperationOption.PRIMARY_KEY.write(properties, td.getPrimaryKeys().stream().collect(Collectors.joining(",")));
         PartitioningSettings ps = td.getPartitioningSettings();
         if (ps != null) {
-            PartitionOption.writeAll(options, ps);
+            PartitionOption.writeAll(properties, ps);
         }
-
-        return new CaseInsensitiveStringMap(options);
+        logger.debug("Loaded table {} with {} columns and {} partitions", this.path, schema.size(), partitions.length);
     }
 
-    static Map<String, TableColumn> buildColumnsMap(TableDescription td) {
-        Map<String, TableColumn> m = new HashMap<>();
-        for (TableColumn tc : td.getColumns()) {
-            m.put(tc.getName(), tc);
+    private static KeysRange[] parsePartitions(YdbTypes types, String tablePath, List<KeyRange> ranges) {
+        if (ranges == null || ranges.isEmpty()) {
+            return new KeysRange[0];
         }
-        return m;
+
+        KeysRange[] result = new KeysRange[ranges.size()];
+        int idx = 0;
+        for (KeyRange kr : ranges) {
+            KeysRange parsed = new KeysRange(kr, types);
+            if (parsed.isUnrestricted()) {
+                if (result.length > 1) {
+                    logger.warn("Unrestricted partition for table {}, ignoring partition metadata", tablePath);
+                }
+                return new KeysRange[] {parsed};
+            }
+            result[idx++] = new KeysRange(kr, types);
+        }
+
+        return result;
     }
 
     @Override
     public String name() {
-        return logicalName;
+        return name;
+    }
+
+    public String getTablePath() {
+        return path;
+    }
+
+    public Type getType() {
+        return type;
+    }
+
+    public YdbContext getCtx() {
+        return ctx;
+    }
+
+    public FieldInfo[] getKeyColumns() {
+        return keyColumns;
+    }
+
+    public FieldInfo[] getAllColumns() {
+        return columns;
+    }
+
+    public KeysRange[] getPartitions() {
+        return partitions;
+    }
+
+
+    @Override
+    public String toString() {
+        return "YdbTable{name=" + name + ", path='" + path + "', ctx=" + ctx + "}";
     }
 
     @Override
     @SuppressWarnings("deprecation")
     public StructType schema() {
-        if (schema == null) {
-            schema = new StructType(mapFields(columns));
-        }
         return schema;
     }
 
     @Override
     public Map<String, String> properties() {
-        return options;
+        return properties;
     }
 
     @Override
@@ -279,18 +182,33 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite, SupportsDel
         final Set<TableCapability> c = new HashSet<>();
         c.add(TableCapability.BATCH_READ);
         c.add(TableCapability.ACCEPT_ANY_SCHEMA); // allow YDB to check the schema
-        if (!StoreType.INDEX.equals(storeType)) {
-            // tables support writes, while indexes do not
-            c.add(TableCapability.BATCH_WRITE);
-            c.add(TableCapability.TRUNCATE);
+
+        switch (type) {
+            case ROW:
+                c.add(TableCapability.BATCH_WRITE);
+                c.add(TableCapability.TRUNCATE);
+                break;
+            case COLUMN:
+                c.add(TableCapability.BATCH_WRITE);
+                break;
+            case INDEX:
+            default:
+                break;
         }
+
         return c;
     }
 
     @Override
     public Transform[] partitioning() {
-        return new Transform[]{
-            Expressions.bucket(partitions.size(), keyColumns.toArray(new String[]{}))
+        final String[] cols = new String[keyColumns.length];
+        int idx = 0;
+        for (FieldInfo key : keyColumns) {
+            cols[idx++] = key.getName();
+        }
+
+        return new Transform[] {
+            Expressions.bucket(partitions.length, cols)
         };
     }
 
@@ -302,8 +220,8 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite, SupportsDel
     @Override
     public WriteBuilder newWriteBuilder(LogicalWriteInfo info) {
         boolean truncate = OperationOption.TRUNCATE.readBoolean(info.options(), false);
-        LOG.debug("Creating YdbWriteBuilder for table {} with truncate={}", tablePath, truncate);
-        return new YdbWriteBuilder(this, info, truncate);
+        logger.debug("Creating YdbWriteBuilder for table {} with truncate={}", path, truncate);
+        return new YdbWrite(this, info, truncate);
     }
 
     @Override
@@ -320,11 +238,7 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite, SupportsDel
 
     @Override
     public boolean truncateTable() {
-        final YdbTruncateTable action = new YdbTruncateTable(tablePath);
-        connector.getRetryCtx().supplyStatus(session -> action.run(session))
-                .join()
-                .expectSuccess();
-        return true;
+        return ctx.getExecutor().truncateTable(path);
     }
 
     @Override
@@ -332,64 +246,57 @@ public class YdbTable implements Table, SupportsRead, SupportsWrite, SupportsDel
         return new YdbRowLevelBuilder();
     }
 
-    public YdbConnector getConnector() {
-        return connector;
+    private static Type mapType(String tablePath, TableDescription td) {
+        if (tablePath.endsWith(INDEX_TABLE_NAME)) {
+            return Type.INDEX;
+        }
+
+        switch (td.getStoreType()) {
+            case COLUMN:
+                return Type.COLUMN;
+            case ROW:
+                return Type.ROW;
+            default:
+                throw new IllegalArgumentException("Uknown table store type " + td.getStoreType());
+        }
     }
 
-    public YdbTypes getTypes() {
-        return types;
-    }
+    public static TableDescription buildTableDesctiption(List<FieldInfo> fields, CaseInsensitiveStringMap options) {
+        Set<String> fieldNames = fields.stream().map(FieldInfo::getName).collect(Collectors.toSet());
+        String userPrimaryKeys = OperationOption.PRIMARY_KEY.read(options, "");
 
-    public String getTablePath() {
-        return tablePath;
-    }
+        List<String> primaryKeys = new ArrayList<>();
+        for (String keyName : userPrimaryKeys.split(",")) {
+            String trimmed = keyName.trim();
+            if (trimmed.isEmpty()) {
+                continue;
+            }
+            if (!fieldNames.contains(trimmed)) {
+                throw new IllegalArgumentException("Specified column " + trimmed + " not found in source schema");
+            }
+            primaryKeys.add(trimmed);
+        }
 
-    public List<String> getKeyColumns() {
-        return keyColumns;
-    }
+        if (primaryKeys.isEmpty()) {
+            String autoPkName = OperationOption.AUTO_PK.read(options, OperationOption.DEFAULT_AUTO_PK);
+            fields.add(new FieldInfo(autoPkName, FieldType.Text, false));
+            primaryKeys.add(autoPkName);
+        }
 
-    public ArrayList<FieldType> getKeyTypes() {
-        return keyTypes;
-    }
-
-    public ArrayList<KeysRange> getPartitions() {
-        return partitions;
-    }
-
-    public StoreType getStoreType() {
-        return storeType;
-    }
-
-    private StructField[] mapFields(List<TableColumn> columns) {
-        final List<StructField> fields = new ArrayList<>();
-        for (TableColumn tc : columns) {
-            final DataType dataType = types.mapTypeYdb2Spark(tc.getType());
-            if (dataType != null) {
-                fields.add(mapField(tc, dataType));
+        TableDescription.Builder tdb = TableDescription.newBuilder();
+        for (FieldInfo field : fields) {
+            if (field.isNullable()) {
+                tdb.addNullableColumn(field.getName(), field.getType().toSdkType());
+            } else {
+                tdb.addNonnullColumn(field.getName(), field.getType().toSdkType());
             }
         }
-        return fields.toArray(new StructField[0]);
-    }
+        tdb.setPrimaryKeys(primaryKeys);
 
-    private StructField mapField(TableColumn tc, DataType dataType) {
-        return new StructField(tc.getName(), dataType, types.mapNullable(tc.getType()), Metadata.empty());
-    }
+        PartitioningSettings partitioning = new PartitioningSettings();
+        PartitionOption.writeAll(options, partitioning);
+        tdb.setPartitioningSettings(partitioning);
 
-    public ArrayList<FieldInfo> makeColumns() {
-        final ArrayList<FieldInfo> m = new ArrayList<>();
-        for (TableColumn tc : columns) {
-            m.add(new FieldInfo(
-                    tc.getName(),
-                    FieldType.fromSdkType(tc.getType()),
-                    Type.Kind.OPTIONAL.equals(tc.getType().getKind())
-            ));
-        }
-        return m;
+        return tdb.build();
     }
-
-    @Override
-    public String toString() {
-        return "YdbTable:" + connector.getCatalogName() + ":" + tablePath;
-    }
-
 }

@@ -1,40 +1,51 @@
 package tech.ydb.spark.connector.write;
 
-import java.io.Serializable;
 
-import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.connector.write.BatchWrite;
-import org.apache.spark.sql.connector.write.DataWriter;
 import org.apache.spark.sql.connector.write.DataWriterFactory;
 import org.apache.spark.sql.connector.write.LogicalWriteInfo;
 import org.apache.spark.sql.connector.write.PhysicalWriteInfo;
+import org.apache.spark.sql.connector.write.SupportsTruncate;
 import org.apache.spark.sql.connector.write.Write;
+import org.apache.spark.sql.connector.write.WriteBuilder;
 import org.apache.spark.sql.connector.write.WriterCommitMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import tech.ydb.spark.connector.YdbTable;
-import tech.ydb.spark.connector.impl.YdbTruncateTable;
 
 /**
  * YDB table writer: orchestration and partition writer factory.
  *
  * @author zinal
  */
-public class YdbWrite implements Serializable, Write, BatchWrite, DataWriterFactory {
-    private static final long serialVersionUID = 3457488224723758266L;
+public class YdbWrite implements WriteBuilder, SupportsTruncate, Write, BatchWrite {
+    private static final Logger logger = LoggerFactory.getLogger(YdbWrite.class);
 
-    private static final Logger LOG = LoggerFactory.getLogger(YdbWrite.class);
+    private final YdbTable table;
+    private final LogicalWriteInfo logicalInfo;
+    private final boolean truncate;
 
-    private final YdbWriteOptions options;
+    public YdbWrite(YdbTable table, LogicalWriteInfo info, boolean truncate) {
+        this.table = table;
+        this.logicalInfo = info;
+        this.truncate = truncate;
+    }
 
-    public YdbWrite(YdbTable table, LogicalWriteInfo lwi, boolean mapByNames, boolean truncate) {
-        this.options = new YdbWriteOptions(table, mapByNames, lwi.schema(), lwi.queryId(), lwi.options(), truncate);
+    @Override
+    public Write build() {
+        return this;
+    }
+
+    @Override
+    public WriteBuilder truncate() {
+        logger.debug("Truncation requested for table {}", table.getTablePath());
+        return new YdbWrite(table, logicalInfo, true);
     }
 
     @Override
     public BatchWrite toBatch() {
-        LOG.debug("YdbWrite converted to BatchWrite for table {}", options.getTable().getTablePath());
+        logger.debug("YdbWrite converted to BatchWrite for table {}", table.getTablePath());
         return this;
     }
 
@@ -43,17 +54,14 @@ public class YdbWrite implements Serializable, Write, BatchWrite, DataWriterFact
     }
 
     @Override
-    public DataWriterFactory createBatchWriterFactory(PhysicalWriteInfo info) {
-        LOG.debug("YdbWrite converted to DataWriterFactory for table {}", options.getTable().getTablePath());
+    public DataWriterFactory createBatchWriterFactory(PhysicalWriteInfo physicalInfo) {
+        logger.debug("YdbWrite converted to DataWriterFactory for table {}", table.getTablePath());
+        YdbWriterFactory factory = new YdbWriterFactory(table, logicalInfo, physicalInfo);
         // TODO: create the COW copy of the destination table
-        if (options.isTruncate()) {
-            YdbTruncateTable action = new YdbTruncateTable(options.getTable().getTablePath());
-            options.getTable().getConnector().getRetryCtx()
-                    .supplyStatus(session -> action.run(session))
-                    .join()
-                    .expectSuccess();
+        if (truncate) {
+            table.truncateTable();
         }
-        return this;
+        return factory;
     }
 
     @Override
@@ -65,12 +73,46 @@ public class YdbWrite implements Serializable, Write, BatchWrite, DataWriterFact
     public void abort(WriterCommitMessage[] messages) {
         // TODO: remove the COW copy
     }
+/*
+    private boolean validateSchemas(StructType actualSchema, StructType inputSchema) {
+        final List<StructField> inputFields = new ArrayList<>(JavaConverters.asJavaCollection(inputSchema.toList()));
+        if (mapByNames) {
+            for (StructField sfi : inputFields) {
+                Option<Object> index = actualSchema.getFieldIndex(sfi.name());
+                if (!index.isDefined() || index.isEmpty()) {
+                    throw new IllegalArgumentException("Ingestion input cannot be mapped by names: "
+                            + "unknown field [" + sfi.name() + "] specified on input.");
+                }
+                StructField sfa = actualSchema.fields()[(int) index.get()];
 
-    @Override
-    public DataWriter<InternalRow> createWriter(int partitionId, long taskId) {
-        LOG.debug("YdbWriterImpl created for table {}, partition {}, task {}",
-                options.getTable().getTablePath(), partitionId, taskId);
-        return new YdbWriterImpl(options, partitionId, taskId);
+                if (!isAssignableFrom(sfa.dataType(), sfi.dataType())) {
+                    throw new IllegalArgumentException("Ingestion input cannot be converted: "
+                            + "field [" + sfi.name() + "] cannot be converted to type "
+                            + sfa.dataType() + " from type " + sfi.dataType());
+                }
+            }
+        } else {
+            if (actualSchema.size() != inputSchema.size()) {
+                throw new IllegalArgumentException("Ingestion input cannot be mapped by position: "
+                        + "expected " + String.valueOf(actualSchema.size()) + " fields, "
+                        + "got " + inputSchema.size() + " fields.");
+            }
+        }
+        return mapByNames;
     }
 
+    private static boolean areNamesAutoGenerated(List<StructField> inputFields) {
+        for (StructField sf : inputFields) {
+            if (!p.matcher(sf.name()).matches()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean isAssignableFrom(DataType dst, DataType src) {
+        // TODO: validate data type compatibility
+        return true;
+    }
+*/
 }

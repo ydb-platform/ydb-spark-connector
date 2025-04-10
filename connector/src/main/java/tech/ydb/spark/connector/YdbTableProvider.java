@@ -1,19 +1,18 @@
 package tech.ydb.spark.connector;
 
+import java.util.List;
 import java.util.Map;
 
 import org.apache.spark.sql.connector.catalog.Table;
 import org.apache.spark.sql.connector.catalog.TableProvider;
+import org.apache.spark.sql.connector.expressions.Expressions;
 import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.sources.DataSourceRegister;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-import tech.ydb.spark.connector.common.FieldInfo;
-import tech.ydb.spark.connector.impl.YdbCreateTable;
-import tech.ydb.spark.connector.impl.YdbIntrospectTable;
+import tech.ydb.spark.connector.common.OperationOption;
+import tech.ydb.table.description.TableDescription;
 
 /**
  * YDB table provider. Registered under the "ydb" name via the following file:
@@ -22,15 +21,6 @@ import tech.ydb.spark.connector.impl.YdbIntrospectTable;
  * @author zinal
  */
 public class YdbTableProvider implements TableProvider, DataSourceRegister {
-    private static final Logger logger = LoggerFactory.getLogger(YdbTableProvider.class);
-
-    /**
-     * "Implementations must have a public, 0-arg constructor".
-     */
-    public YdbTableProvider() {
-        logger.debug("created ydb table provider");
-    }
-
     @Override
     public String shortName() {
         return "ydb";
@@ -41,41 +31,69 @@ public class YdbTableProvider implements TableProvider, DataSourceRegister {
         return true;
     }
 
+    private String exractTableName(CaseInsensitiveStringMap options) {
+        // Check that table path is provided
+        String table = OperationOption.DBTABLE.read(options);
+        if (table == null || table.trim().length() == 0) {
+            throw new IllegalArgumentException("Missing property: " + OperationOption.DBTABLE);
+        }
+        return table.trim();
+    }
+
     @Override
     public StructType inferSchema(CaseInsensitiveStringMap options) {
-        logger.info("get inferSchema");
-        return new YdbIntrospectTable(options).load(false).schema();
+        YdbContext ctx = new YdbContext(options);
+        YdbTypes types = new YdbTypes(options);
+
+        String tableName = exractTableName(options);
+        String tablePath = ctx.getExecutor().extractPath(tableName);
+        TableDescription td =  ctx.getExecutor().describeTable(tablePath, false);
+        if (td == null) {
+            throw new RuntimeException("Table " + tablePath + " not found");
+        }
+        return types.toSparkSchema(td.getColumns());
     }
 
     @Override
     public Transform[] inferPartitioning(CaseInsensitiveStringMap options) {
-        return new YdbIntrospectTable(options).load(false).partitioning();
+        YdbContext ctx = new YdbContext(options);
+
+        String tableName = exractTableName(options);
+        String tablePath = ctx.getExecutor().extractPath(tableName);
+        TableDescription td = ctx.getExecutor().describeTable(tablePath, true);
+        if (td == null) {
+            throw new RuntimeException("Table " + tablePath + " not found");
+        }
+
+        List<String> keyColumns = td.getPrimaryKeys();
+
+        String[] keys = new String[keyColumns.size()];
+        int idx = 0;
+        for (String key: keyColumns) {
+            keys[idx++] = key;
+        }
+
+        return new Transform[] {
+            Expressions.bucket(td.getKeyRanges().size(), keys)
+        };
     }
 
     @Override
     public Table getTable(StructType schema, Transform[] partitioning, Map<String, String> properties) {
-        logger.debug("get table");
-        final YdbIntrospectTable intro = new YdbIntrospectTable(new CaseInsensitiveStringMap(properties));
-        if (schema == null) {
-            // No schema provided, so the table must exist.
-            return intro.load(false);
-        }
-        // We have the schema, so the table may need to be created.
-        YdbTable table = intro.load(true);
-        if (table != null) {
-            // Table already exists.
-            return table;
-        }
-        // No such table - creating it.
-        final YdbCreateTable action = new YdbCreateTable(
-                intro.getTablePath(),
-                FieldInfo.fromSchema(intro.getTypes(), schema),
-                properties
-        );
-        intro.getRetryCtx().supplyStatus(session -> action.createTable(session)).join()
-                .expectSuccess("Failed to create table: " + intro.getInputTable());
-        // Trying to load one once again.
-        return intro.load(false);
-    }
+        CaseInsensitiveStringMap options = new CaseInsensitiveStringMap(properties);
 
+        YdbContext ctx = new YdbContext(options);
+        YdbTypes types = new YdbTypes(options);
+
+        String tableName = exractTableName(options);
+        String tablePath = ctx.getExecutor().extractPath(tableName);
+        TableDescription td =  ctx.getExecutor().describeTable(tablePath, true);
+        if (td == null) {
+            // No such table - creating it.
+            td = YdbTable.buildTableDesctiption(types.fromSparkSchema(schema), options);
+            ctx.getExecutor().createTable(tablePath, td);
+        }
+
+        return new YdbTable(ctx, types, tableName, tablePath, td);
+    }
 }

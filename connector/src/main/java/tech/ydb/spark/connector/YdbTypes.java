@@ -1,4 +1,4 @@
-package tech.ydb.spark.connector.impl;
+package tech.ydb.spark.connector;
 
 import java.io.Serializable;
 import java.math.BigDecimal;
@@ -9,17 +9,24 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.Decimal;
+import org.apache.spark.sql.types.Metadata;
+import org.apache.spark.sql.types.StructField;
+import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 import org.apache.spark.unsafe.types.UTF8String;
 
+import tech.ydb.spark.connector.common.FieldInfo;
 import tech.ydb.spark.connector.common.FieldType;
 import tech.ydb.spark.connector.common.OperationOption;
+import tech.ydb.table.description.TableColumn;
 import tech.ydb.table.result.ValueReader;
 import tech.ydb.table.values.DecimalType;
 import tech.ydb.table.values.DecimalValue;
@@ -35,8 +42,7 @@ import tech.ydb.table.values.Value;
  * @author zinal
  */
 public final class YdbTypes implements Serializable {
-
-    private static final long serialVersionUID = -8806489193094006210L;
+    private static final long serialVersionUID = 7729504281996858720L;
 
     public static final DataType SPARK_DECIMAL = DataTypes.createDecimalType(38, 10);
     public static final DataType SPARK_UINT64 = DataTypes.createDecimalType(22, 0);
@@ -47,7 +53,7 @@ public final class YdbTypes implements Serializable {
         this.dateAsString = OperationOption.DATE_AS_STRING.readBoolean(options, false);
     }
 
-    public boolean mapNullable(tech.ydb.table.values.Type yt) {
+    private boolean mapNullable(tech.ydb.table.values.Type yt) {
         switch (yt.getKind()) {
             case OPTIONAL:
                 return true;
@@ -56,7 +62,38 @@ public final class YdbTypes implements Serializable {
         }
     }
 
-    public DataType mapTypeYdb2Spark(tech.ydb.table.values.Type yt) {
+    public FieldInfo fromSparkField(StructField field) {
+        FieldType type = mapTypeSpark2Ydb(field.dataType());
+        if (type == null) {
+            throw new IllegalArgumentException("Unsupported type for table column: " + field.dataType());
+        }
+        return new FieldInfo(field.name(), type, field.nullable());
+    }
+
+    public List<FieldInfo> fromSparkSchema(StructType schema) {
+        final List<FieldInfo> fields = new ArrayList<>(schema.size());
+        for (StructField field : schema.fields()) {
+            FieldType type = mapTypeSpark2Ydb(field.dataType());
+            if (type == null) {
+                throw new IllegalArgumentException("Unsupported type for table column: " + field.dataType());
+            }
+            fields.add(new FieldInfo(field.name(), type, field.nullable()));
+        }
+        return fields;
+    }
+
+    public StructType toSparkSchema(List<TableColumn> columns) {
+        final List<StructField> fields = new ArrayList<>();
+        for (TableColumn tc : columns) {
+            DataType dataType = mapTypeYdb2Spark(tc.getType());
+            if (dataType != null) {
+                fields.add(new StructField(tc.getName(), dataType, mapNullable(tc.getType()), Metadata.empty()));
+            }
+        }
+        return new StructType(fields.toArray(new StructField[0]));
+    }
+
+    private DataType mapTypeYdb2Spark(tech.ydb.table.values.Type yt) {
         if (yt == null) {
             return null;
         }
@@ -287,7 +324,7 @@ public final class YdbTypes implements Serializable {
         return null;
     }
 
-    public Object convertFromYdb(Value<?> v) {
+    public Serializable convertFromYdb(Value<?> v) {
         if (v == null) {
             return null;
         }
@@ -689,7 +726,7 @@ public final class YdbTypes implements Serializable {
     }
 
     @SuppressWarnings("unchecked")
-    public static Object max(Object o1, Object o2) {
+    public static Serializable max(Serializable o1, Serializable o2) {
         if (o1 == null || o1 == o2) {
             return o2;
         }
@@ -703,7 +740,7 @@ public final class YdbTypes implements Serializable {
     }
 
     @SuppressWarnings("unchecked")
-    public static Object min(Object o1, Object o2) {
+    public static Serializable min(Serializable o1, Serializable o2) {
         if (o1 == null || o1 == o2) {
             return o2;
         }
@@ -714,6 +751,74 @@ public final class YdbTypes implements Serializable {
             return ((Comparable) o2).compareTo(o1) < 0 ? o2 : o1;
         }
         return o2;
+    }
+
+    public Value<?> getRowValue(InternalRow row, int i, Type type) {
+        if (type.getKind() == Type.Kind.OPTIONAL) {
+            type = type.unwrapOptional();
+
+            if (row.isNullAt(i)) {
+                return type.makeOptional().emptyValue();
+            } else {
+                return type.makeOptional().newValue(getRowValue(row, i, type));
+            }
+        }
+
+        if (type.getKind() == Type.Kind.DECIMAL) {
+            DecimalType decimalType = (DecimalType) type;
+            Decimal value = row.getDecimal(i, decimalType.getPrecision(), decimalType.getScale());
+            return decimalType.newValue(value.toJavaBigDecimal());
+        }
+
+        if (type.getKind() == Type.Kind.PRIMITIVE) {
+            PrimitiveType primitiveType = (PrimitiveType) type;
+            switch (primitiveType) {
+                case Bool:
+                    return PrimitiveValue.newBool(row.getBoolean(i));
+                case Int8:
+                    return PrimitiveValue.newInt8((byte) row.getInt(i));
+                case Int16:
+                    return PrimitiveValue.newInt16((short) row.getInt(i));
+                case Int32:
+                    return PrimitiveValue.newInt32(row.getInt(i));
+                case Int64:
+                    return PrimitiveValue.newInt64(row.getLong(i));
+                case Uint8:
+                    return PrimitiveValue.newUint8(row.getInt(i));
+                case Uint16:
+                    return PrimitiveValue.newUint16(row.getInt(i));
+                case Uint32:
+                    return PrimitiveValue.newUint32(row.getLong(i));
+                case Uint64:
+                    return PrimitiveValue.newUint64(row.getLong(i));
+                case Float:
+                    return PrimitiveValue.newFloat(row.getFloat(i));
+                case Double:
+                    return PrimitiveValue.newDouble(row.getDouble(i));
+                case Bytes:
+                    return PrimitiveValue.newBytes(row.getBinary(i));
+                case Text:
+                    return PrimitiveValue.newText(row.getUTF8String(i).toString());
+                case Yson:
+                    return PrimitiveValue.newYson(row.getBinary(i));
+                case Json:
+                    return PrimitiveValue.newJson(row.getUTF8String(i).toString());
+                case Uuid:
+                case JsonDocument:
+                case Date:
+                case Datetime:
+                case Timestamp:
+                case Interval:
+                case TzDate:
+                case TzDatetime:
+                case TzTimestamp:
+                case DyNumber:
+                default:
+                    throw new IllegalArgumentException("Conversion from type " + primitiveType + " is not supported");
+            }
+        }
+
+        throw new IllegalArgumentException("Conversion from type " + type + " is not supported");
     }
 
     public void setRowValue(InternalRow row, int i, ValueReader vr) {
@@ -735,7 +840,6 @@ public final class YdbTypes implements Serializable {
 
         if (type.getKind() == Type.Kind.PRIMITIVE) {
             PrimitiveType primitiveType = (PrimitiveType) type;
-            boolean datesAsString = dateAsString;
             switch (primitiveType) {
                 case Bool:
                     row.setBoolean(i, vr.getBool());
@@ -789,28 +893,28 @@ public final class YdbTypes implements Serializable {
                     row.update(i, UTF8String.fromString(vr.getJsonDocument()));
                     break;
                 case Date:
-                    if (datesAsString) {
+                    if (dateAsString) {
                         row.update(i, UTF8String.fromString(vr.getDate().toString()));
                     } else {
                         row.setInt(i, (int) vr.getDate().toEpochDay());
                     }
                     break;
                 case Datetime:
-                    if (datesAsString) {
+                    if (dateAsString) {
                         row.update(i, UTF8String.fromString(vr.getDatetime().toString()));
                     } else {
                         row.setLong(i, vr.getDatetime().toInstant(ZoneOffset.UTC).getEpochSecond());
                     }
                     break;
                 case Timestamp:
-                    if (datesAsString) {
+                    if (dateAsString) {
                         row.update(i, UTF8String.fromString(vr.getTimestamp().toString()));
                     } else {
                         row.setLong(i, vr.getTimestamp().toEpochMilli());
                     }
                     break;
                 case Interval:
-                    if (datesAsString) {
+                    if (dateAsString) {
                         row.update(i, UTF8String.fromString(vr.getInterval().toString()));
                     } else {
                         row.update(i, vr.getInterval());

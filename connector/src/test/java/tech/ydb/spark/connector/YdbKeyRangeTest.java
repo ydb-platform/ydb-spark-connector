@@ -1,6 +1,6 @@
 package tech.ydb.spark.connector;
 
-import java.util.Arrays;
+import java.io.Serializable;
 
 import org.junit.Assert;
 import org.junit.Test;
@@ -13,12 +13,12 @@ import tech.ydb.spark.connector.common.KeysRange;
  */
 public class YdbKeyRangeTest {
 
-    private KeysRange.Limit makeExclusive(Object... vals) {
-        return new KeysRange.Limit(Arrays.asList(vals), false);
+    private KeysRange.Limit makeExclusive(Serializable... vals) {
+        return new KeysRange.Limit(vals, false);
     }
 
-    private KeysRange.Limit makeInclusive(Object... vals) {
-        return new KeysRange.Limit(Arrays.asList(vals), true);
+    private KeysRange.Limit makeInclusive(Serializable... vals) {
+        return new KeysRange.Limit(vals, true);
     }
 
     @Test
@@ -77,15 +77,15 @@ public class YdbKeyRangeTest {
         Assert.assertEquals(false, new KeysRange(x1, x2).isEmpty());
 
         Assert.assertEquals(true,
-                new KeysRange(new Object[] {31000000L}, new Object[] {31000000L}).isEmpty());
+                new KeysRange(new Serializable[] {31000000L}, true, new Serializable[] {31000000L}, false).isEmpty());
     }
 
     @Test
     public void testIntersect() {
         KeysRange r1;
         KeysRange r2, ro;
-        r1 = new KeysRange(new Object[] {31000000L}, new Object[] {32000000L});
-        r2 = new KeysRange(new Object[] {46000000L}, new Object[] {46250000L});
+        r1 = new KeysRange(new Serializable[] {31000000L}, true, new Serializable[] {32000000L}, false);
+        r2 = new KeysRange(new Serializable[] {46000000L}, true, new Serializable[] {46250000L}, false);
         ro = r2.intersect(r1);
         Assert.assertEquals(true, ro.isEmpty());
     }

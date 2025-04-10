@@ -68,7 +68,7 @@ public enum OperationOption implements SparkOption {
      */
     TABLE_PATH("table_path");
 
-    public static String DEFAULT_AUTO_PK = "_spark_key";
+    public static final String DEFAULT_AUTO_PK = "_spark_key";
 
     private final String code;
 

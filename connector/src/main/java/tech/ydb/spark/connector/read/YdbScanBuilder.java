@@ -23,7 +23,7 @@ public class YdbScanBuilder implements ScanBuilder,
         SupportsPushDownRequiredColumns,
         SupportsPushDownLimit {
 
-    private static final Logger LOG = LoggerFactory.getLogger(YdbScanBuilder.class);
+    private static final Logger logger = LoggerFactory.getLogger(YdbScanBuilder.class);
 
     private final YdbTable table;
     private final YdbScanOptions options;
@@ -31,7 +31,7 @@ public class YdbScanBuilder implements ScanBuilder,
     public YdbScanBuilder(YdbTable table, CaseInsensitiveStringMap options) {
         this.table = table;
         this.options = new YdbScanOptions(table, options);
-        LOG.debug("Preparing scan for table {}", table);
+        logger.debug("Preparing scan for table {}", table);
     }
 
     @Override
