@@ -9,48 +9,49 @@ import org.apache.spark.sql.connector.read.PartitionReaderFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import tech.ydb.spark.connector.YdbTable;
 import tech.ydb.spark.connector.impl.YdbScanReadTable;
 
 /**
- * Partition reader factory delivers the scan options to partition reader instances.
  *
- * @author zinal
+ * @author Aleksandr Gorshenin
  */
-public class YdbPartitionReaderFactory implements PartitionReaderFactory {
-    private static final long serialVersionUID = -3117498545638305126L;
+public class YdbReaderFactory implements PartitionReaderFactory {
+    private static final Logger logger = LoggerFactory.getLogger(YdbReaderFactory.class);
+    private static final long serialVersionUID = 6815846949510430713L;
 
-    private static final Logger LOG = LoggerFactory.getLogger(YdbPartitionReaderFactory.class);
-
-
+    private final YdbTable table;
     private final YdbScanOptions options;
 
-    public YdbPartitionReaderFactory(YdbScanOptions options) {
+    public YdbReaderFactory(YdbTable table, YdbScanOptions options) {
+        this.table = table;
         this.options = options;
     }
 
     @Override
     public PartitionReader<InternalRow> createReader(InputPartition partition) {
-        return new YdbReader(options, (YdbTablePartition) partition);
+        return new LazyReader(table, options, partition);
     }
 
-    static class YdbReader implements PartitionReader<InternalRow> {
-
+    public static class LazyReader implements PartitionReader<InternalRow> {
+        private final YdbTable table;
         private final YdbScanOptions options;
         private final YdbTablePartition partition;
-        private YdbScanReadTable scan;
 
-        YdbReader(YdbScanOptions options, YdbTablePartition partition) {
+        private YdbScanReadTable scan = null;
+
+        public LazyReader(YdbTable table, YdbScanOptions options, InputPartition partition) {
+            this.table = table;
             this.options = options;
-            this.partition = partition;
+            this.partition = (YdbTablePartition) partition;
         }
 
         @Override
         public boolean next() throws IOException {
             if (scan == null) {
-                LOG.debug("Preparing scan for table {} at partition {}",
-                        options.getTablePath(), partition);
-                scan = new YdbScanReadTable(options, partition.getRange());
-                LOG.debug("Scan prepared, ready to fetch...");
+                logger.debug("Preparing scan for table {} at partition {}", table.getTablePath(), partition);
+                scan = new YdbScanReadTable(table, options, partition.getRange());
+                logger.debug("Scan prepared, ready to fetch...");
             }
             return scan.next();
         }
@@ -63,7 +64,7 @@ public class YdbPartitionReaderFactory implements PartitionReaderFactory {
         @Override
         public void close() throws IOException {
             if (scan != null) {
-                LOG.debug("Closing the scan.");
+                logger.debug("Closing the scan.");
                 scan.close();
             }
             scan = null;

@@ -10,7 +10,7 @@ import tech.ydb.table.values.Type;
  *
  * @author zinal
  */
-public enum YdbFieldType {
+public enum FieldType {
     Bool("Bool"),
     Int8("Int8"),
     Uint8("Uint8"),
@@ -40,7 +40,7 @@ public enum YdbFieldType {
 
     private final String sqlName;
 
-    YdbFieldType(String sqlName) {
+    FieldType(String sqlName) {
         this.sqlName = sqlName;
     }
 
@@ -56,7 +56,7 @@ public enum YdbFieldType {
         return toSdkType(this, optional);
     }
 
-    public static YdbFieldType fromSdkType(Type t) {
+    public static FieldType fromSdkType(Type t) {
         switch (t.getKind()) {
             case OPTIONAL:
                 t = t.unwrapOptional();
@@ -132,7 +132,7 @@ public enum YdbFieldType {
         throw new IllegalArgumentException(t.toString());
     }
 
-    public static Type toSdkType(YdbFieldType ft, boolean optional) {
+    public static Type toSdkType(FieldType ft, boolean optional) {
         Type t;
         switch (ft) {
             case Bool:

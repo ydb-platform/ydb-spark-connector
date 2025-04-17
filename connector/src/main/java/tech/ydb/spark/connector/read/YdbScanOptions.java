@@ -11,47 +11,70 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
 import org.apache.spark.sql.connector.expressions.filter.And;
 import org.apache.spark.sql.connector.expressions.filter.Predicate;
 import org.apache.spark.sql.types.StructType;
+import org.apache.spark.sql.util.CaseInsensitiveStringMap;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import tech.ydb.spark.connector.YdbTable;
-import tech.ydb.spark.connector.common.YdbFieldType;
-import tech.ydb.spark.connector.common.YdbKeyRange;
-import tech.ydb.spark.connector.common.YdbTableOperationOptions;
-import tech.ydb.spark.connector.common.YdbTypes;
+import tech.ydb.spark.connector.YdbTypes;
+import tech.ydb.spark.connector.common.FieldInfo;
+import tech.ydb.spark.connector.common.KeysRange;
+import tech.ydb.spark.connector.common.OperationOption;
 
 /**
  * All settings for the scan operations, shared between the partition readers.
  *
  * @author zinal
  */
-public class YdbScanOptions extends YdbTableOperationOptions implements Serializable {
+public class YdbScanOptions implements Serializable {
+    private static final Logger logger = LoggerFactory.getLogger(YdbScanOptions.class);
+    private static final long serialVersionUID = -4608401766953066647L;
 
-    private static final long serialVersionUID = 1L;
-
-    private static final org.slf4j.Logger LOG
-            = org.slf4j.LoggerFactory.getLogger(YdbScanOptions.class);
-
-    private final StructType actualSchema;
-    private final ArrayList<String> keyColumns;
-    private final ArrayList<YdbFieldType> keyTypes;
-    private final ArrayList<Object> rangeBegin;
-    private final ArrayList<Object> rangeEnd;
-    private final ArrayList<YdbKeyRange> partitions;
+    private final YdbTypes types;
+    private final FieldInfo[] keys;
     private final int scanQueueDepth;
-    private final int scanSessionSeconds;
-    private int rowLimit;
-    private StructType requiredSchema;
 
-    public YdbScanOptions(YdbTable table) {
-        super(table);
-        this.actualSchema = table.schema();
-        this.keyColumns = new ArrayList<>(table.getKeyColumns()); // ensure serializable list
-        this.keyTypes = table.getKeyTypes();
-        this.rangeBegin = new ArrayList<>();
-        this.rangeEnd = new ArrayList<>();
-        this.partitions = table.getPartitions();
-        this.scanQueueDepth = table.getConnector().getScanQueueDepth();
-        this.scanSessionSeconds = table.getConnector().getScanSessionSeconds();
+    private int rowLimit;
+    private KeysRange predicateRange;
+    private StructType readSchema;
+
+    public YdbScanOptions(YdbTable table, CaseInsensitiveStringMap options) {
+        this.types = new YdbTypes(options);
+        this.keys = table.getKeyColumns();
+
+        this.predicateRange = KeysRange.UNRESTRICTED;
+
+        this.scanQueueDepth = getScanQueueDepth(options);
         this.rowLimit = -1;
+        this.readSchema = table.schema();
+    }
+
+    public YdbTypes getTypes() {
+        return types;
+    }
+
+    public int getScanQueueDepth() {
+        return scanQueueDepth;
+    }
+
+    public StructType getReadSchema() {
+        return readSchema;
+    }
+
+    public int getRowLimit() {
+        return rowLimit;
+    }
+
+    public KeysRange getPredicateRange() {
+        return predicateRange;
+    }
+
+    public void pruneColumns(StructType requiredSchema) {
+        this.readSchema = requiredSchema;
+    }
+
+    public void setRowLimit(int rowLimit) {
+        this.rowLimit = rowLimit;
     }
 
     public void setupPredicates(Predicate[] predicates) {
@@ -60,53 +83,6 @@ public class YdbScanOptions extends YdbTableOperationOptions implements Serializ
         }
         List<Predicate> flat = flattenPredicates(predicates);
         detectRangeSimple(flat);
-    }
-
-    public void pruneColumns(StructType requiredSchema) {
-        this.requiredSchema = requiredSchema;
-    }
-
-    public StructType readSchema() {
-        if (requiredSchema == null) {
-            return actualSchema;
-        }
-        return requiredSchema;
-    }
-
-    public List<String> getKeyColumns() {
-        return keyColumns;
-    }
-
-    public List<YdbFieldType> getKeyTypes() {
-        return keyTypes;
-    }
-
-    public List<Object> getRangeBegin() {
-        return rangeBegin;
-    }
-
-    public List<Object> getRangeEnd() {
-        return rangeEnd;
-    }
-
-    public List<YdbKeyRange> getPartitions() {
-        return partitions;
-    }
-
-    public int getScanQueueDepth() {
-        return scanQueueDepth;
-    }
-
-    public int getScanSessionSeconds() {
-        return scanSessionSeconds;
-    }
-
-    public int getRowLimit() {
-        return rowLimit;
-    }
-
-    public void setRowLimit(int rowLimit) {
-        this.rowLimit = rowLimit;
     }
 
     /**
@@ -149,23 +125,20 @@ public class YdbScanOptions extends YdbTableOperationOptions implements Serializ
         if (predicates == null || predicates.isEmpty()) {
             return;
         }
-        LOG.debug("Calculating scan ranges for predicates {}", predicates);
-        rangeBegin.clear();
-        rangeEnd.clear();
-        for (String x : keyColumns) {
-            rangeBegin.add(null);
-            rangeEnd.add(null);
-        }
-        for (int pos = 0; pos < keyColumns.size(); ++pos) {
-            final String keyColumn = keyColumns.get(pos);
+        logger.debug("Calculating scan ranges for predicates {}", predicates);
+        Serializable[] rangeBegin = new Serializable[keys.length];
+        Serializable[] rangeEnd = new Serializable[keys.length];
+
+        for (int pos = 0; pos < keys.length; ++pos) {
+            final String keyColumn = keys[pos].getName();
             boolean hasEquality = false;
             for (Predicate p : predicates) {
                 final String pname = p.name();
                 if ("=".equalsIgnoreCase(pname) || "<=>".equalsIgnoreCase(pname)) {
                     Lyzer lyzer = new Lyzer(keyColumn, p.children());
                     if (lyzer.success) {
-                        rangeBegin.set(pos, lyzer.value);
-                        rangeEnd.set(pos, lyzer.value);
+                        rangeBegin[pos] = lyzer.value;
+                        rangeEnd[pos] = lyzer.value;
                         hasEquality = true;
                         break; // we got both upper and lower bounds, moving to next key column
                     }
@@ -173,36 +146,36 @@ public class YdbScanOptions extends YdbTableOperationOptions implements Serializ
                     Lyzer lyzer = new Lyzer(keyColumn, p.children());
                     if (lyzer.success) {
                         if (lyzer.revert) {
-                            rangeEnd.set(pos, YdbTypes.min(rangeEnd.get(pos), lyzer.value));
+                            rangeEnd[pos] = YdbTypes.min(rangeEnd[pos], lyzer.value);
                         } else {
-                            rangeBegin.set(pos, YdbTypes.max(rangeBegin.get(pos), lyzer.value));
+                            rangeBegin[pos] = YdbTypes.max(rangeBegin[pos], lyzer.value);
                         }
                     }
                 } else if (">=".equalsIgnoreCase(pname)) {
                     Lyzer lyzer = new Lyzer(keyColumn, p.children());
                     if (lyzer.success) {
                         if (lyzer.revert) {
-                            rangeEnd.set(pos, YdbTypes.min(rangeEnd.get(pos), lyzer.value));
+                            rangeEnd[pos] = YdbTypes.min(rangeEnd[pos], lyzer.value);
                         } else {
-                            rangeBegin.set(pos, YdbTypes.max(rangeBegin.get(pos), lyzer.value));
+                            rangeBegin[pos] = YdbTypes.max(rangeBegin[pos], lyzer.value);
                         }
                     }
                 } else if ("<".equalsIgnoreCase(pname)) {
                     Lyzer lyzer = new Lyzer(keyColumn, p.children());
                     if (lyzer.success) {
                         if (lyzer.revert) {
-                            rangeBegin.set(pos, YdbTypes.max(rangeBegin.get(pos), lyzer.value));
+                            rangeBegin[pos] = YdbTypes.max(rangeBegin[pos], lyzer.value);
                         } else {
-                            rangeEnd.set(pos, YdbTypes.min(rangeEnd.get(pos), lyzer.value));
+                            rangeEnd[pos] = YdbTypes.min(rangeEnd[pos], lyzer.value);
                         }
                     }
                 } else if ("<=".equalsIgnoreCase(pname)) {
                     Lyzer lyzer = new Lyzer(keyColumn, p.children());
                     if (lyzer.success) {
                         if (lyzer.revert) {
-                            rangeBegin.set(pos, YdbTypes.max(rangeBegin.get(pos), lyzer.value));
+                            rangeBegin[pos] = YdbTypes.max(rangeBegin[pos], lyzer.value);
                         } else {
-                            rangeEnd.set(pos, YdbTypes.min(rangeEnd.get(pos), lyzer.value));
+                            rangeEnd[pos] = YdbTypes.min(rangeEnd[pos], lyzer.value);
                         }
                     }
                 } else if ("STARTS_WITH".equalsIgnoreCase(pname)) {
@@ -215,8 +188,8 @@ public class YdbScanOptions extends YdbTableOperationOptions implements Serializ
                                     .append(lvalue, 0, lastCharPos)
                                     .append((char) (1 + lvalue.charAt(lastCharPos)))
                                     .toString();
-                            rangeBegin.set(pos, YdbTypes.max(rangeBegin.get(pos), lvalue));
-                            rangeEnd.set(pos, YdbTypes.min(rangeEnd.get(pos), rvalue));
+                            rangeBegin[pos] = YdbTypes.max(rangeBegin[pos], lvalue);
+                            rangeEnd[pos] = YdbTypes.min(rangeEnd[pos], rvalue);
                         }
                     }
                 }
@@ -226,24 +199,8 @@ public class YdbScanOptions extends YdbTableOperationOptions implements Serializ
             }
         }
 
-        // Drop trailing nulls
-        while (!rangeBegin.isEmpty()) {
-            int pos = rangeBegin.size() - 1;
-            if (rangeBegin.get(pos) == null) {
-                rangeBegin.remove(pos);
-            } else {
-                break;
-            }
-        }
-        while (!rangeEnd.isEmpty()) {
-            int pos = rangeEnd.size() - 1;
-            if (rangeEnd.get(pos) == null) {
-                rangeEnd.remove(pos);
-            } else {
-                break;
-            }
-        }
-        LOG.debug("Calculated scan ranges {} -> {}", rangeBegin, rangeEnd);
+        predicateRange = new KeysRange(rangeBegin, true, rangeEnd, true);
+        logger.debug("Calculated scan ranges {}", predicateRange);
     }
 
     /**
@@ -253,12 +210,12 @@ public class YdbScanOptions extends YdbTableOperationOptions implements Serializ
 
         final boolean success;
         final boolean revert;
-        final Object value;
+        final Serializable value;
 
         Lyzer(String keyColumn, Expression[] children) {
             boolean localSuccess = false;
             boolean localRevert = false;
-            Object localValue = null;
+            Serializable localValue = null;
             if (children.length == 2) {
                 Expression left = children[0];
                 Expression right = children[1];
@@ -276,7 +233,7 @@ public class YdbScanOptions extends YdbTableOperationOptions implements Serializ
                         String fieldName = nr.fieldNames()[nr.fieldNames().length - 1];
                         if (keyColumn.equals(fieldName)) {
                             LiteralValue<?> lv = (LiteralValue<?>) right;
-                            localValue = lv.value();
+                            localValue = (Serializable) lv.value();
                             localSuccess = true;
                         }
                     }
@@ -288,4 +245,20 @@ public class YdbScanOptions extends YdbTableOperationOptions implements Serializ
         }
     }
 
+    private static int getScanQueueDepth(CaseInsensitiveStringMap options) {
+        try {
+            int scanQueueDepth = OperationOption.SCAN_QUEUE_DEPTH.readInt(options, 3);
+            if (scanQueueDepth < 2) {
+                logger.warn("Value of {} property too low, reverting to minimum of 2.",
+                        OperationOption.SCAN_QUEUE_DEPTH);
+                return 2;
+            }
+
+            return scanQueueDepth;
+        } catch (NumberFormatException nfe) {
+            logger.warn("Illegal value of {} property, reverting to default of 3.",
+                    OperationOption.SCAN_QUEUE_DEPTH, nfe);
+            return 3;
+        }
+    }
 }

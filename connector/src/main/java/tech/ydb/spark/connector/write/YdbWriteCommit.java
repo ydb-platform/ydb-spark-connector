@@ -8,8 +8,8 @@ import org.apache.spark.sql.connector.write.WriterCommitMessage;
  * @author zinal
  */
 public class YdbWriteCommit implements WriterCommitMessage {
+    private static final long serialVersionUID = 5484554901029461476L;
 
-    private static final long serialVersionUID = 1L;
 
     // currently empty - no need to transfer anything
 
