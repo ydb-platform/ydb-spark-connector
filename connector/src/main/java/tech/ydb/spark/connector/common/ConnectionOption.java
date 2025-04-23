@@ -57,6 +57,11 @@ public enum ConnectionOption implements SparkOption {
     AUTH_TOKEN("auth.token"),
 
     /**
+     * Token value for the TOKEN authentication mode.
+     */
+    AUTH_TOKEN_FILE("auth.token.file"),
+
+    /**
      * Session pool size limit. Default is 4x number of cores available.
      */
     POOL_SIZE("pool.size");
