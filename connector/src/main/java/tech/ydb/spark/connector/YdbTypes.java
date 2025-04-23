@@ -464,6 +464,9 @@ public final class YdbTypes implements Serializable {
         if (v instanceof Number) {
             return PrimitiveValue.newUint8(((Number) v).intValue());
         }
+        if (v instanceof UTF8String) {
+            return PrimitiveValue.newUint8(((UTF8String) v).toByteExact());
+        }
         throw badConversion(v, t);
     }
 
@@ -484,6 +487,9 @@ public final class YdbTypes implements Serializable {
         if (v instanceof Number) {
             return PrimitiveValue.newUint64(((Number) v).longValue());
         }
+        if (v instanceof UTF8String) {
+            return PrimitiveValue.newUint64(((UTF8String) v).toLongExact());
+        }
         throw badConversion(v, t);
     }
 
@@ -499,6 +505,9 @@ public final class YdbTypes implements Serializable {
         }
         if (v instanceof Number) {
             return PrimitiveValue.newUint32(((Number) v).longValue());
+        }
+        if (v instanceof UTF8String) {
+            return PrimitiveValue.newUint32(((UTF8String) v).toIntExact());
         }
         throw badConversion(v, t);
     }
@@ -516,6 +525,9 @@ public final class YdbTypes implements Serializable {
         if (v instanceof Number) {
             return PrimitiveValue.newUint16(((Number) v).intValue());
         }
+        if (v instanceof UTF8String) {
+            return PrimitiveValue.newUint16(((UTF8String) v).toShortExact());
+        }
         throw badConversion(v, t);
     }
 
@@ -531,6 +543,9 @@ public final class YdbTypes implements Serializable {
         }
         if (v instanceof Number) {
             return PrimitiveValue.newInt8(((Number) v).byteValue());
+        }
+        if (v instanceof UTF8String) {
+            return PrimitiveValue.newInt8(((UTF8String) v).toByteExact());
         }
         throw badConversion(v, t);
     }
@@ -548,6 +563,9 @@ public final class YdbTypes implements Serializable {
         if (v instanceof Number) {
             return PrimitiveValue.newInt64(((Number) v).longValue());
         }
+        if (v instanceof UTF8String) {
+            return PrimitiveValue.newInt64(((UTF8String) v).toLongExact());
+        }
         throw badConversion(v, t);
     }
 
@@ -563,6 +581,9 @@ public final class YdbTypes implements Serializable {
         }
         if (v instanceof Number) {
             return PrimitiveValue.newInt32(((Number) v).intValue());
+        }
+        if (v instanceof UTF8String) {
+            return PrimitiveValue.newInt32(((UTF8String) v).toIntExact());
         }
         throw badConversion(v, t);
     }
@@ -580,6 +601,9 @@ public final class YdbTypes implements Serializable {
         if (v instanceof Number) {
             return PrimitiveValue.newInt16(((Number) v).shortValue());
         }
+        if (v instanceof UTF8String) {
+            return PrimitiveValue.newInt16(((UTF8String) v).toShortExact());
+        }
         throw badConversion(v, t);
     }
 
@@ -596,6 +620,9 @@ public final class YdbTypes implements Serializable {
         if (v instanceof Number) {
             return PrimitiveValue.newFloat(((Number) v).floatValue());
         }
+        if (v instanceof UTF8String) {
+            return PrimitiveValue.newFloat(Float.parseFloat(((UTF8String) v).toString()));
+        }
         throw badConversion(v, t);
     }
 
@@ -611,6 +638,9 @@ public final class YdbTypes implements Serializable {
         }
         if (v instanceof Number) {
             return PrimitiveValue.newDouble(((Number) v).doubleValue());
+        }
+        if (v instanceof UTF8String) {
+            return PrimitiveValue.newDouble(Double.parseDouble(((UTF8String) v).toString()));
         }
         throw badConversion(v, t);
     }
@@ -633,6 +663,9 @@ public final class YdbTypes implements Serializable {
         }
         if (v instanceof Number) {
             return DecimalType.getDefault().newValue(new BigDecimal(((Number) v).longValue()));
+        }
+        if (v instanceof UTF8String) {
+            return DecimalType.getDefault().newValue(((UTF8String) v).toString());
         }
         throw badConversion(v, t);
     }
@@ -716,6 +749,9 @@ public final class YdbTypes implements Serializable {
         }
         if (v instanceof Number) {
             return PrimitiveValue.newBool(((Number) v).intValue() != 0);
+        }
+        if (v instanceof UTF8String) {
+            return PrimitiveValue.newBool(Boolean.parseBoolean(((UTF8String) v).toString()));
         }
         throw badConversion(v, t);
     }
