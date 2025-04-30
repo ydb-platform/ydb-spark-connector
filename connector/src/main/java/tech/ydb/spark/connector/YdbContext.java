@@ -13,7 +13,6 @@ import java.util.Map;
 import java.util.Objects;
 
 import com.google.common.io.ByteStreams;
-import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -35,7 +34,7 @@ import tech.ydb.table.TableClient;
  *
  * @author Aleksandr Gorshenin
  */
-public class YdbContext implements Serializable {
+public class YdbContext implements Serializable, AutoCloseable {
     private static final Logger logger = LoggerFactory.getLogger(YdbContext.class);
 
     private static final long serialVersionUID = 6522842483896983993L;
@@ -62,7 +61,7 @@ public class YdbContext implements Serializable {
 
     private final int sessionPoolSize;
 
-    public YdbContext(CaseInsensitiveStringMap options) {
+    public YdbContext(Map<String, String> options) {
         this.connectionString = ConnectionOption.URL.read(options);
         if (connectionString  == null || this.connectionString .trim().isEmpty()) {
             throw new IllegalArgumentException("Incorrect value for property " + ConnectionOption.URL);
@@ -119,6 +118,11 @@ public class YdbContext implements Serializable {
                 useMetadata == o.useMetadata &&
                 useEnv == o.useEnv &&
                 sessionPoolSize == sessionPoolSize;
+    }
+
+    @Override
+    public void close() {
+        YdbRegistry.closeExecutor(this);
     }
 
     public YdbExecutor getExecutor() {

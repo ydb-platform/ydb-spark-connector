@@ -1,4 +1,4 @@
-package tech.ydb.spark.connector.integration;
+package tech.ydb.spark.connector;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -65,7 +65,6 @@ public class IntegrationTest {
         retryCtx = SessionRetryContext.create(tableClient).build();
 
         spark = SparkSession.builder()
-                .config(conf)
                 .config(conf)
                 .getOrCreate();
     }

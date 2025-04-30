@@ -78,6 +78,10 @@ public class YdbExecutor implements AutoCloseable {
         );
     }
 
+    public CompletableFuture<Status> executeSchemeQuery(String query) {
+        return retryCtx.supplyStatus(s -> s.executeSchemeQuery(query));
+    }
+
     public boolean truncateTable(String tablePath) {
         final YdbTruncateTable action = new YdbTruncateTable(tablePath);
         retryCtx.supplyStatus(session -> action.run(session)).join().expectSuccess();

@@ -1,13 +1,19 @@
 package tech.ydb.spark.connector.common;
 
 import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
+
+import org.sparkproject.guava.annotations.VisibleForTesting;
 
 import tech.ydb.spark.connector.YdbTypes;
 import tech.ydb.table.description.KeyBound;
 import tech.ydb.table.description.KeyRange;
 import tech.ydb.table.values.TupleValue;
+import tech.ydb.table.values.Type;
 import tech.ydb.table.values.Value;
 
 /**
@@ -17,232 +23,242 @@ import tech.ydb.table.values.Value;
  */
 public class KeysRange implements Serializable {
     private static final long serialVersionUID = 5756661733369903758L;
-
-    public static final Limit NO_LIMIT = new Limit(new Serializable[0], true);
-    public static final KeysRange UNRESTRICTED = new KeysRange(NO_LIMIT, NO_LIMIT);
+    public static final KeysRange UNRESTRICTED = new KeysRange(Limit.UNSTRICTED, Limit.UNSTRICTED);
+    public static final KeysRange EMPTY = new KeysRange((Limit) null, (Limit) null);
 
     private final Limit from;
     private final Limit to;
 
-    public KeysRange(Limit from, Limit to) {
-        this.from = validated(from);
-        this.to = validated(to);
-    }
-
     public KeysRange(KeyRange kr, YdbTypes types) {
-        this(convert(kr.getFrom(), types), convert(kr.getTo(), types));
+        this(new Limit(kr.getFrom(), types), new Limit(kr.getTo(), types));
     }
 
-//    public KeysRange(ArrayList<Object> from, ArrayList<Object> to) {
-//        this(new Limit(from, true), new Limit(to, false));
-//    }
-
-//    public KeysRange(List<Object> from, List<Object> to) {
-//        this(new Limit(from, true), new Limit(to, false));
-//    }
-
-    public KeysRange(Serializable[] from, boolean fromInclusive, Serializable[] to, boolean toInclusive) {
-        this(new Limit(from, fromInclusive), new Limit(to, toInclusive));
+    public KeysRange(Serializable[] fromValue, boolean fromInclusive, Serializable[] toValue, boolean toInclusive) {
+        this(new Limit(fromValue, fromInclusive), new Limit(toValue, toInclusive));
     }
 
-    public Limit getFrom() {
-        return from;
+    private KeysRange(Limit left, Limit right) {
+        if (isValidRange(left, right)) {
+            this.from = left;
+            this.to = right;
+        } else {
+            this.from = null;
+            this.to = null;
+        }
     }
 
-    public Limit getTo() {
-        return to;
-    }
-
-    /**
-     * Empty range means left is greater than right. Missing values on left means MIN, on right -
-     * MAX.
-     *
-     * @return true for empty range, false otherwise
-     */
     public boolean isEmpty() {
-        for (int idx = 0; idx < from.values.length && idx < to.values.length; idx += 1) {
-            final Serializable o1 = from.values[idx];
-            final Serializable o2 = to.values[idx];
-            if (o1 == o2) {
-                continue;
-            }
-            if (o1 == null) {
-                return false;
-            }
-            if (o2 == null) {
-                return false;
-            }
-            if (o1.getClass() != o2.getClass()) {
-                throw new IllegalArgumentException("Incompatible data types " + o1.getClass().toString()
-                        + " and " + o2.getClass().toString());
-            }
-            if (!(o1 instanceof Comparable)) {
-                throw new IllegalArgumentException("Uncomparable data type " + o1.getClass().toString());
-            }
-            @SuppressWarnings("unchecked")
-            int cmp = ((Comparable) o1).compareTo(o2);
-            if (cmp > 0) {
-                return true;
-            }
-            if (cmp < 0) {
-                return false;
-            }
-        }
-        if (!from.inclusive) {
-            if ((from.values.length < to.values.length) || to.inclusive) {
-                return true;
-            }
-        }
-        if (!to.inclusive) {
-            if ((from.values.length > to.values.length) || from.inclusive) {
-                return true;
-            }
-        }
-        return false;
+        return from == null || to == null;
+    }
+
+    public boolean hasFromValue() {
+        return from != null && from.values != null;
+    }
+
+    public boolean hasToValue() {
+        return to != null && to.values != null;
     }
 
     public boolean isUnrestricted() {
-        return from.isUnrestricted() && to.isUnrestricted();
+        return from != null && to != null && from.values == null && to.values == null;
     }
 
-    public static Limit convert(Optional<KeyBound> v, YdbTypes types) {
-        if (!v.isPresent()) {
-            return null;
-        }
+    public boolean includesFromValue() {
+        return from != null && from.inclusive;
+    }
 
-        KeyBound kb = v.get();
-        Value<?> tx = kb.getValue();
-        if (!(tx instanceof TupleValue)) {
-            throw new IllegalArgumentException();
+    public boolean includesToValue() {
+        return to != null && to.inclusive;
+    }
+
+    public TupleValue readFromValue(YdbTypes types, FieldInfo[] columns) {
+        return from.writeTuple(types, columns);
+    }
+
+    public TupleValue readToValue(YdbTypes types, FieldInfo[] columns) {
+        return to.writeTuple(types, columns);
+    }
+
+    public KeysRange intersect(KeysRange other) {
+        if (isEmpty() || other == null || other.isUnrestricted()) {
+            return this;
         }
-        TupleValue t = (TupleValue) tx;
-        final int sz = t.size();
-        Serializable[] out = new Serializable[sz];
-        for (int i = 0; i < sz; ++i) {
-            out[i] = types.convertFromYdb(t.get(i));
+        if (other.isEmpty() || isUnrestricted()) {
+            return other;
         }
-        return new Limit(out, kb.isInclusive());
+        return new KeysRange(
+                from.leftMerge(other.from),
+                to.rightMerge(other.to)
+        );
     }
 
     @Override
     public String toString() {
-        return (from.isInclusive() ? "[* " : "(* ")
-                + Arrays.toString(from.values) + " -> " + Arrays.toString(to.values)
-                + (to.isInclusive() ? " *]" : " *)");
+        if (isEmpty()) {
+            return "(None)";
+        }
+        char l = from.inclusive ? '[' : '(';
+        char r = to.inclusive ? ']' : ')';
+        return l + toString(from.values, "-Inf") + " - " + toString(to.values, "+Inf") + r;
     }
 
-    public KeysRange intersect(KeysRange other) {
-        if (other == null || (other.from.isUnrestricted() && other.to.isUnrestricted())) {
-            return this;
-        }
-        if (from.isUnrestricted() && to.isUnrestricted()) {
-            return other;
-        }
-        Limit outFrom = (from.compareTo(other.from, true) > 0) ? from : other.from;
-        Limit outTo = (to.compareTo(other.to, false) > 0) ? other.to : to;
-        KeysRange retval = new KeysRange(outFrom, outTo);
-        return retval;
+    @Override
+    public int hashCode() {
+        return Objects.hash(from, to);
     }
 
-    public static int compare(Serializable[] v1, Serializable[] v2, boolean nullsFirst) {
-        if (v1 == v2 || (v1 != null && v2 != null && v1.length == 0 && v2.length == 0)) {
-            return 0;
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) {
+            return true;
         }
-        if (v1 == null || v1.length == 0) {
-            return nullsFirst ? -1 : 1;
+        if (obj == null) {
+            return false;
         }
-        if (v2 == null || v2.length == 0) {
-            return nullsFirst ? 1 : -1;
+        if (getClass() != obj.getClass()) {
+            return false;
+        }
+        KeysRange other = (KeysRange) obj;
+        return Objects.equals(this.to, other.to) && Objects.equals(this.from, other.from);
+    }
+
+    private static String toString(Serializable[] value, String nullValue) {
+        if (value == null || value.length == 0) {
+            return nullValue;
+        }
+        if (value.length == 1) {
+            return value[0].toString();
+        }
+
+        String[] ss = new String[value.length];
+        for (int idx = 0; idx < value.length; idx += 1) {
+            ss[idx] = value[idx].toString();
+        }
+
+        return "(" + String.join(",", ss) + ")";
+    }
+
+    @VisibleForTesting
+    static int compareValues(Serializable[] v1, Serializable[] v2) {
+        if (v1 == v2) {
+            return 0; // the same values
+        }
+
+        if (v1 == null) {
+            return -1;
+        }
+
+        if (v2 == null) {
+            return 1;
         }
 
         for (int idx = 0; idx < v1.length && idx < v2.length; idx += 1) {
             Serializable o1 = v1[idx];
             Serializable o2 = v2[idx];
+            if (o1 == null) {
+                return o2 == null ? 0 : -1;
+            }
+
+            if (o2 == null) {
+                return 1;
+            }
+
             if (o1 == o2) {
                 continue;
             }
-            if (o1 == null) {
-                return nullsFirst ? -1 : 1;
+            Class<?> type = o1.getClass();
+            if (type != o2.getClass()) {
+                throw new IllegalArgumentException("Incompatible data types " + type + " and " + o2.getClass());
             }
-            if (o2 == null) {
-                return nullsFirst ? 1 : -1;
+            if (!Comparable.class.isAssignableFrom(type)) {
+                throw new IllegalArgumentException("Uncomparable data type " + type);
             }
-            if (o1.getClass() != o2.getClass()) {
-                throw new IllegalArgumentException("Incompatible data types "
-                        + o1.getClass().toString() + " and " + o2.getClass().toString());
-            }
-            if (!(o1 instanceof Comparable)) {
-                throw new IllegalArgumentException("Uncomparable data type "
-                        + o1.getClass().toString());
-            }
+
             @SuppressWarnings("unchecked")
             final int cmp = ((Comparable) o1).compareTo(o2);
             if (cmp != 0) {
                 return cmp;
             }
         }
-        if (v1.length < v2.length) {
-            return nullsFirst ? -1 : 1;
+
+        if (v1.length < v2.length && v2[v1.length] != null) {
+            return -1;
         }
-        if (v1.length > v2.length) {
-            return nullsFirst ? 1 : -1;
+
+        if (v2.length < v1.length && v1[v2.length] != null) {
+            return 1;
         }
 
         return 0;
     }
 
-    private static Limit validated(Limit v) {
-        if (v == null) {
-            return NO_LIMIT;
+    private static boolean isValidRange(Limit from, Limit to) {
+        // empty range
+        if (from == null || to == null) {
+            return false;
         }
-        if (v.isUnrestricted()) {
-            return NO_LIMIT;
+        // range with one or both unrestricted bounds is always correct
+        if (from.values == null || to.values == null) {
+            return true;
         }
-        int pos = v.values.length;
-        while (pos > 0) {
-            Object o = v.values[pos - 1];
-            if (o != null) {
-                break;
-            }
-            pos -= 1;
+
+        int cmp = compareValues(from.values, to.values);
+        if (cmp < 0) { // from < to is always valid range
+            return true;
         }
-        if (pos == v.values.length) {
-            return v;
+        if (cmp > 0) { // from > to is always invalid range
+            return false;
         }
-        if (pos < 1) {
-            return NO_LIMIT;
-        }
-        Serializable[] cleaned = new Serializable[pos];
-        System.arraycopy(v.values, 0, cleaned, 0, pos);
-        return new Limit(cleaned, v.inclusive);
+        // range from single value valids only both bound are inclusive
+        return from.inclusive && to.inclusive;
     }
 
-    public static class Limit implements Serializable {
-        private static final long serialVersionUID = -3278687786440323269L;
+    public static Serializable[] readTuple(Value<?> value, YdbTypes types) {
+        if (!(value instanceof TupleValue)) {
+            throw new IllegalArgumentException();
+        }
+
+        TupleValue tv = (TupleValue) value;
+        int sz = tv.size();
+        Serializable[] out = new Serializable[sz];
+
+        for (int i = 0; i < sz; ++i) {
+            out[i] = types.convertFromYdb(tv.get(i));
+
+            if (out[i] == null) { // can reduce tuple until first null
+                Serializable[] reduced = new Serializable[i];
+                System.arraycopy(out, 0, reduced, 0, i);
+                return reduced;
+            }
+        }
+        return out;
+    }
+
+    private static class Limit implements Serializable {
+        private static final Limit UNSTRICTED = new Limit(Optional.empty(), null);
+        private static final long serialVersionUID = -9050443235398158196L;
 
         private final Serializable[] values;
         private final boolean inclusive;
 
-        public Limit(Serializable[] values, boolean inclusive) {
+        private Limit(Serializable[] values, boolean inclusive) {
             this.values = values;
-            this.inclusive = inclusive;
+            this.inclusive = values != null && inclusive; // inf cannot be inclusive
         }
 
-        public Serializable[] getValues() {
-            return values;
-        }
-
-        public boolean isInclusive() {
-            return inclusive;
-        }
-
-        public boolean isUnrestricted() {
-            return values == null || values.length == 0;
+        private Limit(Optional<KeyBound> key, YdbTypes types) {
+            if (key.isPresent()) {
+                this.values = readTuple(key.get().getValue(), types);
+                this.inclusive = key.get().isInclusive();
+            } else {
+                this.values = null;
+                this.inclusive = false;
+            }
         }
 
         @Override
         public int hashCode() {
-            return 2 * Arrays.hashCode(values) + (this.inclusive ? 1 : 0);
+            return Objects.hash(inclusive, Arrays.hashCode(values));
         }
 
         @Override
@@ -256,31 +272,58 @@ public class KeysRange implements Serializable {
             if (getClass() != obj.getClass()) {
                 return false;
             }
-            final Limit other = (Limit) obj;
-            if (this.inclusive != other.inclusive) {
-                return false;
-            }
-            return Arrays.equals(this.values, other.values);
+            Limit other = (Limit) obj;
+            return this.inclusive == other.inclusive && Arrays.equals(this.values, other.values);
         }
 
-        @Override
-        public String toString() {
-            return "{" + "value=" + Arrays.toString(values) + ", inclusive=" + inclusive + '}';
+        public Limit leftMerge(Limit other) {
+            if (values == null) {
+                return other;
+            }
+            if (other.values == null) {
+                return this;
+            }
+
+            int cmp = compareValues(values, other.values);
+            if (cmp < 0) {
+                return other;
+            }
+            if (cmp > 0) {
+                return this;
+            }
+
+            return new Limit(values, inclusive && other.inclusive);
         }
 
-        public int compareTo(Limit t, boolean nullsFirst) {
-            int cmp = compare(this.values, t.values, nullsFirst);
-            if (cmp == 0) {
-                if (this.inclusive == t.inclusive) {
-                    return 0;
-                }
-                if (this.inclusive) {
-                    return nullsFirst ? -1 : 1;
-                }
-                return nullsFirst ? 1 : -1;
+        public Limit rightMerge(Limit other) {
+            if (values == null) {
+                return other;
             }
-            return cmp;
+            if (other.values == null) {
+                return this;
+            }
+
+            int cmp = compareValues(values, other.values);
+            if (cmp < 0) {
+                return this;
+            }
+            if (cmp > 0) {
+                return other;
+            }
+
+            return new Limit(values, inclusive && other.inclusive);
+        }
+
+        public TupleValue writeTuple(YdbTypes types, FieldInfo[] columns) {
+            final List<Value<?>> l = new ArrayList<>(values.length);
+            for (int i = 0; i < values.length; ++i) {
+                Value<?> v = types.convertToYdb(values[i], columns[i].getType());
+                if (!v.getType().getKind().equals(Type.Kind.OPTIONAL)) {
+                    v = v.makeOptional();
+                }
+                l.add(v);
+            }
+            return TupleValue.of(l);
         }
     }
-
 }

@@ -21,6 +21,8 @@ import tech.ydb.table.description.TableDescription;
  * @author zinal
  */
 public class YdbTableProvider implements TableProvider, DataSourceRegister {
+    private static final String SPARK_PATH_OPTION = "path";
+
     @Override
     public String shortName() {
         return "ydb";
@@ -34,10 +36,16 @@ public class YdbTableProvider implements TableProvider, DataSourceRegister {
     private String exractTableName(CaseInsensitiveStringMap options) {
         // Check that table path is provided
         String table = OperationOption.DBTABLE.read(options);
-        if (table == null || table.trim().length() == 0) {
-            throw new IllegalArgumentException("Missing property: " + OperationOption.DBTABLE);
+        if (table != null && !table.trim().isEmpty()) {
+            return table.trim();
         }
-        return table.trim();
+
+        String path = options.get(SPARK_PATH_OPTION);
+        if (path != null && !path.trim().isEmpty()) {
+            return path.trim();
+        }
+
+        throw new IllegalArgumentException("Missing property: " + OperationOption.DBTABLE);
     }
 
     @Override
