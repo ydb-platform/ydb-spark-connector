@@ -46,7 +46,7 @@ public class YdbWriterFactory implements DataWriterFactory {
         this.table = table;
         this.types = new YdbTypes(logical.options());
         this.method = OperationOption.INGEST_METHOD.readEnum(logical.options(), IngestMethod.BULK_UPSERT);
-        this.maxBatchSize = OperationOption.BATCH_SIZE.readInt(logical.options(), 1000);
+        this.maxBatchSize = OperationOption.BATCH_SIZE.readInt(logical.options(), 10000);
         this.autoPkName = OperationOption.AUTO_PK.read(logical.options(), OperationOption.DEFAULT_AUTO_PK);
         this.schema = logical.schema();
     }

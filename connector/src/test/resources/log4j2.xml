@@ -35,6 +35,10 @@
             <AppenderRef ref="Console"/>
         </Logger>
 
+        <Logger name="tech.ydb.spark" level="debug" additivity="false">
+            <AppenderRef ref="Console"/>
+        </Logger>
+
         <Root level="debug" >
             <AppenderRef ref="Console"/>
         </Root>

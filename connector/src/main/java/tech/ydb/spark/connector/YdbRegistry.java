@@ -32,4 +32,11 @@ public class YdbRegistry {
             }
         }
     }
+
+    public static void closeExecutor(YdbContext ctx) {
+        YdbExecutor executor = EXECUTORS.remove(ctx);
+        if (executor != null) {
+            executor.close();
+        }
+    }
 }

@@ -1,8 +1,6 @@
 package tech.ydb.spark.connector.impl;
 
-import java.io.Serializable;
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CompletableFuture;
@@ -27,8 +25,6 @@ import tech.ydb.table.query.ReadTablePart;
 import tech.ydb.table.result.ResultSetReader;
 import tech.ydb.table.settings.ReadTableSettings;
 import tech.ydb.table.values.TupleValue;
-import tech.ydb.table.values.Type;
-import tech.ydb.table.values.Value;
 
 /**
  * YDB table or index scan implementation through the ReadTable call.
@@ -44,7 +40,7 @@ public class YdbScanReadTable implements AutoCloseable {
 
     private final List<String> outColumns;
     private final GrpcReadStream<ReadTablePart> stream;
-    private final CompletableFuture<Status> readStatus;
+    private final CompletableFuture<Status>  readStatus;
 
     private final ArrayBlockingQueue<QueueItem> queue;
     private volatile QueueItem currentItem = null;
@@ -55,8 +51,8 @@ public class YdbScanReadTable implements AutoCloseable {
         this.queue = new ArrayBlockingQueue<>(options.getScanQueueDepth());
 
         FieldInfo[] keys = table.getKeyColumns();
-        logger.debug("Configuring scan for table {}, range {}, columns {}", tablePath, keysRange, keys);
         ReadTableSettings.Builder rtsb = ReadTableSettings.newBuilder();
+        rtsb.orderedRead(true);
         scala.collection.Iterator<StructField> sfit = options.getReadSchema().toIterator();
         if (sfit.isEmpty()) {
             // In case no fields are required, add the first field of the primary key.
@@ -67,31 +63,29 @@ public class YdbScanReadTable implements AutoCloseable {
             }
         }
 
-        final KeysRange.Limit realLeft = keysRange.getFrom();
-        final KeysRange.Limit realRight = keysRange.getTo();
-        if (!realLeft.isUnrestricted()) {
-            TupleValue tv = makeRange(types, keys, realLeft.getValues());
-            if (realLeft.isInclusive()) {
+        if (keysRange.hasFromValue()) {
+            TupleValue tv = keysRange.readFromValue(types, keys);
+            if (keysRange.includesFromValue()) {
                 rtsb.fromKeyInclusive(tv);
             } else {
                 rtsb.fromKeyExclusive(tv);
             }
-            logger.debug("fromKey: {} -> {}", realLeft, tv);
         }
-        if (!realRight.isUnrestricted()) {
-            TupleValue tv = makeRange(types, keys, realRight.getValues());
-            if (realRight.isInclusive()) {
+        if (keysRange.hasToValue()) {
+            TupleValue tv = keysRange.readToValue(types, keys);
+            if (keysRange.includesToValue()) {
                 rtsb.toKeyInclusive(tv);
             } else {
                 rtsb.toKeyExclusive(tv);
             }
-            logger.debug("toKey: {} -> {}", realRight, tv);
         }
 
         if (options.getRowLimit() > 0) {
-            logger.debug("Setting row limit to {}", options.getRowLimit());
             rtsb.rowLimit(options.getRowLimit());
         }
+
+        logger.debug("Configuring scan for table {} with range {} and limit {}, columns {}",
+                tablePath, keysRange, options.getRowLimit(), keys);
 
         // TODO: add setting for the maximum scan duration.
         rtsb.withRequestTimeout(Duration.ofHours(8));
@@ -113,17 +107,6 @@ public class YdbScanReadTable implements AutoCloseable {
         session.getValue().close();
     }
 
-    private static TupleValue makeRange(YdbTypes types, FieldInfo[] keys, Serializable[] values) {
-        final List<Value<?>> l = new ArrayList<>(values.length);
-        for (int i = 0; i < values.length; ++i) {
-            Value<?> v = types.convertToYdb(values[i], keys[i].getType());
-            if (!v.getType().getKind().equals(Type.Kind.OPTIONAL)) {
-                v = v.makeOptional();
-            }
-            l.add(v);
-        }
-        return TupleValue.of(l);
-    }
     private void onNextPart(ReadTablePart part) {
         QueueItem nextItem = new QueueItem(part.getResultSetReader());
         try {
