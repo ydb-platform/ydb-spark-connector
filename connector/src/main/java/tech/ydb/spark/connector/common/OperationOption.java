@@ -23,6 +23,11 @@ public enum OperationOption implements SparkOption {
     LIST_INDEXES("list.indexes"),
 
     /**
+     * true to list system directories like `.sys`. Default false.
+     */
+    LIST_HIDDEN("list.hidden"),
+
+    /**
      * true to return dates and timestamps as strings, false otherwise. Default false.
      */
     DATE_AS_STRING("date.as.string"),
