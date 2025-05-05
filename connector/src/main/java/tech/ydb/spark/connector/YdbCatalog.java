@@ -55,6 +55,7 @@ public class YdbCatalog implements CatalogPlugin, TableCatalog, SupportsNamespac
     private YdbContext ctx;
     private YdbTypes types;
     private boolean listIndexes;
+    private boolean listHidden;
 
     @Override
     public void initialize(String name, CaseInsensitiveStringMap options) {
@@ -63,6 +64,7 @@ public class YdbCatalog implements CatalogPlugin, TableCatalog, SupportsNamespac
         this.ctx = new YdbContext(options);
         this.types = new YdbTypes(options);
         this.listIndexes = OperationOption.LIST_INDEXES.readBoolean(options, false);
+        this.listHidden = OperationOption.LIST_HIDDEN.readBoolean(options, false);
     }
 
     @Override
@@ -98,7 +100,7 @@ public class YdbCatalog implements CatalogPlugin, TableCatalog, SupportsNamespac
 
     @Override
     public Identifier[] listTables(String[] namespace) throws NoSuchNamespaceException {
-        String path = String.join("/", namespace);
+        String path = ctx.getExecutor().extractPath(String.join("/", namespace));
         ListDirectoryResult list = ctx.getExecutor().listDirectory(path);
         if (list == null) {
             throw new NoSuchNamespaceException(namespace);
@@ -234,24 +236,29 @@ public class YdbCatalog implements CatalogPlugin, TableCatalog, SupportsNamespac
         ctx.getExecutor().renameTable(oldPath, newPath);
     }
 
+    private String namespacePath(String[] namespace) {
+        return ctx.getExecutor().extractPath(String.join("/", namespace));
+    }
+
+    private boolean showEntry(Entry entry) {
+        return listHidden || !entry.getName().startsWith(".");
+    }
+
     @Override
     public String[][] listNamespaces() throws NoSuchNamespaceException {
-        return listNamespaces(null);
+        return listNamespaces(new String[0]);
     }
 
     @Override
     public String[][] listNamespaces(String[] namespace) throws NoSuchNamespaceException {
-        if (namespace == null) {
-            namespace = new String[0];
-        }
-        ListDirectoryResult res = ctx.getExecutor().listDirectory(toPath(namespace));
+        ListDirectoryResult res = ctx.getExecutor().listDirectory(namespacePath(namespace));
         if (res == null) {
             throw new NoSuchNamespaceException(namespace);
         }
 
         List<String[]> retval = new ArrayList<>();
         for (Entry e : res.getEntryChildren()) {
-            if (e.getType() == EntryType.DIRECTORY) {
+            if (e.getType() == EntryType.DIRECTORY && showEntry(e)) {
                 final String[] x = new String[namespace.length + 1];
                 System.arraycopy(namespace, 0, x, 0, namespace.length);
                 x[namespace.length] = e.getName();
@@ -266,7 +273,7 @@ public class YdbCatalog implements CatalogPlugin, TableCatalog, SupportsNamespac
         if (namespace == null || namespace.length == 0) {
             return Collections.emptyMap();
         }
-        DescribePathResult res = ctx.getExecutor().describeDirectory(toPath(namespace));
+        DescribePathResult res = ctx.getExecutor().describeDirectory(namespacePath(namespace));
         if (res == null) {
             throw new NoSuchNamespaceException(namespace);
         }
@@ -280,7 +287,7 @@ public class YdbCatalog implements CatalogPlugin, TableCatalog, SupportsNamespac
     @Override
     public void createNamespace(String[] namespace, Map<String, String> metadata)
             throws NamespaceAlreadyExistsException {
-        if (!ctx.getExecutor().makeDirectory(toPath(namespace))) {
+        if (!ctx.getExecutor().makeDirectory(namespacePath(namespace))) {
             throw new NamespaceAlreadyExistsException(namespace);
         }
     }
@@ -294,7 +301,7 @@ public class YdbCatalog implements CatalogPlugin, TableCatalog, SupportsNamespac
     public boolean dropNamespace(String[] namespace, boolean recursive)
             throws NoSuchNamespaceException, NonEmptyNamespaceException {
         if (!recursive) {
-            return ctx.getExecutor().removeDirectory(toPath(namespace));
+            return ctx.getExecutor().removeDirectory(namespacePath(namespace));
         } else {
             // TODO: recursive removal
             throw new UnsupportedOperationException("Recursive namespace removal is not implemented");
@@ -318,12 +325,6 @@ public class YdbCatalog implements CatalogPlugin, TableCatalog, SupportsNamespac
         StringBuilder sb = new StringBuilder();
         addToPath(sb, id.namespace());
         addToPath(sb, id.name());
-        return sb.toString();
-    }
-
-    private static String toPath(String[] namespace) {
-        StringBuilder sb = new StringBuilder();
-        addToPath(sb, namespace);
         return sb.toString();
     }
 

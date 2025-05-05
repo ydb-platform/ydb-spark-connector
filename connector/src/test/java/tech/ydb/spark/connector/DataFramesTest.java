@@ -10,7 +10,6 @@ import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.Test;
 
-import tech.ydb.spark.connector.YdbContext;
 import tech.ydb.spark.connector.impl.YdbExecutor;
 import tech.ydb.table.values.ListType;
 import tech.ydb.table.values.ListValue;
