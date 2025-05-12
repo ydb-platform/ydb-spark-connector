@@ -11,6 +11,8 @@ import java.util.concurrent.Semaphore;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.connector.write.DataWriter;
 import org.apache.spark.sql.connector.write.WriterCommitMessage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import tech.ydb.core.Status;
 import tech.ydb.core.StatusCode;
@@ -25,6 +27,7 @@ import tech.ydb.table.values.Value;
  * @author zinal
  */
 public abstract class YdbDataWriter implements DataWriter<InternalRow> {
+    private static final Logger logger = LoggerFactory.getLogger(YdbDataWriter.class);
 
     private final YdbTypes types;
     private final StructType structType;
@@ -52,6 +55,7 @@ public abstract class YdbDataWriter implements DataWriter<InternalRow> {
     @Override
     public void write(InternalRow record) throws IOException {
         if (lastError != null) {
+            logger.warn("ydb writer got error {} on write", lastError);
             lastError.expectSuccess("Cannot execute write");
         }
 
@@ -74,6 +78,7 @@ public abstract class YdbDataWriter implements DataWriter<InternalRow> {
         semaphore.release(maxConcurrency);
 
         if (lastError != null) {
+            logger.warn("ydb writer got error {} on commit", lastError);
             lastError.expectSuccess("cannot commit write");
         }
 
@@ -121,69 +126,4 @@ public abstract class YdbDataWriter implements DataWriter<InternalRow> {
             semaphore.release();
         });
     }
-
-/*
-    private void startNewStatement(List<Value<?>> input) {
-        LOG.debug("[{}, {}] Sending a batch of {} rows into table {}",
-                partitionId, taskId, input.size(), tablePath);
-        if (currentStatus != null) {
-            currentStatus.join().expectSuccess();
-            currentStatus = null;
-            LOG.debug("[{}, {}] Previous async batch completed for table {}",
-                    partitionId, taskId, tablePath);
-        }
-        // The list is being copied here.
-        // DO NOT move this call into the async methods below.
-        ListValue value = listType.newValue(input);
-        if (IngestMethod.BULK_UPSERT.equals(ingestMethod)) {
-            currentStatus = connector.getRetryCtx().supplyStatus(
-                    session -> session.executeBulkUpsert(
-                            tablePath, value, new BulkUpsertSettings()));
-            LOG.debug("[{}, {}] Async bulk upsert started on table {}",
-                    partitionId, taskId, tablePath);
-        } else {
-            currentStatus = connector.getRetryCtx().supplyStatus(
-                    session -> session.executeDataQuery(sqlStatement,
-                            TxControl.serializableRw().setCommitTx(true),
-                            Params.of("$input", value))
-                            .thenApply(result -> result.getStatus()));
-            LOG.debug("[{}, {}] Async upsert transaction started on table {}",
-                    partitionId, taskId, tablePath);
-        }
-    }
-*/
-//    private static List<FieldInfo> makeStatementFields(YdbTypes types, YdbWriteOptions options,
-//            List<StructField> inputFields) {
-//        final List<FieldInfo> out = new ArrayList<>(inputFields.size());
-////        if (options.isMapByNames()) {
-////            for (StructField sf : inputFields) {
-////                final String name = sf.name();
-////                FieldInfo yfi = options.getFieldsMap().get(name);
-////                if (yfi != null) {
-////                    out.add(yfi);
-////                }
-////            }
-////        } else {
-//            for (int pos = 0; pos < inputFields.size(); ++pos) {
-//                out.add(FieldInfo.fromSchema(types, inputFields.get(pos)));
-//            }
-////        }
-//        if (options.getAddtitionalPk() != null) {
-//            // Generated PK is the last column, if one is presented at all.
-//            out.add(new FieldInfo(options.getAddtitionalPk(), FieldType.Text, false));
-//        }
-//        return out;
-//    }
-//
-//    private static StructType makeInputType(List<FieldInfo> statementFields) {
-//        if (statementFields.isEmpty()) {
-//            throw new IllegalArgumentException("Empty input field list specified for writing");
-//        }
-//        final Map<String, Type> m = new HashMap<>();
-//        for (FieldInfo yfi : statementFields) {
-//            m.put(yfi.getName(), FieldType.toSdkType(yfi.getType(), yfi.isNullable()));
-//        }
-//        return tech.ydb.StructType.of(m);
-//    }
-
 }
