@@ -12,7 +12,6 @@ import org.apache.spark.sql.types.StructField;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import tech.ydb.core.Result;
 import tech.ydb.core.Status;
 import tech.ydb.core.grpc.GrpcReadStream;
 import tech.ydb.spark.connector.YdbTable;
@@ -20,7 +19,6 @@ import tech.ydb.spark.connector.YdbTypes;
 import tech.ydb.spark.connector.common.FieldInfo;
 import tech.ydb.spark.connector.common.KeysRange;
 import tech.ydb.spark.connector.read.YdbScanOptions;
-import tech.ydb.table.Session;
 import tech.ydb.table.query.ReadTablePart;
 import tech.ydb.table.result.ResultSetReader;
 import tech.ydb.table.settings.ReadTableSettings;
@@ -94,17 +92,8 @@ public class YdbScanReadTable implements AutoCloseable {
         this.outColumns = settings.getColumns();
 
         // Create or acquire the connector object.
-        Result<Session> session = table.getCtx().getExecutor().createSession();
-        if (!session.isSuccess()) {
-            this.stream = null;
-            this.readStatus = CompletableFuture.completedFuture(session.getStatus());
-            return;
-        }
-
-        this.stream = session.getValue().executeReadTable(table.getTablePath(), settings);
+        this.stream = table.getCtx().getExecutor().executeReadTable(table.getTablePath(), settings);
         this.readStatus = this.stream.start(this::onNextPart);
-        // Read table is not using session, so we can close it
-        session.getValue().close();
     }
 
     private void onNextPart(ReadTablePart part) {

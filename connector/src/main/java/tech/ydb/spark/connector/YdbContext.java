@@ -153,6 +153,7 @@ public class YdbContext implements Serializable, AutoCloseable {
             return sessionPoolSize;
         }
 
+        // TODO: Add unrestricted session pool
         return Math.min(8, 4 * Runtime.getRuntime().availableProcessors());
     }
 
