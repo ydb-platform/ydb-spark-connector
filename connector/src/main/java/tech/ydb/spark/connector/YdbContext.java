@@ -26,6 +26,7 @@ import tech.ydb.core.grpc.GrpcTransport;
 import tech.ydb.core.grpc.GrpcTransportBuilder;
 import tech.ydb.core.impl.auth.GrpcAuthRpc;
 import tech.ydb.core.utils.URITools;
+import tech.ydb.query.QueryClient;
 import tech.ydb.spark.connector.common.ConnectionOption;
 import tech.ydb.spark.connector.impl.YdbExecutor;
 import tech.ydb.table.TableClient;
@@ -131,11 +132,16 @@ public class YdbContext implements Serializable, AutoCloseable {
 
     private YdbExecutor createExecutor() {
         logger.info("{} is creating executor", this);
+        int maxPoolSize = getSessionPoolSize();
+
         GrpcTransport transport = createGrpcTransport();
-        TableClient client = TableClient.newClient(transport)
-                .sessionPoolSize(0, getSessionPoolSize())
+        TableClient tableClient = TableClient.newClient(transport)
+                .sessionPoolSize(0, maxPoolSize)
                 .build();
-        return new YdbExecutor(transport, client);
+        QueryClient queryClient = QueryClient.newClient(transport)
+                .sessionPoolMaxSize(maxPoolSize)
+                .build();
+        return new YdbExecutor(transport, tableClient, queryClient);
     }
 
     private GrpcTransport createGrpcTransport() {

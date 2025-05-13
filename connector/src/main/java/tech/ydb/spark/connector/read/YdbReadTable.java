@@ -4,8 +4,10 @@ import java.util.Arrays;
 import java.util.Random;
 import java.util.stream.Stream;
 
+import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.connector.read.Batch;
 import org.apache.spark.sql.connector.read.InputPartition;
+import org.apache.spark.sql.connector.read.PartitionReader;
 import org.apache.spark.sql.connector.read.PartitionReaderFactory;
 import org.apache.spark.sql.connector.read.Scan;
 import org.apache.spark.sql.connector.read.SupportsReportPartitioning;
@@ -23,13 +25,14 @@ import tech.ydb.spark.connector.common.KeysRange;
  *
  * @author zinal
  */
-public class YdbScan implements Scan, Batch, SupportsReportPartitioning {
-    private static final Logger logger = LoggerFactory.getLogger(YdbScan.class);
+public class YdbReadTable implements Scan, Batch, SupportsReportPartitioning, PartitionReaderFactory  {
+    private static final Logger logger = LoggerFactory.getLogger(YdbReadTable.class);
+    private static final long serialVersionUID = -8956326045629055757L;
 
     private final YdbTable table;
-    private final YdbScanOptions options;
+    private final YdbReadTableOptions options;
 
-    public YdbScan(YdbTable table, YdbScanOptions options) {
+    public YdbReadTable(YdbTable table, YdbReadTableOptions options) {
         this.table = table;
         this.options = options;
     }
@@ -42,6 +45,17 @@ public class YdbScan implements Scan, Batch, SupportsReportPartitioning {
     @Override
     public Batch toBatch() {
         return this;
+    }
+
+    @Override
+    public PartitionReaderFactory createReaderFactory() {
+        return this;
+    }
+
+    @Override
+    public PartitionReader<InternalRow> createReader(InputPartition partition) {
+        ShardPartition p = (ShardPartition) partition;
+        return new YdbReadTableReader(table, options, p.getRange());
     }
 
     @Override
@@ -63,15 +77,15 @@ public class YdbScan implements Scan, Batch, SupportsReportPartitioning {
         if (partitions.length == 0) {
             logger.warn("Missing partitioning information for table {}", table.getTablePath());
             // Single partition with possible limits taken from the predicates.
-            return new InputPartition[] {new YdbTablePartition(0, KeysRange.UNRESTRICTED)};
+            return new InputPartition[] {new ShardPartition(0, KeysRange.UNRESTRICTED)};
         }
         logger.debug("Input table partitions: {}", Arrays.toString(partitions));
         final Random random = new Random();
-        YdbTablePartition[] out = Stream.of(partitions)
+        ShardPartition[] out = Stream.of(partitions)
                 .map(kr -> kr.intersect(predicateRange))
                 .filter(kr -> !kr.isEmpty())
-                .map(kr -> new YdbTablePartition(random.nextInt(999999999), kr))
-                .toArray(YdbTablePartition[]::new);
+                .map(kr -> new ShardPartition(random.nextInt(999999999), kr))
+                .toArray(ShardPartition[]::new);
         if (logger.isDebugEnabled()) {
             logger.debug("Input partitions count {}, filtered partitions count {}", partitions.length, out.length);
             logger.debug("Filtered partition ranges: {}", Arrays.toString(out));
@@ -79,10 +93,5 @@ public class YdbScan implements Scan, Batch, SupportsReportPartitioning {
         // Random ordering is better for multiple  concurrent scans with limited parallelism.
         Arrays.sort(out, (p1, p2) -> Integer.compare(p1.getOrderingKey(), p2.getOrderingKey()));
         return out;
-    }
-
-    @Override
-    public PartitionReaderFactory createReaderFactory() {
-        return new YdbReaderFactory(table, options);
     }
 }

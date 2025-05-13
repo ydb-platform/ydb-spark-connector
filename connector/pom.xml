@@ -56,6 +56,10 @@
             <groupId>tech.ydb</groupId>
             <artifactId>ydb-sdk-table</artifactId>
         </dependency>
+        <dependency>
+            <groupId>tech.ydb</groupId>
+            <artifactId>ydb-sdk-query</artifactId>
+        </dependency>
 
         <dependency>
             <groupId>tech.ydb.auth</groupId>

@@ -69,13 +69,18 @@ public class DataFramesTest {
     }
 
     private static void prepareTables(YdbExecutor executor) {
-        executor.makeDirectory(executor.extractPath("df_test_dir"));
-        executor.executeSchemeQuery("CREATE TABLE df_test_table ("
+        executor.makeDirectory(executor.extractPath("dir"));
+        executor.executeSchemeQuery("CREATE TABLE row_table ("
                 + " id Int32 NOT NULL,"
                 + " value Text,"
                 + " PRIMARY KEY(id)  "
-                + ")").join().expectSuccess("cannot create test table");
-        executor.executeSchemeQuery("CREATE TABLE `df_test_dir/splitted_table` ("
+                + ")").join().expectSuccess("cannot create test row table");
+        executor.executeSchemeQuery("CREATE TABLE column_table ("
+                + " id Int32 NOT NULL,"
+                + " value Text,"
+                + " PRIMARY KEY(id)  "
+                + ") WITH (STORE=COLUMN)").join().expectSuccess("cannot create test column table");
+        executor.executeSchemeQuery("CREATE TABLE `dir/splitted` ("
                 + " id Int32 NOT NULL,"
                 + " value Text,"
                 + " PRIMARY KEY(id)  "
@@ -98,47 +103,45 @@ public class DataFramesTest {
             struct.newValue("id", PrimitiveValue.newInt32(67), "value", PrimitiveValue.newText("v10"))
         );
 
-        executor.executeBulkUpsert(executor.extractPath("df_test_table"), initValues).join()
-                .expectSuccess("cannot insert data to df_test_dir");
-        executor.executeBulkUpsert(executor.extractPath("df_test_dir/splitted_table"), initValues).join()
-                .expectSuccess("cannot insert data to df_test_dir/splitted_table");
+        executor.executeBulkUpsert(executor.extractPath("row_table"), initValues).join()
+                .expectSuccess("cannot insert data to row_table");
+        executor.executeBulkUpsert(executor.extractPath("column_table"), initValues).join()
+                .expectSuccess("cannot insert data to column_table");
+        executor.executeBulkUpsert(executor.extractPath("dir/splitted"), initValues).join()
+                .expectSuccess("cannot insert data to dir/splitted");
     }
 
     private static void cleanTables(YdbExecutor executor) {
-        executor.executeSchemeQuery("DROP TABLE `df_test_dir/splitted_table`;").join();
-        executor.executeSchemeQuery("DROP TABLE df_test_table;").join();
-        executor.removeDirectory(executor.extractPath("df_test_dir"));
+        executor.executeSchemeQuery("DROP TABLE `dir/splitted`;").join();
+        executor.executeSchemeQuery("DROP TABLE column_table;").join();
+        executor.executeSchemeQuery("DROP TABLE row_table;").join();
+        executor.removeDirectory(executor.extractPath("dir"));
     }
 
     @Test
-    public void readTableByOptionTest() {
-        long count1 = spark.read().format("ydb")
-                .option("url", ydbURL)
-                .option("dbtable", "df_test_table")
-                .load()
-                .count();
-        Assert.assertEquals(10, count1);
+    public void countRowTableTest() {
+        long count = spark.read().format("ydb").option("url", ydbURL).option("dbtable", "row_table").load().count();
+        Assert.assertEquals(10, count);
 
-        long count2 = spark.read().format("ydb")
-                .option("url", ydbURL)
-                .option("dbtable", "df_test_dir/splitted_table")
-                .load()
-                .count();
-        Assert.assertEquals(10, count2);
+        long count2 = spark.read().format("ydb").option("url", ydbURL).load("row_table").count();
+        Assert.assertEquals(count, count2);
     }
 
     @Test
-    public void readTableByNameTest() {
-        long count1 = spark.read().format("ydb")
-                .option("url", ydbURL)
-                .load("df_test_table")
-                .count();
-        Assert.assertEquals(10, count1);
+    public void countColumnTableTest() {
+        long count = spark.read().format("ydb").option("url", ydbURL).option("dbtable", "column_table").load().count();
+        Assert.assertEquals(10, count);
 
-        long count2 = spark.read().format("ydb")
-                .option("url", ydbURL)
-                .load("df_test_dir/splitted_table")
-                .count();
-        Assert.assertEquals(10, count2);
+        long count2 = spark.read().format("ydb").option("url", ydbURL).load("column_table").count();
+        Assert.assertEquals(count, count2);
+    }
+
+    @Test
+    public void countSplittedTableTest() {
+        long count = spark.read().format("ydb").option("url", ydbURL).option("dbtable", "dir/splitted").load().count();
+        Assert.assertEquals(10, count);
+
+        long count2 = spark.read().format("ydb").option("url", ydbURL).load("dir/splitted").count();
+        Assert.assertEquals(count, count2);
     }
 }
