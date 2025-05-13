@@ -9,6 +9,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import javax.ws.rs.NotSupportedException;
+
 import org.apache.spark.sql.connector.catalog.SupportsDelete;
 import org.apache.spark.sql.connector.catalog.SupportsRead;
 import org.apache.spark.sql.connector.catalog.SupportsRowLevelOperations;
@@ -33,7 +35,7 @@ import tech.ydb.spark.connector.common.FieldType;
 import tech.ydb.spark.connector.common.KeysRange;
 import tech.ydb.spark.connector.common.OperationOption;
 import tech.ydb.spark.connector.common.PartitionOption;
-import tech.ydb.spark.connector.read.YdbScanBuilder;
+import tech.ydb.spark.connector.read.YdbReadTableOptions;
 import tech.ydb.spark.connector.write.YdbRowLevelBuilder;
 import tech.ydb.spark.connector.write.YdbWrite;
 import tech.ydb.table.description.KeyRange;
@@ -214,7 +216,14 @@ public class YdbTable implements Serializable, Table, SupportsRead, SupportsWrit
 
     @Override
     public ScanBuilder newScanBuilder(CaseInsensitiveStringMap options) {
-        return new YdbScanBuilder(this, options);
+        switch (type) {
+            case COLUMN:
+                throw new NotSupportedException("Column name are not supported");
+            case ROW:
+            case INDEX:
+            default:
+                return new YdbReadTableOptions(this, options);
+        }
     }
 
     @Override

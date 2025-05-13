@@ -10,6 +10,11 @@ import org.apache.spark.sql.connector.expressions.LiteralValue;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 import org.apache.spark.sql.connector.expressions.filter.And;
 import org.apache.spark.sql.connector.expressions.filter.Predicate;
+import org.apache.spark.sql.connector.read.Scan;
+import org.apache.spark.sql.connector.read.ScanBuilder;
+import org.apache.spark.sql.connector.read.SupportsPushDownLimit;
+import org.apache.spark.sql.connector.read.SupportsPushDownRequiredColumns;
+import org.apache.spark.sql.connector.read.SupportsPushDownV2Filters;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 import org.slf4j.Logger;
@@ -26,10 +31,12 @@ import tech.ydb.spark.connector.common.OperationOption;
  *
  * @author zinal
  */
-public class YdbScanOptions implements Serializable {
-    private static final Logger logger = LoggerFactory.getLogger(YdbScanOptions.class);
+public class YdbReadTableOptions implements Serializable,
+        ScanBuilder, SupportsPushDownV2Filters, SupportsPushDownRequiredColumns, SupportsPushDownLimit {
+    private static final Logger logger = LoggerFactory.getLogger(YdbReadTableOptions.class);
     private static final long serialVersionUID = -4608401766953066647L;
 
+    private final YdbTable table;
     private final YdbTypes types;
     private final FieldInfo[] keys;
     private final int scanQueueDepth;
@@ -38,7 +45,8 @@ public class YdbScanOptions implements Serializable {
     private KeysRange predicateRange;
     private StructType readSchema;
 
-    public YdbScanOptions(YdbTable table, CaseInsensitiveStringMap options) {
+    public YdbReadTableOptions(YdbTable table, CaseInsensitiveStringMap options) {
+        this.table = table;
         this.types = new YdbTypes(options);
         this.keys = table.getKeyColumns();
 
@@ -47,6 +55,37 @@ public class YdbScanOptions implements Serializable {
         this.scanQueueDepth = getScanQueueDepth(options);
         this.rowLimit = -1;
         this.readSchema = table.schema();
+    }
+
+    @Override
+    public Scan build() {
+        return new YdbReadTable(table, this);
+    }
+
+    @Override
+    public Predicate[] pushPredicates(Predicate[] predicates) {
+        if (predicates == null || predicates.length == 0) {
+            return predicates;
+        }
+        List<Predicate> flat = flattenPredicates(predicates);
+        detectRangeSimple(flat);
+        return predicates; // all predicates should be re-checked
+    }
+
+    @Override
+    public Predicate[] pushedPredicates() {
+        return new Predicate[]{}; // all predicates should be re-checked
+    }
+
+    @Override
+    public boolean pushLimit(int limit) {
+        this.rowLimit = limit;
+        return false;
+    }
+
+    @Override
+    public void pruneColumns(StructType requiredSchema) {
+        this.readSchema = requiredSchema;
     }
 
     public YdbTypes getTypes() {
@@ -67,14 +106,6 @@ public class YdbScanOptions implements Serializable {
 
     public KeysRange getPredicateRange() {
         return predicateRange;
-    }
-
-    public void pruneColumns(StructType requiredSchema) {
-        this.readSchema = requiredSchema;
-    }
-
-    public void setRowLimit(int rowLimit) {
-        this.rowLimit = rowLimit;
     }
 
     public void setupPredicates(Predicate[] predicates) {

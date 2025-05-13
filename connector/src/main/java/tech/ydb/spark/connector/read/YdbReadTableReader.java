@@ -1,4 +1,4 @@
-package tech.ydb.spark.connector.impl;
+package tech.ydb.spark.connector.read;
 
 import java.time.Duration;
 import java.util.List;
@@ -8,6 +8,7 @@ import java.util.concurrent.TimeUnit;
 
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
+import org.apache.spark.sql.connector.read.PartitionReader;
 import org.apache.spark.sql.types.StructField;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,7 +19,6 @@ import tech.ydb.spark.connector.YdbTable;
 import tech.ydb.spark.connector.YdbTypes;
 import tech.ydb.spark.connector.common.FieldInfo;
 import tech.ydb.spark.connector.common.KeysRange;
-import tech.ydb.spark.connector.read.YdbScanOptions;
 import tech.ydb.table.query.ReadTablePart;
 import tech.ydb.table.result.ResultSetReader;
 import tech.ydb.table.settings.ReadTableSettings;
@@ -29,9 +29,9 @@ import tech.ydb.table.values.TupleValue;
  *
  * @author zinal
  */
-public class YdbScanReadTable implements AutoCloseable {
+public class YdbReadTableReader implements PartitionReader<InternalRow> {
 
-    private static final Logger logger = LoggerFactory.getLogger(YdbScanReadTable.class);
+    private static final Logger logger = LoggerFactory.getLogger(YdbReadTableReader.class);
 
     private final String tablePath;
     private final YdbTypes types;
@@ -41,9 +41,10 @@ public class YdbScanReadTable implements AutoCloseable {
     private final CompletableFuture<Status>  readStatus;
 
     private final ArrayBlockingQueue<QueueItem> queue;
+
     private volatile QueueItem currentItem = null;
 
-    public YdbScanReadTable(YdbTable table, YdbScanOptions options, KeysRange keysRange) {
+    public YdbReadTableReader(YdbTable table, YdbReadTableOptions options, KeysRange keysRange) {
         this.tablePath = table.getTablePath();
         this.types = options.getTypes();
         this.queue = new ArrayBlockingQueue<>(options.getScanQueueDepth());
@@ -87,13 +88,20 @@ public class YdbScanReadTable implements AutoCloseable {
 
         // TODO: add setting for the maximum scan duration.
         rtsb.withRequestTimeout(Duration.ofHours(8));
-
         ReadTableSettings settings = rtsb.build();
         this.outColumns = settings.getColumns();
 
-        // Create or acquire the connector object.
+        // Execute read table
         this.stream = table.getCtx().getExecutor().executeReadTable(table.getTablePath(), settings);
         this.readStatus = this.stream.start(this::onNextPart);
+        this.readStatus.whenComplete((status, th) -> {
+            if (status != null && !status.isSuccess()) {
+                logger.warn("read table {} finished with error {}", table.getTablePath(), status);
+            }
+            if (th != null) {
+                logger.error("read table {} finished with exception", table.getTablePath(), th);
+            }
+        });
     }
 
     private void onNextPart(ReadTablePart part) {
@@ -110,6 +118,7 @@ public class YdbScanReadTable implements AutoCloseable {
         }
     }
 
+    @Override
     public boolean next() {
         while (true) {
             if (readStatus.isDone()) {
@@ -132,6 +141,7 @@ public class YdbScanReadTable implements AutoCloseable {
         }
     }
 
+    @Override
     public InternalRow get() {
         if (currentItem == null) {
             throw new IllegalStateException("Nothing to read");

@@ -23,13 +23,13 @@ import tech.ydb.spark.connector.common.KeysRange;
  *
  * @author zinal
  */
-public class YdbScan implements Scan, Batch, SupportsReportPartitioning {
-    private static final Logger logger = LoggerFactory.getLogger(YdbScan.class);
+public class YdbReadTable implements Scan, Batch, SupportsReportPartitioning {
+    private static final Logger logger = LoggerFactory.getLogger(YdbReadTable.class);
 
     private final YdbTable table;
-    private final YdbScanOptions options;
+    private final YdbReadTableOptions options;
 
-    public YdbScan(YdbTable table, YdbScanOptions options) {
+    public YdbReadTable(YdbTable table, YdbReadTableOptions options) {
         this.table = table;
         this.options = options;
     }
@@ -83,6 +83,6 @@ public class YdbScan implements Scan, Batch, SupportsReportPartitioning {
 
     @Override
     public PartitionReaderFactory createReaderFactory() {
-        return new YdbReaderFactory(table, options);
+        return new YdbReadTableReaderFactory(table, options);
     }
 }
