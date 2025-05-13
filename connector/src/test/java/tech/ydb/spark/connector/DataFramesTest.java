@@ -118,7 +118,6 @@ public class DataFramesTest {
         executor.removeDirectory(executor.extractPath("dir"));
     }
 
-
     @Test
     public void countRowTableTest() {
         long count = spark.read().format("ydb").option("url", ydbURL).option("dbtable", "row_table").load().count();

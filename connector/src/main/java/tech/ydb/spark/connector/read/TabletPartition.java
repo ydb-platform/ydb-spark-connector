@@ -10,19 +10,19 @@ import org.apache.spark.sql.connector.read.InputPartition;
 public class TabletPartition implements InputPartition {
     private static final long serialVersionUID = -4836481111366035711L;
 
-    private final int tablet;
+    private final String tabletId;
 
-    public TabletPartition(int tablet) {
-        this.tablet = tablet;
+    public TabletPartition(String tabletId) {
+        this.tabletId = tabletId;
     }
 
-    public int getTablet() {
-        return tablet;
+    public String getTabletId() {
+        return tabletId;
     }
 
     @Override
     public String toString() {
-        return (tablet <= 0) ? "tablet:unconfined" : ("tablet:" + tablet);
+        return (tabletId == null) ? "tablet:unconfined" : ("tablet:" + tabletId);
     }
 
 }

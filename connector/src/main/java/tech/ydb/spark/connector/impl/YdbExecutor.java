@@ -1,8 +1,12 @@
 package tech.ydb.spark.connector.impl;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
+import tech.ydb.common.transaction.TxMode;
 import tech.ydb.core.Issue;
 import tech.ydb.core.Result;
 import tech.ydb.core.Status;
@@ -11,6 +15,7 @@ import tech.ydb.core.grpc.GrpcReadStream;
 import tech.ydb.core.grpc.GrpcTransport;
 import tech.ydb.query.QueryClient;
 import tech.ydb.query.QuerySession;
+import tech.ydb.query.tools.QueryReader;
 import tech.ydb.scheme.SchemeClient;
 import tech.ydb.scheme.description.DescribePathResult;
 import tech.ydb.scheme.description.ListDirectoryResult;
@@ -19,6 +24,7 @@ import tech.ydb.table.TableClient;
 import tech.ydb.table.description.TableDescription;
 import tech.ydb.table.query.Params;
 import tech.ydb.table.query.ReadTablePart;
+import tech.ydb.table.result.ResultSetReader;
 import tech.ydb.table.settings.AlterTableSettings;
 import tech.ydb.table.settings.BulkUpsertSettings;
 import tech.ydb.table.settings.CreateTableSettings;
@@ -41,6 +47,7 @@ public class YdbExecutor implements AutoCloseable {
     private final ImplicitSession implicitSession;
     private final SessionRetryContext retryCtx;
     private final SessionRetryContext implicitRetryCtx;
+    private final tech.ydb.query.tools.SessionRetryContext queryRetryCtx;
 
     public YdbExecutor(GrpcTransport transport, TableClient tableClient, QueryClient queryClient) {
         this.transport = transport;
@@ -55,6 +62,11 @@ public class YdbExecutor implements AutoCloseable {
                 .maxRetries(20)
                 .build();
         this.implicitRetryCtx = SessionRetryContext.create(implicitSession)
+                .sessionCreationTimeout(Duration.ofMinutes(5))
+                .idempotent(true)
+                .maxRetries(20)
+                .build();
+        this.queryRetryCtx = tech.ydb.query.tools.SessionRetryContext.create(queryClient)
                 .sessionCreationTimeout(Duration.ofMinutes(5))
                 .idempotent(true)
                 .maxRetries(20)
@@ -196,5 +208,23 @@ public class YdbExecutor implements AutoCloseable {
 
     public Result<QuerySession> createQuerySession() {
         return queryClient.createSession(Duration.ofMinutes(5)).join();
+    }
+
+    public List<String> getTabletIds(String path) {
+        String query = "SELECT DISTINCT(TabletId) FROM `" + extractPath(path) + "/.sys/primary_index_stats`";
+        Result<QueryReader> res = queryRetryCtx.supplyResult(
+                session -> QueryReader.readFrom(session.createQuery(query, TxMode.SNAPSHOT_RO))
+        ).join();
+
+        if (!res.isSuccess()) {
+            return Collections.emptyList();
+        }
+
+        ResultSetReader rs = res.getValue().getResultSet(0);
+        List<String> ids = new ArrayList<>();
+        while (rs.next()) {
+            ids.add(Long.toUnsignedString(rs.getColumn(0).getUint64()));
+        }
+        return ids;
     }
 }

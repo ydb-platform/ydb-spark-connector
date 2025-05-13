@@ -30,11 +30,11 @@ public class YdbScanTableOptions implements Serializable,
     private int rowLimit;
     private StructType readSchema;
 
-    public YdbScanTableOptions(YdbTable table, int queueMaxSize, CaseInsensitiveStringMap options) {
+    public YdbScanTableOptions(YdbTable table, CaseInsensitiveStringMap options) {
         this.table = table;
         this.types = new YdbTypes(options);
 
-        this.queueMaxSize = queueMaxSize;
+        this.queueMaxSize = CachedReader.readQueueMaxSize(options);
         this.rowLimit = -1;
         this.readSchema = table.schema();
     }

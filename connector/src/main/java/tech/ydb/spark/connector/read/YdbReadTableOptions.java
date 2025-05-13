@@ -37,21 +37,21 @@ public class YdbReadTableOptions implements Serializable,
 
     private final YdbTable table;
     private final YdbTypes types;
-    private final FieldInfo[] keys;
     private final int queueMaxSize;
+    private final FieldInfo[] keys;
 
     private int rowLimit;
     private KeysRange predicateRange;
     private StructType readSchema;
 
-    public YdbReadTableOptions(YdbTable table, int queueMaxSize, CaseInsensitiveStringMap options) {
+    public YdbReadTableOptions(YdbTable table, CaseInsensitiveStringMap options) {
         this.table = table;
         this.types = new YdbTypes(options);
+        this.queueMaxSize = CachedReader.readQueueMaxSize(options);
         this.keys = table.getKeyColumns();
 
         this.predicateRange = KeysRange.UNRESTRICTED;
 
-        this.queueMaxSize = queueMaxSize;
         this.rowLimit = -1;
         this.readSchema = table.schema();
     }

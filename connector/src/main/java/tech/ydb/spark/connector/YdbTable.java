@@ -215,14 +215,13 @@ public class YdbTable implements Serializable, Table, SupportsRead, SupportsWrit
 
     @Override
     public ScanBuilder newScanBuilder(CaseInsensitiveStringMap options) {
-        int queryMaxSize = getScanQueueDepth(options);
         switch (type) {
             case COLUMN:
-                return new YdbScanTableOptions(this, queryMaxSize, options);
+                return new YdbScanTableOptions(this, options);
             case ROW:
             case INDEX:
             default:
-                return new YdbReadTableOptions(this, queryMaxSize, options);
+                return new YdbReadTableOptions(this, options);
         }
     }
 
@@ -307,22 +306,5 @@ public class YdbTable implements Serializable, Table, SupportsRead, SupportsWrit
         tdb.setPartitioningSettings(partitioning);
 
         return tdb.build();
-    }
-
-    private static int getScanQueueDepth(CaseInsensitiveStringMap options) {
-        try {
-            int scanQueueDepth = OperationOption.SCAN_QUEUE_DEPTH.readInt(options, 3);
-            if (scanQueueDepth < 2) {
-                logger.warn("Value of {} property too low, reverting to minimum of 2.",
-                        OperationOption.SCAN_QUEUE_DEPTH);
-                return 2;
-            }
-
-            return scanQueueDepth;
-        } catch (NumberFormatException nfe) {
-            logger.warn("Illegal value of {} property, reverting to default of 3.",
-                    OperationOption.SCAN_QUEUE_DEPTH, nfe);
-            return 3;
-        }
     }
 }

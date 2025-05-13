@@ -1,6 +1,8 @@
 package tech.ydb.spark.connector.read;
 
 
+import java.util.List;
+
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.connector.read.Batch;
 import org.apache.spark.sql.connector.read.InputPartition;
@@ -38,7 +40,7 @@ public class YdbScanTable implements Scan, Batch, SupportsReportPartitioning, Pa
     @Override
     public PartitionReader<InternalRow> createReader(InputPartition partition) {
         TabletPartition p = (TabletPartition) partition;
-        return new YdbScanTableReader(table, options, p.getTablet());
+        return new YdbScanTableReader(table, options, p.getTabletId());
     }
 
     @Override
@@ -58,6 +60,15 @@ public class YdbScanTable implements Scan, Batch, SupportsReportPartitioning, Pa
 
     @Override
     public InputPartition[] planInputPartitions() {
-        return new InputPartition[]{new TabletPartition(-1)};
+        List<String> tablets = table.getCtx().getExecutor().getTabletIds(table.getTablePath());
+        if (tablets.isEmpty()) {
+            return new InputPartition[]{new TabletPartition(null)};
+        }
+        InputPartition[] partitions = new InputPartition[tablets.size()];
+        int idx = 0;
+        for (String id: tablets) {
+            partitions[idx++] = new TabletPartition(id);
+        }
+        return partitions;
     }
 }
