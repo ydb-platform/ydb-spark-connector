@@ -9,6 +9,8 @@ import tech.ydb.core.Status;
 import tech.ydb.core.StatusCode;
 import tech.ydb.core.grpc.GrpcReadStream;
 import tech.ydb.core.grpc.GrpcTransport;
+import tech.ydb.query.QueryClient;
+import tech.ydb.query.QuerySession;
 import tech.ydb.scheme.SchemeClient;
 import tech.ydb.scheme.description.DescribePathResult;
 import tech.ydb.scheme.description.ListDirectoryResult;
@@ -34,14 +36,16 @@ import tech.ydb.table.values.ListValue;
 public class YdbExecutor implements AutoCloseable {
     private final GrpcTransport transport;
     private final TableClient tableClient;
+    private final QueryClient queryClient;
     private final SchemeClient schemeClient;
     private final ImplicitSession implicitSession;
     private final SessionRetryContext retryCtx;
     private final SessionRetryContext implicitRetryCtx;
 
-    public YdbExecutor(GrpcTransport transport, TableClient tableClient) {
+    public YdbExecutor(GrpcTransport transport, TableClient tableClient, QueryClient queryClient) {
         this.transport = transport;
         this.tableClient = tableClient;
+        this.queryClient = queryClient;
         this.schemeClient = SchemeClient.newClient(transport).build();
         this.implicitSession = new ImplicitSession(transport);
 
@@ -59,6 +63,7 @@ public class YdbExecutor implements AutoCloseable {
 
     @Override
     public void close() {
+        queryClient.close();
         tableClient.close();
         schemeClient.close();
         transport.close();
@@ -189,4 +194,7 @@ public class YdbExecutor implements AutoCloseable {
                 .isSuccess();
     }
 
+    public Result<QuerySession> createQuerySession() {
+        return queryClient.createSession(Duration.ofMinutes(5)).join();
+    }
 }

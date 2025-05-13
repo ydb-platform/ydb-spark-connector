@@ -2,8 +2,6 @@ package tech.ydb.spark.connector;
 
 import java.util.Collections;
 
-import javax.ws.rs.NotSupportedException;
-
 import org.apache.spark.SparkConf;
 import org.apache.spark.sql.SparkSession;
 import org.junit.AfterClass;
@@ -130,7 +128,7 @@ public class DataFramesTest {
         Assert.assertEquals(count, count2);
     }
 
-    @Test(expected = NotSupportedException.class)
+    @Test
     public void countColumnTableTest() {
         long count = spark.read().format("ydb").option("url", ydbURL).option("dbtable", "column_table").load().count();
         Assert.assertEquals(10, count);

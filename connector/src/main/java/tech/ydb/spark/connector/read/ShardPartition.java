@@ -11,14 +11,14 @@ import tech.ydb.spark.connector.common.KeysRange;
  *
  * @author zinal
  */
-public class YdbTablePartition implements InputPartition {
+public class ShardPartition implements InputPartition {
 
     private static final long serialVersionUID = -529216835125843329L;
 
     private final int orderingKey;
     private final KeysRange range;
 
-    public YdbTablePartition(int orderingKey, KeysRange range) {
+    public ShardPartition(int orderingKey, KeysRange range) {
         this.orderingKey = orderingKey;
         this.range = range;
     }

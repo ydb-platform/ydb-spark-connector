@@ -9,8 +9,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import javax.ws.rs.NotSupportedException;
-
 import org.apache.spark.sql.connector.catalog.SupportsDelete;
 import org.apache.spark.sql.connector.catalog.SupportsRead;
 import org.apache.spark.sql.connector.catalog.SupportsRowLevelOperations;
@@ -36,6 +34,7 @@ import tech.ydb.spark.connector.common.KeysRange;
 import tech.ydb.spark.connector.common.OperationOption;
 import tech.ydb.spark.connector.common.PartitionOption;
 import tech.ydb.spark.connector.read.YdbReadTableOptions;
+import tech.ydb.spark.connector.read.YdbScanTableOptions;
 import tech.ydb.spark.connector.write.YdbRowLevelBuilder;
 import tech.ydb.spark.connector.write.YdbWrite;
 import tech.ydb.table.description.KeyRange;
@@ -216,13 +215,14 @@ public class YdbTable implements Serializable, Table, SupportsRead, SupportsWrit
 
     @Override
     public ScanBuilder newScanBuilder(CaseInsensitiveStringMap options) {
+        int queryMaxSize = getScanQueueDepth(options);
         switch (type) {
             case COLUMN:
-                throw new NotSupportedException("Column name are not supported");
+                return new YdbScanTableOptions(this, queryMaxSize, options);
             case ROW:
             case INDEX:
             default:
-                return new YdbReadTableOptions(this, options);
+                return new YdbReadTableOptions(this, queryMaxSize, options);
         }
     }
 
@@ -307,5 +307,22 @@ public class YdbTable implements Serializable, Table, SupportsRead, SupportsWrit
         tdb.setPartitioningSettings(partitioning);
 
         return tdb.build();
+    }
+
+    private static int getScanQueueDepth(CaseInsensitiveStringMap options) {
+        try {
+            int scanQueueDepth = OperationOption.SCAN_QUEUE_DEPTH.readInt(options, 3);
+            if (scanQueueDepth < 2) {
+                logger.warn("Value of {} property too low, reverting to minimum of 2.",
+                        OperationOption.SCAN_QUEUE_DEPTH);
+                return 2;
+            }
+
+            return scanQueueDepth;
+        } catch (NumberFormatException nfe) {
+            logger.warn("Illegal value of {} property, reverting to default of 3.",
+                    OperationOption.SCAN_QUEUE_DEPTH, nfe);
+            return 3;
+        }
     }
 }

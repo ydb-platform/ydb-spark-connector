@@ -24,7 +24,6 @@ import tech.ydb.spark.connector.YdbTable;
 import tech.ydb.spark.connector.YdbTypes;
 import tech.ydb.spark.connector.common.FieldInfo;
 import tech.ydb.spark.connector.common.KeysRange;
-import tech.ydb.spark.connector.common.OperationOption;
 
 /**
  * All settings for the scan operations, shared between the partition readers.
@@ -34,25 +33,25 @@ import tech.ydb.spark.connector.common.OperationOption;
 public class YdbReadTableOptions implements Serializable,
         ScanBuilder, SupportsPushDownV2Filters, SupportsPushDownRequiredColumns, SupportsPushDownLimit {
     private static final Logger logger = LoggerFactory.getLogger(YdbReadTableOptions.class);
-    private static final long serialVersionUID = -4608401766953066647L;
+    private static final long serialVersionUID = -5865188993174204708L;
 
     private final YdbTable table;
     private final YdbTypes types;
     private final FieldInfo[] keys;
-    private final int scanQueueDepth;
+    private final int queueMaxSize;
 
     private int rowLimit;
     private KeysRange predicateRange;
     private StructType readSchema;
 
-    public YdbReadTableOptions(YdbTable table, CaseInsensitiveStringMap options) {
+    public YdbReadTableOptions(YdbTable table, int queueMaxSize, CaseInsensitiveStringMap options) {
         this.table = table;
         this.types = new YdbTypes(options);
         this.keys = table.getKeyColumns();
 
         this.predicateRange = KeysRange.UNRESTRICTED;
 
-        this.scanQueueDepth = getScanQueueDepth(options);
+        this.queueMaxSize = queueMaxSize;
         this.rowLimit = -1;
         this.readSchema = table.schema();
     }
@@ -92,8 +91,8 @@ public class YdbReadTableOptions implements Serializable,
         return types;
     }
 
-    public int getScanQueueDepth() {
-        return scanQueueDepth;
+    public int getMaxQueueSize() {
+        return queueMaxSize;
     }
 
     public StructType getReadSchema() {
@@ -106,14 +105,6 @@ public class YdbReadTableOptions implements Serializable,
 
     public KeysRange getPredicateRange() {
         return predicateRange;
-    }
-
-    public void setupPredicates(Predicate[] predicates) {
-        if (predicates == null || predicates.length == 0) {
-            return;
-        }
-        List<Predicate> flat = flattenPredicates(predicates);
-        detectRangeSimple(flat);
     }
 
     /**
@@ -273,23 +264,6 @@ public class YdbReadTableOptions implements Serializable,
             this.success = localSuccess;
             this.revert = localRevert;
             this.value = localValue;
-        }
-    }
-
-    private static int getScanQueueDepth(CaseInsensitiveStringMap options) {
-        try {
-            int scanQueueDepth = OperationOption.SCAN_QUEUE_DEPTH.readInt(options, 3);
-            if (scanQueueDepth < 2) {
-                logger.warn("Value of {} property too low, reverting to minimum of 2.",
-                        OperationOption.SCAN_QUEUE_DEPTH);
-                return 2;
-            }
-
-            return scanQueueDepth;
-        } catch (NumberFormatException nfe) {
-            logger.warn("Illegal value of {} property, reverting to default of 3.",
-                    OperationOption.SCAN_QUEUE_DEPTH, nfe);
-            return 3;
         }
     }
 }

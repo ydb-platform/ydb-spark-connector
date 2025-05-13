@@ -1,6 +1,7 @@
 package tech.ydb.spark.connector.read;
 
-import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CompletableFuture;
@@ -9,91 +10,73 @@ import java.util.concurrent.TimeUnit;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.connector.read.PartitionReader;
-import org.apache.spark.sql.types.StructField;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import tech.ydb.common.transaction.TxMode;
+import tech.ydb.core.Result;
 import tech.ydb.core.Status;
-import tech.ydb.core.grpc.GrpcReadStream;
+import tech.ydb.query.QuerySession;
+import tech.ydb.query.QueryStream;
+import tech.ydb.query.result.QueryResultPart;
 import tech.ydb.spark.connector.YdbTable;
 import tech.ydb.spark.connector.YdbTypes;
-import tech.ydb.spark.connector.common.FieldInfo;
-import tech.ydb.spark.connector.common.KeysRange;
-import tech.ydb.table.query.ReadTablePart;
 import tech.ydb.table.result.ResultSetReader;
-import tech.ydb.table.settings.ReadTableSettings;
-import tech.ydb.table.values.TupleValue;
 
 /**
  * YDB table or index scan implementation through the ReadTable call.
  *
  * @author zinal
  */
-public class YdbReadTableReader implements PartitionReader<InternalRow> {
+public class YdbScanTableReader implements PartitionReader<InternalRow> {
 
-    private static final Logger logger = LoggerFactory.getLogger(YdbReadTableReader.class);
+    private static final Logger logger = LoggerFactory.getLogger(YdbScanTableReader.class);
 
     private final String tablePath;
     private final YdbTypes types;
 
     private final List<String> outColumns;
-    private final GrpcReadStream<ReadTablePart> stream;
+    private final QueryStream stream;
     private final CompletableFuture<Status>  readStatus;
 
     private final ArrayBlockingQueue<QueueItem> queue;
 
     private volatile QueueItem currentItem = null;
 
-    public YdbReadTableReader(YdbTable table, YdbReadTableOptions options, KeysRange keysRange) {
+    public YdbScanTableReader(YdbTable table, YdbScanTableOptions options, int tablet) {
         this.tablePath = table.getTablePath();
         this.types = options.getTypes();
-        this.queue = new ArrayBlockingQueue<>(options.getMaxQueueSize());
+        this.queue = new ArrayBlockingQueue<>(options.getQueueMaxSize());
+        this.outColumns = new ArrayList<>(Arrays.asList(options.getReadSchema().fieldNames()));
 
-        FieldInfo[] keys = table.getKeyColumns();
-        ReadTableSettings.Builder rtsb = ReadTableSettings.newBuilder();
-        rtsb.orderedRead(true);
-        scala.collection.Iterator<StructField> sfit = options.getReadSchema().toIterator();
-        if (sfit.isEmpty()) {
-            // In case no fields are required, add the first field of the primary key.
-            rtsb.column(keys[0].getName());
-        } else {
-            while (sfit.hasNext()) {
-                rtsb.column(sfit.next().name());
-            }
+        if (outColumns.isEmpty()) {
+            outColumns.add(table.getKeyColumns()[0].getName());
         }
 
-        if (keysRange.hasFromValue()) {
-            TupleValue tv = keysRange.readFromValue(types, keys);
-            if (keysRange.includesFromValue()) {
-                rtsb.fromKeyInclusive(tv);
-            } else {
-                rtsb.fromKeyExclusive(tv);
-            }
+        StringBuilder sb = new StringBuilder("SELECT");
+        char dep = ' ';
+        for (String name: outColumns) {
+            sb.append(dep);
+            sb.append('`');
+            sb.append(name);
+            sb.append('`');
+            dep = ',';
         }
-        if (keysRange.hasToValue()) {
-            TupleValue tv = keysRange.readToValue(types, keys);
-            if (keysRange.includesToValue()) {
-                rtsb.toKeyInclusive(tv);
-            } else {
-                rtsb.toKeyExclusive(tv);
-            }
+        sb.append(" FROM `").append(tablePath).append("`");
+        String query = sb.toString();
+
+        logger.debug("Execute scan query[{}]", query);
+
+        Result<QuerySession> session = table.getCtx().getExecutor().createQuerySession();
+        if (!session.isSuccess()) {
+            logger.error("Cannot get session from the pool {}", session.getStatus());
+            this.stream = null;
+            this.readStatus = CompletableFuture.completedFuture(session.getStatus());
+            return;
         }
 
-        if (options.getRowLimit() > 0) {
-            rtsb.rowLimit(options.getRowLimit());
-        }
-
-        logger.debug("Configuring scan for table {} with range {} and limit {}, columns {}",
-                tablePath, keysRange, options.getRowLimit(), keys);
-
-        // TODO: add setting for the maximum scan duration.
-        rtsb.withRequestTimeout(Duration.ofHours(8));
-        ReadTableSettings settings = rtsb.build();
-        this.outColumns = settings.getColumns();
-
-        // Execute read table
-        this.stream = table.getCtx().getExecutor().executeReadTable(table.getTablePath(), settings);
-        this.readStatus = this.stream.start(this::onNextPart);
+        this.stream = session.getValue().createQuery(query, TxMode.SNAPSHOT_RO);
+        this.readStatus = this.stream.execute(this::onNextPart).thenApply(Result::getStatus);
         this.readStatus.whenComplete((status, th) -> {
             if (status != null && !status.isSuccess()) {
                 logger.warn("read table {} finished with error {}", table.getTablePath(), status);
@@ -101,10 +84,11 @@ public class YdbReadTableReader implements PartitionReader<InternalRow> {
             if (th != null) {
                 logger.error("read table {} finished with exception", table.getTablePath(), th);
             }
+            session.getValue().close();
         });
     }
 
-    private void onNextPart(ReadTablePart part) {
+    private void onNextPart(QueryResultPart part) {
         QueueItem nextItem = new QueueItem(part.getResultSetReader());
         try {
             while (!readStatus.isDone()) {
