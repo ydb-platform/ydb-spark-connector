@@ -36,7 +36,6 @@ import tech.ydb.spark.connector.YdbTypes;
  */
 public class YdbScanTable implements Batch, Scan, ScanBuilder, SupportsReportPartitioning, PartitionReaderFactory,
         SupportsPushDownV2Filters, SupportsPushDownRequiredColumns, SupportsPushDownLimit  {
-
     private static final long serialVersionUID = 6752417702512593851L;
 
     private final YdbTable table;
@@ -82,12 +81,6 @@ public class YdbScanTable implements Batch, Scan, ScanBuilder, SupportsReportPar
     }
 
     @Override
-    public Partitioning outputPartitioning() {
-        return new UnknownPartitioning(1);
-    }
-
-
-    @Override
     public Predicate[] pushPredicates(Predicate[] predicates) {
         return predicates; // all predicates should be re-checked
     }
@@ -106,6 +99,15 @@ public class YdbScanTable implements Batch, Scan, ScanBuilder, SupportsReportPar
     @Override
     public void pruneColumns(StructType requiredSchema) {
         this.readSchema = requiredSchema;
+    }
+
+    @Override
+    public Partitioning outputPartitioning() {
+        List<String> tablets = table.getCtx().getExecutor().getTabletIds(table.getTablePath());
+        if (tablets.isEmpty()) {
+            return new UnknownPartitioning(1);
+        }
+        return new UnknownPartitioning(tablets.size());
     }
 
     @Override

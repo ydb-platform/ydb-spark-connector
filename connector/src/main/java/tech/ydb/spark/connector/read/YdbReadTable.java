@@ -134,6 +134,7 @@ public class YdbReadTable implements Batch, Scan, ScanBuilder, SupportsReportPar
         if (partitions.length == 0) {
             return new UnknownPartitioning(1);
         }
+        logger.info("Output {} unknown partitions", partitions.length);
         return new UnknownPartitioning(partitions.length);
     }
 
@@ -152,10 +153,9 @@ public class YdbReadTable implements Batch, Scan, ScanBuilder, SupportsReportPar
                 .filter(kr -> !kr.isEmpty())
                 .map(kr -> new ShardPartition(random.nextInt(999999999), kr))
                 .toArray(ShardPartition[]::new);
-        if (logger.isDebugEnabled()) {
-            logger.debug("Input partitions count {}, filtered partitions count {}", partitions.length, out.length);
-            logger.debug("Filtered partition ranges: {}", Arrays.toString(out));
-        }
+
+        logger.debug("Input partitions count {}, filtered partitions count {}", partitions.length, out.length);
+        logger.debug("Filtered partition ranges: {}", Arrays.toString(out));
         // Random ordering is better for multiple  concurrent scans with limited parallelism.
         Arrays.sort(out, (p1, p2) -> Integer.compare(p1.getOrderingKey(), p2.getOrderingKey()));
         return out;
@@ -363,7 +363,7 @@ public class YdbReadTable implements Batch, Scan, ScanBuilder, SupportsReportPar
             }
 
             String columns = columnsToRead.stream().collect(Collectors.joining(","));
-            this.id = "READ " + columns + " FROM " + tablePath + " RANGE " + keysRange + " LIMIT " + rowLimit;
+            this.id = "READ TABLE " + columns + " RANGE " + keysRange + " LIMIT " + rowLimit;
 
             // Execute read table
             this.stream = table.getCtx().getExecutor().executeReadTable(tablePath, rtsb.build());

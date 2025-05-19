@@ -2,6 +2,7 @@ package tech.ydb.spark.connector.read;
 
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.spark.sql.catalyst.InternalRow;
@@ -24,6 +25,7 @@ import tech.ydb.table.result.ResultSetReader;
  */
 abstract class LazyReader implements PartitionReader<InternalRow> {
     private static final Logger logger = LoggerFactory.getLogger(LazyReader.class);
+    private static final AtomicInteger COUNTER = new AtomicInteger(0);
 
     private final String[] outColumns;
     private final YdbTypes types;
@@ -59,15 +61,17 @@ abstract class LazyReader implements PartitionReader<InternalRow> {
             logger.error("[{}] reading finished with exception", id, th);
             finishStatus = Status.of(StatusCode.CLIENT_INTERNAL_ERROR, th);
         }
+        COUNTER.decrementAndGet();
         logger.info("[{}] got {} rows in {} ms", id, readedRows.get(), ms);
     }
 
     protected void onNextPart(ResultSetReader reader) {
+
         QueueItem nextItem = new QueueItem(reader);
         try {
             while (finishStatus == null) {
                 if (queue.offer(nextItem, 100, TimeUnit.MILLISECONDS)) {
-                    readedRows.addAndGet(nextItem.reader.getRowCount());
+                    readedRows.addAndGet(reader.getRowCount());
                     return;
                 }
             }
@@ -82,7 +86,7 @@ abstract class LazyReader implements PartitionReader<InternalRow> {
         if (id == null) {
             startedAt = System.currentTimeMillis();
             id = start();
-            logger.info("[{}] started", id);
+            logger.info("[{}] started, {} total", id, COUNTER.incrementAndGet());
         }
         while (true) {
             if (finishStatus != null) {
@@ -92,7 +96,7 @@ abstract class LazyReader implements PartitionReader<InternalRow> {
                 }
             }
 
-            if (currentItem != null && currentItem.reader.next()) {
+            if (currentItem != null && currentItem.next()) {
                 return true;
             }
 
@@ -121,8 +125,8 @@ abstract class LazyReader implements PartitionReader<InternalRow> {
     }
 
     private class QueueItem {
-        final ResultSetReader reader;
-        final int[] columnIndexes;
+        private final ResultSetReader reader;
+        private final int[] columnIndexes;
 
         QueueItem(ResultSetReader reader) {
             this.reader = reader;
@@ -133,7 +137,14 @@ abstract class LazyReader implements PartitionReader<InternalRow> {
             }
         }
 
+        public boolean next() {
+            return reader.next();
+        }
+
         public InternalRow get() {
+            if (columnIndexes.length == 0) {
+                return InternalRow.empty();
+            }
             InternalRow row = new GenericInternalRow(columnIndexes.length);
             for (int i = 0; i < columnIndexes.length; ++i) {
                 types.setRowValue(row, i, reader.getColumn(columnIndexes[i]));

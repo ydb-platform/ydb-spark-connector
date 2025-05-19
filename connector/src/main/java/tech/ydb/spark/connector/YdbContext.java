@@ -160,7 +160,7 @@ public class YdbContext implements Serializable, AutoCloseable {
         }
 
         // TODO: Add unrestricted session pool
-        return Math.min(8, 4 * Runtime.getRuntime().availableProcessors());
+        return Math.max(8, 4 * Runtime.getRuntime().availableProcessors());
     }
 
     private AuthRpcProvider<? super GrpcAuthRpc> createAuthProvider() {
