@@ -34,7 +34,7 @@ public class YdbScanTableOptions implements Serializable,
         this.table = table;
         this.types = new YdbTypes(options);
 
-        this.queueMaxSize = CachedReader.readQueueMaxSize(options);
+        this.queueMaxSize = LazyReader.readQueueMaxSize(options);
         this.rowLimit = -1;
         this.readSchema = table.schema();
     }

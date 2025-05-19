@@ -1,9 +1,7 @@
 package tech.ydb.spark.connector.read;
 
 import java.time.Duration;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import java.util.stream.Collectors;
 
 import tech.ydb.core.grpc.GrpcReadStream;
 import tech.ydb.spark.connector.YdbTable;
@@ -18,8 +16,8 @@ import tech.ydb.table.values.TupleValue;
  *
  * @author zinal
  */
-public final class YdbReadTableReader extends CachedReader {
-    private static final Logger logger = LoggerFactory.getLogger(YdbReadTableReader.class);
+public final class YdbReadTableReader extends LazyReader {
+    private final String id;
     private final GrpcReadStream<ReadTablePart> stream;
 
     public YdbReadTableReader(YdbTable table, YdbReadTableOptions options, KeysRange keysRange) {
@@ -49,22 +47,22 @@ public final class YdbReadTableReader extends CachedReader {
             }
         }
 
-        if (options.getRowLimit() > 0) {
+        int rowLimit = options.getRowLimit();
+        if (rowLimit > 0) {
             rtsb.rowLimit(options.getRowLimit());
         }
 
-        logger.debug("Configuring scan for table {} with range {} and limit {}, columns {}",
-                tablePath, keysRange, options.getRowLimit(), keys);
-
-        ReadTableSettings settings = rtsb.build();
+        String columns = outColumns.stream().collect(Collectors.joining(","));
+        this.id = "READ " + columns + " FROM " + tablePath + " RANGE " + keysRange + " LIMIT " + rowLimit;
 
         // Execute read table
-        this.stream = table.getCtx().getExecutor().executeReadTable(table.getTablePath(), settings);
-        this.stream.start(this::onNextPart).whenComplete(this::onComplete);
+        this.stream = table.getCtx().getExecutor().executeReadTable(tablePath, rtsb.build());
     }
 
-    private void onNextPart(ReadTablePart part) {
-        super.onNextPart(part.getResultSetReader());
+    @Override
+    protected String start() {
+        stream.start(part -> onNextPart(part.getResultSetReader())).whenComplete(this::onComplete);
+        return id;
     }
 
     @Override

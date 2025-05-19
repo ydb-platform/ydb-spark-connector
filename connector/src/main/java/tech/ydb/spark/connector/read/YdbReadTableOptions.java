@@ -47,7 +47,7 @@ public class YdbReadTableOptions implements Serializable,
     public YdbReadTableOptions(YdbTable table, CaseInsensitiveStringMap options) {
         this.table = table;
         this.types = new YdbTypes(options);
-        this.queueMaxSize = CachedReader.readQueueMaxSize(options);
+        this.queueMaxSize = LazyReader.readQueueMaxSize(options);
         this.keys = table.getKeyColumns();
 
         this.predicateRange = KeysRange.UNRESTRICTED;

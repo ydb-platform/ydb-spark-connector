@@ -5,6 +5,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
@@ -25,18 +26,23 @@ import tech.ydb.table.result.ResultSetReader;
  *
  * @author Aleksandr Gorshenin
  */
-public abstract class CachedReader implements PartitionReader<InternalRow> {
-    private static final Logger logger = LoggerFactory.getLogger(CachedReader.class);
+abstract class LazyReader implements PartitionReader<InternalRow> {
+    private static final Logger logger = LoggerFactory.getLogger(LazyReader.class);
 
     protected final String tablePath;
     protected final List<String> outColumns;
     protected final YdbTypes types;
 
     private final ArrayBlockingQueue<QueueItem> queue;
+
+    private final AtomicLong readedRows = new AtomicLong();
+
+    private volatile String id = null;
+    private volatile long startedAt = System.currentTimeMillis();
     private volatile QueueItem currentItem = null;
     private volatile Status finishStatus = null;
 
-    public CachedReader(YdbTable table, YdbTypes types, int maxQueueSize, StructType schema) {
+    public LazyReader(YdbTable table, YdbTypes types, int maxQueueSize, StructType schema) {
         this.tablePath = table.getTablePath();
         this.types = types;
         this.queue = new ArrayBlockingQueue<>(maxQueueSize);
@@ -47,19 +53,23 @@ public abstract class CachedReader implements PartitionReader<InternalRow> {
         }
     }
 
+    protected abstract String start();
+
     protected abstract void cancel();
 
     protected void onComplete(Status status, Throwable th) {
+        long ms = System.currentTimeMillis() - startedAt;
         if (status != null) {
             if (!status.isSuccess()) {
-                logger.warn("read table {} finished with error {}", tablePath, status);
+                logger.warn("[{}] reading finished with error {}", id, status);
             }
             finishStatus = status;
         }
         if (th != null) {
-            logger.error("read table {} finished with exception", tablePath, th);
+            logger.error("[{}] reading finished with exception", id, th);
             finishStatus = Status.of(StatusCode.CLIENT_INTERNAL_ERROR, th);
         }
+        logger.info("[{}] got {} rows in {} ms", id, readedRows.get(), ms);
     }
 
     protected void onNextPart(ResultSetReader reader) {
@@ -67,17 +77,23 @@ public abstract class CachedReader implements PartitionReader<InternalRow> {
         try {
             while (finishStatus == null) {
                 if (queue.offer(nextItem, 100, TimeUnit.MILLISECONDS)) {
+                    readedRows.addAndGet(nextItem.reader.getRowCount());
                     return;
                 }
             }
         } catch (InterruptedException ex) {
-            logger.warn("Scan read of table {} was interrupted", tablePath);
+            logger.warn("[{}] reading was interrupted", id);
             Thread.currentThread().interrupt();
         }
     }
 
     @Override
     public boolean next() {
+        if (id == null) {
+            startedAt = System.currentTimeMillis();
+            id = start();
+            logger.info("[{}] started", id);
+        }
         while (true) {
             if (finishStatus != null) {
                 finishStatus.expectSuccess("Scan failed.");
@@ -94,7 +110,7 @@ public abstract class CachedReader implements PartitionReader<InternalRow> {
                 currentItem = queue.poll(100, TimeUnit.MILLISECONDS);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                throw new RuntimeException("Scan was interrupted", e);
+                throw new RuntimeException("Reading was interrupted", e);
             }
         }
     }

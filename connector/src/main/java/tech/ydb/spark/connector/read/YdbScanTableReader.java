@@ -1,14 +1,11 @@
 package tech.ydb.spark.connector.read;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import tech.ydb.common.transaction.TxMode;
 import tech.ydb.core.Result;
 import tech.ydb.query.QuerySession;
 import tech.ydb.query.QueryStream;
-import tech.ydb.query.result.QueryInfo;
-import tech.ydb.query.result.QueryResultPart;
+import tech.ydb.spark.connector.YdbContext;
 import tech.ydb.spark.connector.YdbTable;
 
 /**
@@ -16,13 +13,15 @@ import tech.ydb.spark.connector.YdbTable;
  *
  * @author zinal
  */
-public final class YdbScanTableReader extends CachedReader {
-    private static final Logger logger = LoggerFactory.getLogger(CachedReader.class);
-
-    private final QueryStream stream;
+public final class YdbScanTableReader extends LazyReader {
+    private final YdbContext ctx;
+    private final String query;
+    private volatile QueryStream stream = null;
 
     public YdbScanTableReader(YdbTable table, YdbScanTableOptions options, String tabletId) {
         super(table, options.getTypes(), options.getQueueMaxSize(), options.getReadSchema());
+
+        this.ctx = table.getCtx();
 
         StringBuilder sb = new StringBuilder("SELECT");
         char dep = ' ';
@@ -43,28 +42,23 @@ public final class YdbScanTableReader extends CachedReader {
             sb.append(" LIMIT ").append(options.getRowLimit());
         }
 
-        String query = sb.toString();
-        logger.debug("Execute scan query[{}]", query);
+        this.query = sb.toString();
+    }
 
-        Result<QuerySession> session = table.getCtx().getExecutor().createQuerySession();
+    @Override
+    protected String start() {
+        Result<QuerySession> session = ctx.getExecutor().createQuerySession();
         if (!session.isSuccess()) {
-            logger.error("Cannot get session from the pool {}", session.getStatus());
-            this.stream = null;
-            return;
+            onComplete(session.getStatus(), null);
         }
 
-        this.stream = session.getValue().createQuery(query, TxMode.SNAPSHOT_RO);
-        this.stream.execute(this::onNextPart).whenComplete(this::onComplete).thenRun(() -> {
+        stream = session.getValue().createQuery(query, TxMode.SNAPSHOT_RO);
+        stream.execute(part -> onNextPart(part.getResultSetReader())).whenComplete((res, th) -> {
             session.getValue().close();
+            onComplete(res.getStatus(), th);
         });
-    }
 
-    private void onNextPart(QueryResultPart part) {
-        super.onNextPart(part.getResultSetReader());
-    }
-
-    private void onComplete(Result<QueryInfo> result, Throwable th) {
-        super.onComplete(result.getStatus(), th);
+        return query;
     }
 
     @Override
