@@ -1,8 +1,5 @@
 package tech.ydb.spark.connector.read;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -17,7 +14,6 @@ import org.slf4j.LoggerFactory;
 
 import tech.ydb.core.Status;
 import tech.ydb.core.StatusCode;
-import tech.ydb.spark.connector.YdbTable;
 import tech.ydb.spark.connector.YdbTypes;
 import tech.ydb.spark.connector.common.OperationOption;
 import tech.ydb.table.result.ResultSetReader;
@@ -29,9 +25,8 @@ import tech.ydb.table.result.ResultSetReader;
 abstract class LazyReader implements PartitionReader<InternalRow> {
     private static final Logger logger = LoggerFactory.getLogger(LazyReader.class);
 
-    protected final String tablePath;
-    protected final List<String> outColumns;
-    protected final YdbTypes types;
+    private final String[] outColumns;
+    private final YdbTypes types;
 
     private final ArrayBlockingQueue<QueueItem> queue;
 
@@ -42,15 +37,10 @@ abstract class LazyReader implements PartitionReader<InternalRow> {
     private volatile QueueItem currentItem = null;
     private volatile Status finishStatus = null;
 
-    public LazyReader(YdbTable table, YdbTypes types, int maxQueueSize, StructType schema) {
-        this.tablePath = table.getTablePath();
+    protected LazyReader(YdbTypes types, int maxQueueSize, StructType schema) {
         this.types = types;
         this.queue = new ArrayBlockingQueue<>(maxQueueSize);
-        this.outColumns = new ArrayList<>(Arrays.asList(schema.fieldNames()));
-
-        if (outColumns.isEmpty()) {
-            outColumns.add(table.getKeyColumns()[0].getName());
-        }
+        this.outColumns = schema.fieldNames();
     }
 
     protected abstract String start();
@@ -136,7 +126,7 @@ abstract class LazyReader implements PartitionReader<InternalRow> {
 
         QueueItem(ResultSetReader reader) {
             this.reader = reader;
-            this.columnIndexes = new int[outColumns.size()];
+            this.columnIndexes = new int[outColumns.length];
             int idx = 0;
             for (String column: outColumns) {
                 columnIndexes[idx++] = reader.getColumnIndex(column);
