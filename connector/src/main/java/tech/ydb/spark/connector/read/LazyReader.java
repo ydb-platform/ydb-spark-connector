@@ -1,10 +1,9 @@
 package tech.ydb.spark.connector.read;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
@@ -16,7 +15,6 @@ import org.slf4j.LoggerFactory;
 
 import tech.ydb.core.Status;
 import tech.ydb.core.StatusCode;
-import tech.ydb.spark.connector.YdbTable;
 import tech.ydb.spark.connector.YdbTypes;
 import tech.ydb.spark.connector.common.OperationOption;
 import tech.ydb.table.result.ResultSetReader;
@@ -25,59 +23,71 @@ import tech.ydb.table.result.ResultSetReader;
  *
  * @author Aleksandr Gorshenin
  */
-public abstract class CachedReader implements PartitionReader<InternalRow> {
-    private static final Logger logger = LoggerFactory.getLogger(CachedReader.class);
+abstract class LazyReader implements PartitionReader<InternalRow> {
+    private static final Logger logger = LoggerFactory.getLogger(LazyReader.class);
+    private static final AtomicInteger COUNTER = new AtomicInteger(0);
 
-    protected final String tablePath;
-    protected final List<String> outColumns;
-    protected final YdbTypes types;
+    private final String[] outColumns;
+    private final YdbTypes types;
 
     private final ArrayBlockingQueue<QueueItem> queue;
+
+    private final AtomicLong readedRows = new AtomicLong();
+
+    private volatile String id = null;
+    private volatile long startedAt = System.currentTimeMillis();
     private volatile QueueItem currentItem = null;
     private volatile Status finishStatus = null;
 
-    public CachedReader(YdbTable table, YdbTypes types, int maxQueueSize, StructType schema) {
-        this.tablePath = table.getTablePath();
+    protected LazyReader(YdbTypes types, int maxQueueSize, StructType schema) {
         this.types = types;
         this.queue = new ArrayBlockingQueue<>(maxQueueSize);
-        this.outColumns = new ArrayList<>(Arrays.asList(schema.fieldNames()));
-
-        if (outColumns.isEmpty()) {
-            outColumns.add(table.getKeyColumns()[0].getName());
-        }
+        this.outColumns = schema.fieldNames();
     }
+
+    protected abstract String start();
 
     protected abstract void cancel();
 
     protected void onComplete(Status status, Throwable th) {
+        long ms = System.currentTimeMillis() - startedAt;
         if (status != null) {
             if (!status.isSuccess()) {
-                logger.warn("read table {} finished with error {}", tablePath, status);
+                logger.warn("[{}] reading finished with error {}", id, status);
             }
             finishStatus = status;
         }
         if (th != null) {
-            logger.error("read table {} finished with exception", tablePath, th);
+            logger.error("[{}] reading finished with exception", id, th);
             finishStatus = Status.of(StatusCode.CLIENT_INTERNAL_ERROR, th);
         }
+        COUNTER.decrementAndGet();
+        logger.info("[{}] got {} rows in {} ms", id, readedRows.get(), ms);
     }
 
     protected void onNextPart(ResultSetReader reader) {
+
         QueueItem nextItem = new QueueItem(reader);
         try {
             while (finishStatus == null) {
                 if (queue.offer(nextItem, 100, TimeUnit.MILLISECONDS)) {
+                    readedRows.addAndGet(reader.getRowCount());
                     return;
                 }
             }
         } catch (InterruptedException ex) {
-            logger.warn("Scan read of table {} was interrupted", tablePath);
+            logger.warn("[{}] reading was interrupted", id);
             Thread.currentThread().interrupt();
         }
     }
 
     @Override
     public boolean next() {
+        if (id == null) {
+            startedAt = System.currentTimeMillis();
+            id = start();
+            logger.info("[{}] started, {} total", id, COUNTER.incrementAndGet());
+        }
         while (true) {
             if (finishStatus != null) {
                 finishStatus.expectSuccess("Scan failed.");
@@ -86,7 +96,7 @@ public abstract class CachedReader implements PartitionReader<InternalRow> {
                 }
             }
 
-            if (currentItem != null && currentItem.reader.next()) {
+            if (currentItem != null && currentItem.next()) {
                 return true;
             }
 
@@ -94,7 +104,7 @@ public abstract class CachedReader implements PartitionReader<InternalRow> {
                 currentItem = queue.poll(100, TimeUnit.MILLISECONDS);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                throw new RuntimeException("Scan was interrupted", e);
+                throw new RuntimeException("Reading was interrupted", e);
             }
         }
     }
@@ -115,19 +125,26 @@ public abstract class CachedReader implements PartitionReader<InternalRow> {
     }
 
     private class QueueItem {
-        final ResultSetReader reader;
-        final int[] columnIndexes;
+        private final ResultSetReader reader;
+        private final int[] columnIndexes;
 
         QueueItem(ResultSetReader reader) {
             this.reader = reader;
-            this.columnIndexes = new int[outColumns.size()];
+            this.columnIndexes = new int[outColumns.length];
             int idx = 0;
             for (String column: outColumns) {
                 columnIndexes[idx++] = reader.getColumnIndex(column);
             }
         }
 
+        public boolean next() {
+            return reader.next();
+        }
+
         public InternalRow get() {
+            if (columnIndexes.length == 0) {
+                return InternalRow.empty();
+            }
             InternalRow row = new GenericInternalRow(columnIndexes.length);
             for (int i = 0; i < columnIndexes.length; ++i) {
                 types.setRowValue(row, i, reader.getColumn(columnIndexes[i]));
