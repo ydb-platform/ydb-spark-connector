@@ -21,6 +21,7 @@ import tech.ydb.proto.table.YdbTable;
 import tech.ydb.table.Session;
 import tech.ydb.table.SessionSupplier;
 import tech.ydb.table.description.TableDescription;
+import tech.ydb.table.description.TableOptionDescription;
 import tech.ydb.table.query.DataQuery;
 import tech.ydb.table.query.DataQueryResult;
 import tech.ydb.table.query.ExplainDataQueryResult;
@@ -38,6 +39,7 @@ import tech.ydb.table.settings.CopyTableSettings;
 import tech.ydb.table.settings.CopyTablesSettings;
 import tech.ydb.table.settings.CreateTableSettings;
 import tech.ydb.table.settings.DeleteSessionSettings;
+import tech.ydb.table.settings.DescribeTableOptionsSettings;
 import tech.ydb.table.settings.DescribeTableSettings;
 import tech.ydb.table.settings.DropTableSettings;
 import tech.ydb.table.settings.ExecuteDataQuerySettings;
@@ -280,6 +282,11 @@ public class ImplicitSession implements Session, SessionSupplier {
 
 
     public CompletableFuture<Status> delete(DeleteSessionSettings settings) {
+        throw new UnsupportedOperationException("Not supported for implicit sessions");
+    }
+
+    @Override
+    public CompletableFuture<Result<TableOptionDescription>> describeTableOptions(DescribeTableOptionsSettings opts) {
         throw new UnsupportedOperationException("Not supported for implicit sessions");
     }
 }
