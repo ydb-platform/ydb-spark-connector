@@ -43,6 +43,11 @@ public enum OperationOption implements SparkOption {
     INGEST_METHOD("method"),
 
     /**
+     * YDB data reading method: ReadTable/QueryService/QueryService with ApacheArrow
+     */
+    READ_METHOD("read.method"),
+
+    /**
      * YDB max batch rows for ingestion.
      */
     BATCH_SIZE("batchsize"),
