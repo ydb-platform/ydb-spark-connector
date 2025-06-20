@@ -20,7 +20,7 @@
         <!-- Must be syncronized with spark version -->
         <slf4j.version>2.0.6</slf4j.version>
 
-        <ydb.sdk.version>2.3.11</ydb.sdk.version>
+        <ydb.sdk.version>2.3.16</ydb.sdk.version>
         <!-- Must be syncronized with ydb version -->
         <grpc.version>1.59.1</grpc.version>
         <protobuf.version>3.24.0</protobuf.version>
@@ -124,6 +124,7 @@
                     <configuration>
                         <environmentVariables>
                             <TESTCONTAINERS_REUSE_ENABLE>true</TESTCONTAINERS_REUSE_ENABLE>
+                            <YDB_DOCKER_IMAGE>ydbplatform/local-ydb:trunk</YDB_DOCKER_IMAGE>
                         </environmentVariables>
                     </configuration>
                 </plugin>
