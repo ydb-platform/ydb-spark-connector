@@ -89,7 +89,7 @@ public class PredicatesTest {
                 + " PRIMARY KEY(sv, cv)"
                 + ") WITH ("
                 + "  AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 5, "
-                + "  PARTITION_AT_KEYS = (500, 800, 900, 950) "
+                + "  PARTITION_AT_KEYS = ((500), (700), (900, 2), (950, 10)) "
                 + ")").join().expectSuccess("cannot create row_table1 table");
         executor.executeSchemeQuery("CREATE TABLE row_table2 ("
                 + " sv Uint32 NOT NULL,"

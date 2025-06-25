@@ -23,8 +23,8 @@ import tech.ydb.table.result.ResultSetReader;
  *
  * @author Aleksandr Gorshenin
  */
-abstract class LazyReader implements PartitionReader<InternalRow> {
-    private static final Logger logger = LoggerFactory.getLogger(LazyReader.class);
+abstract class StreamReader implements PartitionReader<InternalRow> {
+    private static final Logger logger = LoggerFactory.getLogger(StreamReader.class);
     private static final AtomicInteger COUNTER = new AtomicInteger(0);
 
     private final String[] outColumns;
@@ -39,7 +39,7 @@ abstract class LazyReader implements PartitionReader<InternalRow> {
     private volatile QueueItem currentItem = null;
     private volatile Status finishStatus = null;
 
-    protected LazyReader(YdbTypes types, int maxQueueSize, StructType schema) {
+    protected StreamReader(YdbTypes types, int maxQueueSize, StructType schema) {
         this.types = types;
         this.queue = new ArrayBlockingQueue<>(maxQueueSize);
         this.outColumns = schema.fieldNames();
@@ -86,7 +86,7 @@ abstract class LazyReader implements PartitionReader<InternalRow> {
         if (id == null) {
             startedAt = System.currentTimeMillis();
             id = start();
-            logger.info("[{}] started, {} total", id, COUNTER.incrementAndGet());
+            logger.debug("[{}] started, {} total", id, COUNTER.incrementAndGet());
         }
         while (true) {
             if (finishStatus != null) {

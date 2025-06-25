@@ -57,7 +57,7 @@ public class YdbScanTable implements Batch, Scan, ScanBuilder, SupportsReportPar
         this.query = new SelectQuery(table);
         this.types = new YdbTypes(options);
 
-        this.queueMaxSize = LazyReader.readQueueMaxSize(options);
+        this.queueMaxSize = StreamReader.readQueueMaxSize(options);
         this.readSchema = table.schema();
     }
 
@@ -174,7 +174,8 @@ public class YdbScanTable implements Batch, Scan, ScanBuilder, SupportsReportPar
                     InputPartition[] partitions = new InputPartition[tablets.size()];
                     int idx = 0;
                     for (String id: tablets) {
-                        partitions[idx++] = YdbPartitions.tabletId(id);
+                        logger.debug("create tablet {} partition", id);
+                        partitions[idx++] = YdbPartition.tabletId(id);
                     }
                     return shuffle(partitions);
                 }
@@ -186,17 +187,18 @@ public class YdbScanTable implements Batch, Scan, ScanBuilder, SupportsReportPar
                 if (ranges.length > 0) {
                     InputPartition[] partitions = new InputPartition[ranges.length];
                     for (int idx = 0; idx < ranges.length; idx++) {
-                        partitions[idx] = YdbPartitions.keysRange(types, table.getKeyColumns(), ranges[idx]);
+                        logger.debug("create range {} partition", ranges[idx]);
+                        partitions[idx] = YdbPartition.keysRange(types, table.getKeyColumns(), ranges[idx]);
                     }
                     return shuffle(partitions);
                 }
                 break;
         }
 
-        return new InputPartition[]{YdbPartitions.none()};
+        return new InputPartition[]{YdbPartition.unrestricted()};
     }
 
-    private final class QueryServiceReader extends LazyReader {
+    private final class QueryServiceReader extends StreamReader {
         private final String query;
         private final Params params;
         private volatile QueryStream stream = null;
@@ -220,7 +222,11 @@ public class YdbScanTable implements Batch, Scan, ScanBuilder, SupportsReportPar
                 onComplete(res.getStatus(), th);
             });
 
-            return query;
+            StringBuilder sb = new StringBuilder(query);
+            params.values().forEach((k, v) -> {
+                sb.append(", ").append(k).append("=").append(v);
+            });
+            return sb.toString();
         }
 
         @Override
