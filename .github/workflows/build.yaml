@@ -3,7 +3,7 @@ name: Build YDB Spark Connector
 on:
   push:
     branches:
-      - master
+      - main
       - release*
   pull_request:
       type: [opened, reopened, edited, synchronize]
