@@ -65,7 +65,7 @@ public class YdbReadTable implements Batch, Scan, ScanBuilder, SupportsReportPar
         this.table = table;
 
         this.types = new YdbTypes(options);
-        this.queueMaxSize = LazyReader.readQueueMaxSize(options);
+        this.queueMaxSize = StreamReader.readQueueMaxSize(options);
         this.keys = table.getKeyColumns();
 
         this.predicateRange = KeysRange.UNRESTRICTED;
@@ -321,7 +321,7 @@ public class YdbReadTable implements Batch, Scan, ScanBuilder, SupportsReportPar
         }
     }
 
-    private final class ReadTableReader extends LazyReader {
+    private final class ReadTableReader extends StreamReader {
         private final String id;
         private final GrpcReadStream<ReadTablePart> stream;
 

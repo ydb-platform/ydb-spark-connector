@@ -89,7 +89,7 @@ public class PredicatesTest {
                 + " PRIMARY KEY(sv, cv)"
                 + ") WITH ("
                 + "  AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 5, "
-                + "  PARTITION_AT_KEYS = (500, 800, 900, 950) "
+                + "  PARTITION_AT_KEYS = ((500), (700), (900, 2), (950, 10)) "
                 + ")").join().expectSuccess("cannot create row_table1 table");
         executor.executeSchemeQuery("CREATE TABLE row_table2 ("
                 + " sv Uint32 NOT NULL,"
@@ -190,11 +190,11 @@ public class PredicatesTest {
     @Test
     public void test04_count() {
         long count1 = readYdb().load("row_table1").count();
-        long count2 = readYdb().option("read.method", "READ_TABLE").load("row_table1").count();
+        long count2 = readYdb().option("useReadTable", "true").load("row_table1").count();
         Assert.assertEquals(count1, count2);
 
         long count3 = readYdb().load("row_table2").count();
-        long count4 = readYdb().option("read.method", "READ_TABLE").load("row_table2").count();
+        long count4 = readYdb().option("useReadTable", "true").load("row_table2").count();
         Assert.assertEquals(count3, count4);
 
         long count5 = readYdb().load("column_table").count();
