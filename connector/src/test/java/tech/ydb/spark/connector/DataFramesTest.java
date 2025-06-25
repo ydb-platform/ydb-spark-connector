@@ -126,7 +126,7 @@ public class DataFramesTest {
         long count2 = spark.read().format("ydb").option("url", ydbURL).load("row_table").count();
         Assert.assertEquals(count, count2);
 
-        long count3 = spark.read().format("ydb").option("url", ydbURL).option("read.method", "READ_TABLE")
+        long count3 = spark.read().format("ydb").option("url", ydbURL).option("useReadTable", "true")
                 .load("row_table").count();
         Assert.assertEquals(count2, count3);
     }
@@ -148,7 +148,7 @@ public class DataFramesTest {
         long count2 = spark.read().format("ydb").option("url", ydbURL).load("dir/splitted").count();
         Assert.assertEquals(count, count2);
 
-        long count3 = spark.read().format("ydb").option("url", ydbURL).option("read.method", "READ_TABLE")
+        long count3 = spark.read().format("ydb").option("url", ydbURL).option("useReadTable", "true")
                 .load("dir/splitted").count();
         Assert.assertEquals(count2, count3);
     }

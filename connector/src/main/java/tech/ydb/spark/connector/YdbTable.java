@@ -33,7 +33,6 @@ import tech.ydb.spark.connector.common.FieldType;
 import tech.ydb.spark.connector.common.KeysRange;
 import tech.ydb.spark.connector.common.OperationOption;
 import tech.ydb.spark.connector.common.PartitionOption;
-import tech.ydb.spark.connector.common.ReadMethod;
 import tech.ydb.spark.connector.read.YdbReadTable;
 import tech.ydb.spark.connector.read.YdbScanTable;
 import tech.ydb.spark.connector.write.YdbRowLevelBuilder;
@@ -216,14 +215,14 @@ public class YdbTable implements Serializable, Table, SupportsRead, SupportsWrit
 
     @Override
     public ScanBuilder newScanBuilder(CaseInsensitiveStringMap options) {
-        ReadMethod method = OperationOption.READ_METHOD.readEnum(options, ReadMethod.QUERY);
+        boolean useReadTable = OperationOption.USE_READ_TABLE.readBoolean(options, false);
         switch (type) {
             case COLUMN:
                 return new YdbScanTable(this, options);
             case ROW:
             case INDEX:
             default:
-                if (method == ReadMethod.READ_TABLE) {
+                if (useReadTable) {
                     return new YdbReadTable(this, options);
                 }
                 return new YdbScanTable(this, options);

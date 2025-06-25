@@ -190,11 +190,11 @@ public class PredicatesTest {
     @Test
     public void test04_count() {
         long count1 = readYdb().load("row_table1").count();
-        long count2 = readYdb().option("read.method", "READ_TABLE").load("row_table1").count();
+        long count2 = readYdb().option("useReadTable", "true").load("row_table1").count();
         Assert.assertEquals(count1, count2);
 
         long count3 = readYdb().load("row_table2").count();
-        long count4 = readYdb().option("read.method", "READ_TABLE").load("row_table2").count();
+        long count4 = readYdb().option("useReadTable", "true").load("row_table2").count();
         Assert.assertEquals(count3, count4);
 
         long count5 = readYdb().load("column_table").count();
