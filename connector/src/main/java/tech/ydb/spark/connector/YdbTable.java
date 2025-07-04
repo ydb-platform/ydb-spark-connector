@@ -33,7 +33,6 @@ import tech.ydb.spark.connector.common.FieldType;
 import tech.ydb.spark.connector.common.KeysRange;
 import tech.ydb.spark.connector.common.OperationOption;
 import tech.ydb.spark.connector.common.PartitionOption;
-import tech.ydb.spark.connector.read.YdbApacheArrowScan;
 import tech.ydb.spark.connector.read.YdbReadTable;
 import tech.ydb.spark.connector.read.YdbScanTable;
 import tech.ydb.spark.connector.write.YdbRowLevelBuilder;
@@ -217,21 +216,14 @@ public class YdbTable implements Serializable, Table, SupportsRead, SupportsWrit
     @Override
     public ScanBuilder newScanBuilder(CaseInsensitiveStringMap options) {
         boolean useReadTable = OperationOption.USE_READ_TABLE.readBoolean(options, false);
-        boolean useApacheArrow = OperationOption.USE_APACHE_ARROW.readBoolean(options, false);
         switch (type) {
             case COLUMN:
-                if (useApacheArrow) {
-                    return new YdbApacheArrowScan(this, options);
-                }
                 return new YdbScanTable(this, options);
             case ROW:
             case INDEX:
             default:
                 if (useReadTable) {
                     return new YdbReadTable(this, options);
-                }
-                if (useApacheArrow) {
-                    return new YdbApacheArrowScan(this, options);
                 }
                 return new YdbScanTable(this, options);
         }

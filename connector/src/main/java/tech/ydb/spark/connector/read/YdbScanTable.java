@@ -23,6 +23,7 @@ import org.apache.spark.sql.connector.read.partitioning.Partitioning;
 import org.apache.spark.sql.connector.read.partitioning.UnknownPartitioning;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
+import org.apache.spark.sql.vectorized.ColumnarBatch;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -33,6 +34,7 @@ import tech.ydb.query.QueryStream;
 import tech.ydb.spark.connector.YdbTable;
 import tech.ydb.spark.connector.YdbTypes;
 import tech.ydb.spark.connector.common.KeysRange;
+import tech.ydb.spark.connector.common.OperationOption;
 import tech.ydb.table.query.Params;
 
 /**
@@ -49,6 +51,7 @@ public class YdbScanTable implements Batch, Scan, ScanBuilder, SupportsReportPar
     private final SelectQuery query;
     private final YdbTypes types;
     private final int queueMaxSize;
+    private final boolean useApacheArrow;
 
     private StructType readSchema;
 
@@ -56,6 +59,7 @@ public class YdbScanTable implements Batch, Scan, ScanBuilder, SupportsReportPar
         this.table = table;
         this.query = new SelectQuery(table);
         this.types = new YdbTypes(options);
+        this.useApacheArrow = OperationOption.USE_APACHE_ARROW.readBoolean(options, false);
 
         this.queueMaxSize = StreamReader.readQueueMaxSize(options);
         this.readSchema = table.schema();
@@ -72,6 +76,16 @@ public class YdbScanTable implements Batch, Scan, ScanBuilder, SupportsReportPar
     }
 
     @Override
+    public ColumnarSupportMode columnarSupportMode() {
+        return useApacheArrow ? ColumnarSupportMode.SUPPORTED : ColumnarSupportMode.PARTITION_DEFINED;
+    }
+
+    @Override
+    public boolean supportColumnarReads(InputPartition partition) {
+        return useApacheArrow;
+    }
+
+    @Override
     public PartitionReaderFactory createReaderFactory() {
         return this;
     }
@@ -85,6 +99,12 @@ public class YdbScanTable implements Batch, Scan, ScanBuilder, SupportsReportPar
     public PartitionReader<InternalRow> createReader(InputPartition partition) {
         YdbPartition p = (YdbPartition) partition;
         return new QueryServiceReader(p.makeQuery(query));
+    }
+
+    @Override
+    public PartitionReader<ColumnarBatch> createColumnarReader(InputPartition partition) {
+        YdbPartition p = (YdbPartition) partition;
+        return new ApacheArrowReader(table.getCtx(), p.makeQuery(query), queueMaxSize);
     }
 
     @Override

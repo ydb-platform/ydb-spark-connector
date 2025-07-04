@@ -47,7 +47,8 @@ public class DataFramesTest {
         prepareTables(ctx.getExecutor());
 
         SparkConf conf = new SparkConf()
-                .setMaster("local[4]")
+//                .setMaster("local[4]")
+                .setMaster("local[1]")
                 .setAppName("ydb-spark-dataframes-test")
                 .set("spark.ui.enabled", "false");
 
@@ -138,6 +139,13 @@ public class DataFramesTest {
 
         long count2 = spark.read().format("ydb").option("url", ydbURL).load("column_table").count();
         Assert.assertEquals(count, count2);
+    }
+
+    @Test
+    public void countByApacheArrowTableTest() {
+        long count = spark.read().format("ydb").option("url", ydbURL).option("useApacheArrow", true)
+                .load("column_table").count();
+        Assert.assertEquals(10, count);
     }
 
     @Test
