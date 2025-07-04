@@ -48,6 +48,11 @@ public enum OperationOption implements SparkOption {
     USE_READ_TABLE("useReadTable"),
 
     /**
+     * Force to use Apache Arrow format for data reading
+     */
+    USE_APACHE_ARROW("useApacheArrow"),
+
+    /**
      * YDB max batch rows for ingestion.
      */
     BATCH_SIZE("batchsize"),

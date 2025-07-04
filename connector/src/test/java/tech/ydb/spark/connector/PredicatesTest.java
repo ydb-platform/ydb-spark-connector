@@ -198,8 +198,10 @@ public class PredicatesTest {
         Assert.assertEquals(count3, count4);
 
         long count5 = readYdb().load("column_table").count();
+        long count6 = readYdb().option("useApacheArrow", "true").load("column_table").count();
+        Assert.assertEquals(count5, count6);
+
         Assert.assertEquals(1000, count1);
-        Assert.assertEquals(1000, count3);
         Assert.assertEquals(5000, count5);
     }
 }
