@@ -3,6 +3,9 @@ package tech.ydb.spark.connector;
 import java.util.Collections;
 
 import org.apache.spark.SparkConf;
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.SaveMode;
 import org.apache.spark.sql.SparkSession;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -11,6 +14,7 @@ import org.junit.ClassRule;
 import org.junit.Test;
 
 import tech.ydb.spark.connector.impl.YdbExecutor;
+import tech.ydb.table.description.TableDescription;
 import tech.ydb.table.values.ListType;
 import tech.ydb.table.values.ListValue;
 import tech.ydb.table.values.PrimitiveType;
@@ -72,7 +76,7 @@ public class DataFramesTest {
         executor.makeDirectory(executor.extractPath("dir"));
         executor.executeSchemeQuery("CREATE TABLE row_table ("
                 + " id Int32 NOT NULL,"
-                + " value Text,"
+                + " value Text NOT NULL,"
                 + " PRIMARY KEY(id)  "
                 + ")").join().expectSuccess("cannot create test row table");
         executor.executeSchemeQuery("CREATE TABLE column_table ("
@@ -116,6 +120,12 @@ public class DataFramesTest {
         executor.executeSchemeQuery("DROP TABLE column_table;").join();
         executor.executeSchemeQuery("DROP TABLE row_table;").join();
         executor.removeDirectory(executor.extractPath("dir"));
+        executor.removeDirectory(executor.extractPath("copy"));
+    }
+
+    private TableDescription describeTable(String path) {
+        String fullPath = ctx.getExecutor().extractPath(path);
+        return ctx.getExecutor().describeTable(fullPath, false);
     }
 
     @Test
@@ -151,5 +161,81 @@ public class DataFramesTest {
         long count3 = spark.read().format("ydb").option("url", ydbURL).option("useReadTable", "true")
                 .load("dir/splitted").count();
         Assert.assertEquals(count2, count3);
+    }
+
+    @Test
+    public void tableAutoCreateTest() {
+        Dataset<Row> origin = spark.read().format("ydb").option("url", ydbURL).load("row_table");
+
+        Assert.assertEquals(10, origin.count());
+        Assert.assertEquals(2, origin.schema().length());
+        Assert.assertArrayEquals(new String[] {"id", "value"} , origin.schema().fieldNames());
+
+        try {
+            origin.write().format("ydb").option("url", ydbURL).mode(SaveMode.Append).save("copy/row_table1");
+            Dataset<Row> copy = spark.read().format("ydb").option("url", ydbURL).load("copy/row_table1");
+
+            Assert.assertEquals(10, copy.count());
+            Assert.assertArrayEquals(new String[] {"id", "value", "_spark_key"} , copy.schema().fieldNames());
+        } finally {
+            ctx.getExecutor().executeSchemeQuery("DROP TABLE `copy/row_table1`;").join();
+        }
+    }
+
+    @Test
+    public void tableAutoCreateWithKeysTest() {
+        Dataset<Row> origin = spark.read().format("ydb").option("url", ydbURL).load("row_table");
+
+        Assert.assertEquals(10, origin.count());
+        Assert.assertEquals(2, origin.schema().length());
+        Assert.assertArrayEquals(new String[] {"id", "value"} , origin.schema().fieldNames());
+
+        try {
+            origin.write().format("ydb")
+                    .option("url", ydbURL)
+                    .option("table.primary_keys", "value, id")
+                    .mode(SaveMode.Append)
+                    .save("copy/row_table2");
+            Dataset<Row> copy = spark.read().format("ydb")
+                    .option("url", ydbURL)
+                    .load("copy/row_table2");
+
+            Assert.assertEquals(10, copy.count());
+            Assert.assertArrayEquals(new String[] {"id", "value"} , copy.schema().fieldNames());
+
+            TableDescription desc = describeTable("copy/row_table2");
+            Assert.assertEquals(TableDescription.StoreType.ROW, desc.getStoreType());
+        } finally {
+            ctx.getExecutor().executeSchemeQuery("DROP TABLE `copy/row_table2`;").join();
+        }
+    }
+
+    @Test
+    public void tableAutoCreateColumnTableTest() {
+        Dataset<Row> origin = spark.read().format("ydb").option("url", ydbURL).load("row_table");
+
+        Assert.assertEquals(10, origin.count());
+        Assert.assertEquals(2, origin.schema().length());
+        Assert.assertArrayEquals(new String[] {"id", "value"} , origin.schema().fieldNames());
+
+        try {
+            origin.write().format("ydb")
+                    .option("url", ydbURL)
+                    .option("table.primary_keys", " , value,,,")
+                    .option("table.type", "column")
+                    .mode(SaveMode.Append)
+                    .save("copy/column_table");
+            Dataset<Row> copy = spark.read().format("ydb")
+                    .option("url", ydbURL)
+                    .load("copy/column_table");
+
+            Assert.assertEquals(10, copy.count());
+            Assert.assertArrayEquals(new String[] {"id", "value"} , copy.schema().fieldNames());
+
+            TableDescription desc = describeTable("copy/column_table");
+            Assert.assertEquals(TableDescription.StoreType.COLUMN, desc.getStoreType());
+        } finally {
+            ctx.getExecutor().executeSchemeQuery("DROP TABLE `copy/column_table`;").join();
+        }
     }
 }

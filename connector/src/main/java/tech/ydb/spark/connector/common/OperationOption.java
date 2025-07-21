@@ -55,28 +55,33 @@ public enum OperationOption implements SparkOption {
     /**
      * YDB table's primary key, as a comma-delimited list of column names.
      */
-    PRIMARY_KEY("primary_key"),
+    TABLE_AUTOCREATE("table.autocreate"),
 
     /**
-     * YDB table's automatic primary key column name to be filled by the YDB Spark Connector.
+     * YDB table type: ROW - row-organized table, COLUMN - column-organized table, INDEX - secondary index table
      */
-    AUTO_PK("auto_pk"),
-
-    /**
-     * YDB table's truncate option when writing to the existing table.
-     */
-    TRUNCATE("truncate"),
-
-    /**
-     * YDB table type: - row-organized (table), - secondary index (index), - column-organized
-     * (columnshard).
-     */
-    TABLE_TYPE("table_type"),
+    TABLE_TYPE("table.type"),
 
     /**
      * YDB table path.
      */
-    TABLE_PATH("table_path");
+    TABLE_PATH("table.path"),
+
+    /**
+     * YDB table's automatic primary key column name to be filled by the YDB Spark Connector.
+     */
+    TABLE_AUTOPK_NAME("table.auto_pk_name"),
+
+    /**
+     * YDB table's primary key, as a comma-delimited list of column names.
+     */
+    TABLE_PRIMARY_KEYS("table.primary_keys"),
+
+    /**
+     * YDB table's truncate option when writing to the existing table.
+     */
+    TABLE_TRUNCATE("table.truncate");
+
 
     public static final String DEFAULT_AUTO_PK = "_spark_key";
 

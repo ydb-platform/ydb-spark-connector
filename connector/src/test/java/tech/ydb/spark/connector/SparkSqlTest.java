@@ -110,4 +110,11 @@ public class SparkSqlTest {
         Dataset<Row> root = spark.sql("show namespaces from ydb");
         Assert.assertEquals(2, root.count());
     }
+
+//    @Test
+//    public void ddlTests() {
+//        Dataset<Row> df = spark.sql("CREATE TABLE test_table1 (id Int32 NOT NULL, value Text, PRIMARY KEY(id)) USING YDB");
+//        Assert.assertEquals(0, df.schema().size());
+//        Assert.assertTrue(df.isEmpty());
+//    }
 }
