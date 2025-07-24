@@ -97,6 +97,11 @@ public class YdbTableProvider implements TableProvider, DataSourceRegister {
         String tablePath = ctx.getExecutor().extractPath(tableName);
         TableDescription td =  ctx.getExecutor().describeTable(tablePath, true);
         if (td == null) {
+            boolean useAutoCreate = OperationOption.TABLE_AUTOCREATE.readBoolean(options, true);
+            if (!useAutoCreate) {
+                throw new RuntimeException("Table " + tablePath + " not found");
+            }
+
             // No such table - creating it.
             td = YdbTable.buildTableDesctiption(types.fromSparkSchema(schema), options);
             ctx.getExecutor().createTable(tablePath, td);

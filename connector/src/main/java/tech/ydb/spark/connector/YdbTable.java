@@ -1,7 +1,6 @@
 package tech.ydb.spark.connector;
 
 import java.io.Serializable;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -103,7 +102,8 @@ public class YdbTable implements Serializable, Table, SupportsRead, SupportsWrit
         this.properties = new HashMap<>();
         OperationOption.TABLE_PATH.write(properties, path);
         OperationOption.TABLE_TYPE.write(properties, type.name());
-        OperationOption.PRIMARY_KEY.write(properties, td.getPrimaryKeys().stream().collect(Collectors.joining(",")));
+        String pkList = td.getPrimaryKeys().stream().collect(Collectors.joining(","));
+        OperationOption.TABLE_PRIMARY_KEYS.write(properties, pkList);
         PartitioningSettings ps = td.getPartitioningSettings();
         if (ps != null) {
             PartitionOption.writeAll(properties, ps);
@@ -231,7 +231,7 @@ public class YdbTable implements Serializable, Table, SupportsRead, SupportsWrit
 
     @Override
     public WriteBuilder newWriteBuilder(LogicalWriteInfo info) {
-        boolean truncate = OperationOption.TRUNCATE.readBoolean(info.options(), false);
+        boolean truncate = OperationOption.TABLE_TRUNCATE.readBoolean(info.options(), false);
         logger.debug("Creating YdbWriteBuilder for table {} with truncate={}", path, truncate);
         return new YdbWrite(this, info, truncate);
     }
@@ -273,11 +273,12 @@ public class YdbTable implements Serializable, Table, SupportsRead, SupportsWrit
         }
     }
 
+    @SuppressWarnings("checkstyle:LineLength")
     public static TableDescription buildTableDesctiption(List<FieldInfo> fields, CaseInsensitiveStringMap options) {
         Set<String> fieldNames = fields.stream().map(FieldInfo::getName).collect(Collectors.toSet());
-        String userPrimaryKeys = OperationOption.PRIMARY_KEY.read(options, "");
+        String userPrimaryKeys = OperationOption.TABLE_PRIMARY_KEYS.read(options, "");
 
-        List<String> primaryKeys = new ArrayList<>();
+        Set<String> primaryKeys = new HashSet<>();
         for (String keyName : userPrimaryKeys.split(",")) {
             String trimmed = keyName.trim();
             if (trimmed.isEmpty()) {
@@ -290,20 +291,37 @@ public class YdbTable implements Serializable, Table, SupportsRead, SupportsWrit
         }
 
         if (primaryKeys.isEmpty()) {
-            String autoPkName = OperationOption.AUTO_PK.read(options, OperationOption.DEFAULT_AUTO_PK);
+            String autoPkName = OperationOption.TABLE_PRIMARY_KEYS.read(options, OperationOption.DEFAULT_AUTO_PK);
             fields.add(new FieldInfo(autoPkName, FieldType.Text, false));
             primaryKeys.add(autoPkName);
         }
 
         TableDescription.Builder tdb = TableDescription.newBuilder();
+        Type tableType = OperationOption.TABLE_TYPE.readEnum(options, Type.ROW);
+        switch (tableType) {
+            case ROW:
+                tdb.setStoreType(TableDescription.StoreType.ROW);
+                break;
+            case COLUMN:
+                tdb.setStoreType(TableDescription.StoreType.COLUMN);
+                break;
+            case INDEX:
+            default:
+                throw new IllegalArgumentException("Specified table type " + tableType +
+                        " is not supported for table creating");
+        }
+
+        // Spark always uses a schema with all columns nullable
+        // https://github.com/apache/spark/blob/a08d8b09/sql/core/src/main/scala/org/apache/spark/sql/classic/DataFrameWriter.scala#L155
+        // but we cannot use nullable type for primary keys in column-orientired tables
         for (FieldInfo field : fields) {
-            if (field.isNullable()) {
-                tdb.addNullableColumn(field.getName(), field.getType().toSdkType());
-            } else {
+            if (tableType == Type.COLUMN && primaryKeys.contains(field.getName())) {
                 tdb.addNonnullColumn(field.getName(), field.getType().toSdkType());
+            } else {
+                tdb.addNullableColumn(field.getName(), field.getType().toSdkType());
             }
         }
-        tdb.setPrimaryKeys(primaryKeys);
+        tdb.setPrimaryKeys(primaryKeys.toArray(new String[0]));
 
         PartitioningSettings partitioning = new PartitioningSettings();
         PartitionOption.writeAll(options, partitioning);
