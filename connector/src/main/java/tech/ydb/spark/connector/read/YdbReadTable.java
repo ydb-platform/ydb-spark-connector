@@ -33,11 +33,13 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import tech.ydb.core.Result;
 import tech.ydb.core.grpc.GrpcReadStream;
 import tech.ydb.spark.connector.YdbTable;
 import tech.ydb.spark.connector.YdbTypes;
 import tech.ydb.spark.connector.common.FieldInfo;
 import tech.ydb.spark.connector.common.KeysRange;
+import tech.ydb.table.Session;
 import tech.ydb.table.query.ReadTablePart;
 import tech.ydb.table.settings.ReadTableSettings;
 import tech.ydb.table.values.TupleValue;
@@ -323,12 +325,14 @@ public class YdbReadTable implements Batch, Scan, ScanBuilder, SupportsReportPar
 
     private final class ReadTableReader extends StreamReader {
         private final String id;
-        private final GrpcReadStream<ReadTablePart> stream;
+        private final String tablePath;
+        private final ReadTableSettings settings;
+        private volatile GrpcReadStream<ReadTablePart> stream;
 
         ReadTableReader(KeysRange keysRange) {
             super(types, queueMaxSize, readSchema);
 
-            String tablePath = table.getTablePath();
+            this.tablePath = table.getTablePath();
 
             List<String> columnsToRead = new ArrayList<>(Arrays.asList(readSchema.fieldNames()));
             if (columnsToRead.isEmpty()) {
@@ -364,20 +368,31 @@ public class YdbReadTable implements Batch, Scan, ScanBuilder, SupportsReportPar
 
             String columns = columnsToRead.stream().collect(Collectors.joining(","));
             this.id = "READ TABLE " + columns + " RANGE " + keysRange + " LIMIT " + rowLimit;
-
-            // Execute read table
-            this.stream = table.getCtx().getExecutor().executeReadTable(tablePath, rtsb.build());
+            this.settings = rtsb.build();
         }
 
         @Override
         protected String start() {
-            stream.start(part -> onNextPart(part.getResultSetReader())).whenComplete(this::onComplete);
+            // Execute read table
+            Result<Session> session = table.getCtx().getExecutor().createTableSession();
+            if (!session.isSuccess()) {
+                onComplete(session.getStatus(), null);
+            }
+
+            this.stream = session.getValue().executeReadTable(tablePath, settings);
+            stream.start(part -> onNextPart(part.getResultSetReader())).whenComplete((status, th) -> {
+                session.getValue().close();
+                onComplete(status, th);
+            });
+
             return id;
         }
 
         @Override
         protected void cancel() {
-            stream.cancel();
+            if (stream != null) {
+                stream.cancel();
+            }
         }
     }
 }
