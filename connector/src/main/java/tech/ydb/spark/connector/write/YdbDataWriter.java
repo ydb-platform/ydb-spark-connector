@@ -46,7 +46,7 @@ public abstract class YdbDataWriter implements DataWriter<InternalRow> {
         this.structType = structType;
         this.readers = readers;
         this.maxBatchSize = maxBatchSize;
-        this.maxConcurrency = 5;
+        this.maxConcurrency = 2;
         this.semaphore = new Semaphore(maxConcurrency);
     }
 
