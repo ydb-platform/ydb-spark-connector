@@ -342,6 +342,7 @@ public class YdbReadTable implements Batch, Scan, ScanBuilder, SupportsReportPar
             ReadTableSettings.Builder rtsb = ReadTableSettings.newBuilder()
                     // TODO: add setting for the maximum scan duration.
                     .withRequestTimeout(Duration.ofHours(8))
+                    .withGrpcFlowControl(flowControl)
                     .orderedRead(true)
                     .columns(columnsToRead);
 

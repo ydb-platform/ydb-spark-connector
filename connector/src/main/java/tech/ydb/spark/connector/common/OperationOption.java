@@ -15,7 +15,7 @@ public enum OperationOption implements SparkOption {
     /**
      * Scan queue depth for each executor. Default 10, minimum 2.
      */
-    SCAN_QUEUE_DEPTH("scan.queue.depth"),
+    READQUEUE_SIZE("scan.queue.depth"),
 
     /**
      * true to list indexes as tables, false otherwise. Default false.

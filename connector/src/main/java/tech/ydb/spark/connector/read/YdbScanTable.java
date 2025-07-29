@@ -30,6 +30,7 @@ import tech.ydb.common.transaction.TxMode;
 import tech.ydb.core.Result;
 import tech.ydb.query.QuerySession;
 import tech.ydb.query.QueryStream;
+import tech.ydb.query.settings.ExecuteQuerySettings;
 import tech.ydb.spark.connector.YdbTable;
 import tech.ydb.spark.connector.YdbTypes;
 import tech.ydb.spark.connector.common.KeysRange;
@@ -216,7 +217,10 @@ public class YdbScanTable implements Batch, Scan, ScanBuilder, SupportsReportPar
                 onComplete(session.getStatus(), null);
             }
 
-            stream = session.getValue().createQuery(query, TxMode.SNAPSHOT_RO, params);
+            ExecuteQuerySettings settings = ExecuteQuerySettings.newBuilder()
+                    .withGrpcFlowControl(flowControl)
+                    .build();
+            stream = session.getValue().createQuery(query, TxMode.SNAPSHOT_RO, params, settings);
             stream.execute(part -> onNextPart(part.getResultSetReader())).whenComplete((res, th) -> {
                 session.getValue().close();
                 onComplete(res.getStatus(), th);
