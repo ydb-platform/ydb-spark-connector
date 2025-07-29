@@ -1,9 +1,11 @@
 package tech.ydb.spark.connector.read;
 
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.IntConsumer;
 
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
@@ -15,6 +17,7 @@ import org.slf4j.LoggerFactory;
 
 import tech.ydb.core.Status;
 import tech.ydb.core.StatusCode;
+import tech.ydb.core.grpc.GrpcFlowControl;
 import tech.ydb.spark.connector.YdbTypes;
 import tech.ydb.spark.connector.common.OperationOption;
 import tech.ydb.table.result.ResultSetReader;
@@ -30,19 +33,25 @@ abstract class StreamReader implements PartitionReader<InternalRow> {
     private final String[] outColumns;
     private final YdbTypes types;
 
-    private final ArrayBlockingQueue<QueueItem> queue;
-
+    private final BlockingQueue<QueueItem> queue;
     private final AtomicLong readedRows = new AtomicLong();
 
+    protected final GrpcFlowControl flowControl;
+
     private volatile String id = null;
+    private volatile GrpcCall call = null;
     private volatile long startedAt = System.currentTimeMillis();
     private volatile QueueItem currentItem = null;
     private volatile Status finishStatus = null;
 
     protected StreamReader(YdbTypes types, int maxQueueSize, StructType schema) {
+        this.outColumns = schema.fieldNames();
         this.types = types;
         this.queue = new ArrayBlockingQueue<>(maxQueueSize);
-        this.outColumns = schema.fieldNames();
+        this.flowControl = (req) -> {
+            call = new GrpcCall(req);
+            return call;
+        };
     }
 
     protected abstract String start();
@@ -66,19 +75,7 @@ abstract class StreamReader implements PartitionReader<InternalRow> {
     }
 
     protected void onNextPart(ResultSetReader reader) {
-
-        QueueItem nextItem = new QueueItem(reader);
-        try {
-            while (finishStatus == null) {
-                if (queue.offer(nextItem, 100, TimeUnit.MILLISECONDS)) {
-                    readedRows.addAndGet(reader.getRowCount());
-                    return;
-                }
-            }
-        } catch (InterruptedException ex) {
-            logger.warn("[{}] reading was interrupted", id);
-            Thread.currentThread().interrupt();
-        }
+        queue.add(new QueueItem(reader));
     }
 
     @Override
@@ -88,6 +85,7 @@ abstract class StreamReader implements PartitionReader<InternalRow> {
             id = start();
             logger.debug("[{}] started, {} total", id, COUNTER.incrementAndGet());
         }
+
         while (true) {
             if (finishStatus != null) {
                 finishStatus.expectSuccess("Scan failed.");
@@ -102,6 +100,9 @@ abstract class StreamReader implements PartitionReader<InternalRow> {
 
             try {
                 currentItem = queue.poll(100, TimeUnit.MILLISECONDS);
+                if (currentItem != null) {
+                    call.requestNextMessage();
+                }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw new RuntimeException("Reading was interrupted", e);
@@ -121,6 +122,28 @@ abstract class StreamReader implements PartitionReader<InternalRow> {
     public void close() {
         if (finishStatus == null) {
             cancel();
+        }
+    }
+
+    private class GrpcCall implements GrpcFlowControl.Call {
+        private final IntConsumer req;
+
+        GrpcCall(IntConsumer req) {
+            this.req = req;
+        }
+
+        @Override
+        public void onStart() {
+            req.accept(queue.remainingCapacity());
+        }
+
+        @Override
+        public void onMessageRead() {
+            // nothing
+        }
+
+        public void requestNextMessage() {
+            req.accept(1);
         }
     }
 
@@ -155,17 +178,15 @@ abstract class StreamReader implements PartitionReader<InternalRow> {
 
     public static int readQueueMaxSize(CaseInsensitiveStringMap options) {
         try {
-            int scanQueueDepth = OperationOption.SCAN_QUEUE_DEPTH.readInt(options, 3);
+            int scanQueueDepth = OperationOption.READQUEUE_SIZE.readInt(options, 3);
             if (scanQueueDepth < 2) {
-                logger.warn("Value of {} property too low, reverting to minimum of 2.",
-                        OperationOption.SCAN_QUEUE_DEPTH);
+                logger.warn("Value of {} property too low, reverting to minimum of 2.", OperationOption.READQUEUE_SIZE);
                 return 2;
             }
 
             return scanQueueDepth;
-        } catch (NumberFormatException nfe) {
-            logger.warn("Illegal value of {} property, reverting to default of 3.",
-                        OperationOption.SCAN_QUEUE_DEPTH, nfe);
+        } catch (NumberFormatException ex) {
+            logger.warn("Illegal value of {} property, reverting to default of 3.", OperationOption.READQUEUE_SIZE, ex);
             return 3;
         }
     }
