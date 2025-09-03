@@ -93,7 +93,7 @@ defined as described below:
 `<CatalogName>` as Spark catalog for accessing YDB tables;
 * `spark.sql.catalog.<CatalogName>.url` should be set to YDB database URL;
 * `spark.sql.catalog.<CatalogName>.<Property>`, where `<Property>` is one of the supported configuration properties for
-YDB connector (see the reference below).
+YDB connector (see the [reference in the YDB documentation](https://ydb.tech/docs/en/integrations/ingestion/spark)).
 
 Spark SQL launch command example with `my_ydb` defined as the catalog name pointing to the local YDB docker container:
 
