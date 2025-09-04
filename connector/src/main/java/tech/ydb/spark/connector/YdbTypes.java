@@ -939,14 +939,14 @@ public final class YdbTypes implements Serializable {
                     if (dateAsString) {
                         row.update(i, UTF8String.fromString(vr.getDatetime().toString()));
                     } else {
-                        row.setLong(i, vr.getDatetime().toInstant(ZoneOffset.UTC).getEpochSecond());
+                        row.setLong(i, vr.getDatetime().toInstant(ZoneOffset.UTC).toEpochMilli() * 1000L);
                     }
                     break;
                 case Timestamp:
                     if (dateAsString) {
                         row.update(i, UTF8String.fromString(vr.getTimestamp().toString()));
                     } else {
-                        row.setLong(i, vr.getTimestamp().toEpochMilli());
+                        row.setLong(i, vr.getTimestamp().toEpochMilli() * 1000L);
                     }
                     break;
                 case Interval:
