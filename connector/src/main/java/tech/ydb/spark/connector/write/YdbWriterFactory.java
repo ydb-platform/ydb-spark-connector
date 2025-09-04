@@ -78,7 +78,7 @@ public class YdbWriterFactory implements DataWriterFactory {
 
         if (tableTypes.containsKey(autoPkName)) {
             FieldInfo fi = tableTypes.get(autoPkName);
-            if (fi.getType() != PrimitiveType.Text) {
+            if (fi.getSafeType() != PrimitiveType.Text) {
                 throw new IllegalArgumentException("Wrong type of autopk column "
                         + autoPkName + " -> " + fi.getType());
             }
