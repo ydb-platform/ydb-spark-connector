@@ -49,7 +49,7 @@ import tech.ydb.table.values.PrimitiveType;
 public class YdbTable implements Serializable, Table, SupportsRead, SupportsWrite, SupportsDelete,
         SupportsRowLevelOperations {
 
-    private static final long serialVersionUID = -7889575077751922731L;
+    private static final long serialVersionUID = 20250409001L;
 
     private static final Logger logger = LoggerFactory.getLogger(YdbTable.class);
 

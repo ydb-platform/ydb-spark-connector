@@ -11,6 +11,7 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.List;
 
 import com.google.common.primitives.UnsignedBytes;
@@ -44,7 +45,7 @@ import tech.ydb.table.values.Value;
  * @author zinal
  */
 public final class YdbTypes implements Serializable {
-    private static final long serialVersionUID = 7729504281996858720L;
+    private static final long serialVersionUID = 20250904001L;
 
     public static final DataType SPARK_DECIMAL = DataTypes.createDecimalType(38, 10);
     public static final DataType SPARK_UINT64 = DataTypes.createDecimalType(22, 0);
@@ -910,7 +911,7 @@ public final class YdbTypes implements Serializable {
     }
 
     public static class Bytes implements Comparable<Bytes>, Serializable {
-        private static final long serialVersionUID = 1L;
+        private static final long serialVersionUID = 20250904001L;
 
         private final byte[] data;
 
@@ -948,6 +949,14 @@ public final class YdbTypes implements Serializable {
             }
             final Bytes other = (Bytes) obj;
             return Arrays.equals(this.data, other.data);
+        }
+
+        @Override
+        public String toString() {
+            if (data == null) {
+                return "<null>";
+            }
+            return Base64.getEncoder().encodeToString(data);
         }
     }
 }

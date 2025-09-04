@@ -22,7 +22,8 @@ import tech.ydb.table.values.Value;
  * @author zinal
  */
 public class KeysRange implements Serializable {
-    private static final long serialVersionUID = 5756661733369903758L;
+    private static final long serialVersionUID = 20250904001L;
+
     public static final KeysRange UNRESTRICTED = new KeysRange(Limit.UNSTRICTED, Limit.UNSTRICTED);
     public static final KeysRange EMPTY = new KeysRange((Limit) null, (Limit) null);
 
