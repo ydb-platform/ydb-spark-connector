@@ -14,17 +14,19 @@ public class FieldInfo implements Serializable {
     private static final long serialVersionUID = -4901495186649569832L;
 
     private final String name;
-    private final FieldType type;
+    private final Type type;
     private final boolean nullable;
 
-    public FieldInfo(String name, FieldType type, boolean nullable) {
+    public FieldInfo(String name, Type type) {
         this.name = name;
+        this.nullable = (type.getKind() == Type.Kind.OPTIONAL);
         this.type = type;
-        this.nullable = nullable;
     }
 
     public FieldInfo(TableColumn tc) {
-        this(tc.getName(), FieldType.fromSdkType(tc.getType()), tc.getType().getKind() == Type.Kind.OPTIONAL);
+        this.name = tc.getName();
+        this.nullable = (tc.getType().getKind() == Type.Kind.OPTIONAL);
+        this.type = tc.getType();
     }
 
 
@@ -32,12 +34,15 @@ public class FieldInfo implements Serializable {
         return name;
     }
 
-    public FieldType getType() {
+    public Type getType() {
         return type;
     }
 
-    public Type toYdbType() {
-        return type.toSdkType(nullable);
+    public Type getSafeType() {
+        if (Type.Kind.OPTIONAL == type.getKind()) {
+            return type.unwrapOptional();
+        }
+        return type;
     }
 
     public boolean isNullable() {
@@ -46,6 +51,6 @@ public class FieldInfo implements Serializable {
 
     @Override
     public String toString() {
-        return name + ":" + type + (nullable ? "?" : "");
+        return name + ":" + type;
     }
 }

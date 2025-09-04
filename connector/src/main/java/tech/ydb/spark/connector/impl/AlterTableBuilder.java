@@ -10,12 +10,12 @@ import org.apache.spark.sql.connector.catalog.TableChange;
 
 import tech.ydb.spark.connector.YdbTypes;
 import tech.ydb.spark.connector.common.FieldInfo;
-import tech.ydb.spark.connector.common.FieldType;
 import tech.ydb.spark.connector.common.PartitionOption;
 import tech.ydb.table.description.TableColumn;
 import tech.ydb.table.description.TableDescription;
 import tech.ydb.table.settings.AlterTableSettings;
 import tech.ydb.table.settings.PartitioningSettings;
+import tech.ydb.table.values.Type;
 
 /**
  * Alter Table implementation.
@@ -42,9 +42,12 @@ public class AlterTableBuilder {
     }
 
     public void prepare(TableChange.AddColumn change) {
-        FieldType yft = types.mapTypeSpark2Ydb(change.dataType());
+        Type yft = types.mapTypeSpark2Ydb(change.dataType());
         if (null == yft) {
             throw new UnsupportedOperationException("Unsupported data type for column: " + change.dataType());
+        }
+        if (change.isNullable()) {
+            yft = yft.makeOptional();
         }
         if (change.fieldNames().length != 1) {
             String fieldName = Arrays.toString(change.fieldNames());
@@ -58,7 +61,7 @@ public class AlterTableBuilder {
         if (removeColumns.contains(fieldName)) {
             throw new UnsupportedOperationException("Attempt to add and drop the same column: " + fieldName);
         }
-        final FieldInfo yfi = new FieldInfo(fieldName, yft, change.isNullable());
+        final FieldInfo yfi = new FieldInfo(fieldName, yft);
         if (addColumns.put(fieldName, yfi) != null) {
             throw new UnsupportedOperationException("Duplicate column add operation: " + fieldName);
         }
@@ -102,10 +105,10 @@ public class AlterTableBuilder {
     public AlterTableSettings build() {
         AlterTableSettings settings = new AlterTableSettings();
         for (FieldInfo yfi : addColumns.values()) {
-            if (yfi.isNullable()) {
-                settings.addNullableColumn(yfi.getName(), yfi.getType().toSdkType(false));
+            if (yfi.getType().getKind() == Type.Kind.OPTIONAL) {
+                settings.addNullableColumn(yfi.getName(), yfi.getType().unwrapOptional());
             } else {
-                settings.addNonnullColumn(yfi.getName(), yfi.getType().toSdkType(false));
+                settings.addNonnullColumn(yfi.getName(), yfi.getType());
             }
         }
         for (String name : removeColumns) {

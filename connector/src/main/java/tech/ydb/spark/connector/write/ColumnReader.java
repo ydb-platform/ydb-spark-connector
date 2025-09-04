@@ -5,7 +5,7 @@ import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.types.DataType;
 
 import tech.ydb.spark.connector.YdbTypes;
-import tech.ydb.spark.connector.common.FieldType;
+import tech.ydb.table.values.Type;
 import tech.ydb.table.values.Value;
 
 /**
@@ -15,9 +15,9 @@ import tech.ydb.table.values.Value;
 public class ColumnReader implements ValueReader {
     private final int colIdx;
     private final DataType sparkType;
-    private final FieldType ydbType;
+    private final Type ydbType;
 
-    public ColumnReader(int colIdx, DataType sparkType, FieldType ydbType) {
+    public ColumnReader(int colIdx, DataType sparkType, Type ydbType) {
         this.colIdx = colIdx;
         this.sparkType = sparkType;
         this.ydbType = ydbType;
