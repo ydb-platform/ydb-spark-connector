@@ -18,11 +18,11 @@ import tech.ydb.core.Status;
 import tech.ydb.spark.connector.YdbTable;
 import tech.ydb.spark.connector.YdbTypes;
 import tech.ydb.spark.connector.common.FieldInfo;
-import tech.ydb.spark.connector.common.FieldType;
 import tech.ydb.spark.connector.common.IngestMethod;
 import tech.ydb.spark.connector.common.OperationOption;
 import tech.ydb.table.query.Params;
 import tech.ydb.table.values.ListValue;
+import tech.ydb.table.values.PrimitiveType;
 import tech.ydb.table.values.StructType;
 import tech.ydb.table.values.Type;
 
@@ -72,17 +72,18 @@ public class YdbWriterFactory implements DataWriterFactory {
                 throw new IllegalArgumentException("Cannot write column " + name + " to table " + table);
             }
             FieldInfo fi = tableTypes.get(name);
-            inputTypes.put(name, fi.toYdbType());
+            inputTypes.put(name, fi.getType());
             columnReadeds.put(name, new ColumnReader(idx++, sf.dataType(), fi.getType()));
         }
 
         if (tableTypes.containsKey(autoPkName)) {
             FieldInfo fi = tableTypes.get(autoPkName);
-            if (fi.getType() != FieldType.Text) {
-                throw new IllegalArgumentException("Wrong type of autopk column " + autoPkName + " -> " + fi.getType());
+            if (fi.getType() != PrimitiveType.Text) {
+                throw new IllegalArgumentException("Wrong type of autopk column "
+                        + autoPkName + " -> " + fi.getType());
             }
 
-            inputTypes.put(autoPkName, fi.toYdbType());
+            inputTypes.put(autoPkName, fi.getType());
             columnReadeds.put(autoPkName, new RandomReader());
         }
 

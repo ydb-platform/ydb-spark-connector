@@ -223,7 +223,7 @@ public class KeysRange implements Serializable {
         Serializable[] out = new Serializable[sz];
 
         for (int i = 0; i < sz; ++i) {
-            out[i] = types.convertFromYdb(tv.get(i));
+            out[i] = types.ydb2pojo(tv.get(i));
 
             if (out[i] == null) { // can reduce tuple until first null
                 Serializable[] reduced = new Serializable[i];

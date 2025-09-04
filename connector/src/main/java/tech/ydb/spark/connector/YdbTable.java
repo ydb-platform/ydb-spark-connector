@@ -28,7 +28,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import tech.ydb.spark.connector.common.FieldInfo;
-import tech.ydb.spark.connector.common.FieldType;
 import tech.ydb.spark.connector.common.KeysRange;
 import tech.ydb.spark.connector.common.OperationOption;
 import tech.ydb.spark.connector.common.PartitionOption;
@@ -40,6 +39,7 @@ import tech.ydb.table.description.KeyRange;
 import tech.ydb.table.description.TableColumn;
 import tech.ydb.table.description.TableDescription;
 import tech.ydb.table.settings.PartitioningSettings;
+import tech.ydb.table.values.PrimitiveType;
 
 /**
  * YDB table metadata representation for Spark.
@@ -292,7 +292,7 @@ public class YdbTable implements Serializable, Table, SupportsRead, SupportsWrit
 
         if (primaryKeys.isEmpty()) {
             String autoPkName = OperationOption.TABLE_PRIMARY_KEYS.read(options, OperationOption.DEFAULT_AUTO_PK);
-            fields.add(new FieldInfo(autoPkName, FieldType.Text, false));
+            fields.add(new FieldInfo(autoPkName, PrimitiveType.Text));
             primaryKeys.add(autoPkName);
         }
 
@@ -316,9 +316,9 @@ public class YdbTable implements Serializable, Table, SupportsRead, SupportsWrit
         // but we cannot use nullable type for primary keys in column-orientired tables
         for (FieldInfo field : fields) {
             if (tableType == Type.COLUMN && primaryKeys.contains(field.getName())) {
-                tdb.addNonnullColumn(field.getName(), field.getType().toSdkType());
+                tdb.addNonnullColumn(field.getName(), field.getType());
             } else {
-                tdb.addNullableColumn(field.getName(), field.getType().toSdkType());
+                tdb.addNullableColumn(field.getName(), field.getType());
             }
         }
         tdb.setPrimaryKeys(primaryKeys.toArray(new String[0]));
