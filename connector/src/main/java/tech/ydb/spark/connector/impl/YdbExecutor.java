@@ -6,6 +6,9 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import tech.ydb.common.transaction.TxMode;
 import tech.ydb.core.Issue;
 import tech.ydb.core.Result;
@@ -38,6 +41,9 @@ import tech.ydb.table.values.ListValue;
  * @author zinal
  */
 public class YdbExecutor implements AutoCloseable {
+
+    private static final Logger logger = LoggerFactory.getLogger(YdbExecutor.class);
+
     private final GrpcTransport transport;
     private final TableClient tableClient;
     private final QueryClient queryClient;
@@ -130,9 +136,12 @@ public class YdbExecutor implements AutoCloseable {
     }
 
     public boolean dropTable(String tablePath) {
-        return retryCtx.supplyStatus(session -> session.dropTable(tablePath))
-                .join()
-                .isSuccess();
+        Status status = retryCtx.supplyStatus(session -> session.dropTable(tablePath)).join();
+        if (status.isSuccess()) {
+            return true;
+        }
+        logger.warn("Cannot drop table {} - {}", tablePath, status);
+        return false;
     }
 
     public void renameTable(String path1, String path2) {
