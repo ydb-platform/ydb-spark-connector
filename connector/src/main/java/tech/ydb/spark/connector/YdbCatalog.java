@@ -217,7 +217,7 @@ public class YdbCatalog implements CatalogPlugin, TableCatalog, SupportsNamespac
             throw new UnsupportedOperationException("Cannot drop index table " + ident);
         }
 
-        final String tablePath = toPath(ident);
+        String tablePath = ctx.getExecutor().extractPath(toPath(ident));
         logger.debug("Dropping table {}", tablePath);
         return ctx.getExecutor().dropTable(tablePath);
     }
@@ -231,8 +231,8 @@ public class YdbCatalog implements CatalogPlugin, TableCatalog, SupportsNamespac
         if (newIdent.name().startsWith(INDEX_PREFIX)) {
             throw new UnsupportedOperationException("Cannot rename table to index " + newIdent);
         }
-        final String oldPath = toPath(oldIdent);
-        final String newPath = toPath(newIdent);
+        String oldPath =  ctx.getExecutor().extractPath(toPath(oldIdent));
+        String newPath = ctx.getExecutor().extractPath(toPath(newIdent));
         ctx.getExecutor().renameTable(oldPath, newPath);
     }
 
