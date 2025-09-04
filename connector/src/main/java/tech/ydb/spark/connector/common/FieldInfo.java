@@ -38,6 +38,13 @@ public class FieldInfo implements Serializable {
         return type;
     }
 
+    public Type getSafeType() {
+        if (Type.Kind.OPTIONAL == type.getKind()) {
+            return type.unwrapOptional();
+        }
+        return type;
+    }
+
     public boolean isNullable() {
         return nullable;
     }

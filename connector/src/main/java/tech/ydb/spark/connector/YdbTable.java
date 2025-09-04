@@ -316,9 +316,9 @@ public class YdbTable implements Serializable, Table, SupportsRead, SupportsWrit
         // but we cannot use nullable type for primary keys in column-orientired tables
         for (FieldInfo field : fields) {
             if (tableType == Type.COLUMN && primaryKeys.contains(field.getName())) {
-                tdb.addNonnullColumn(field.getName(), field.getType());
+                tdb.addNonnullColumn(field.getName(), field.getSafeType());
             } else {
-                tdb.addNullableColumn(field.getName(), field.getType());
+                tdb.addNullableColumn(field.getName(), field.getSafeType());
             }
         }
         tdb.setPrimaryKeys(primaryKeys.toArray(new String[0]));
