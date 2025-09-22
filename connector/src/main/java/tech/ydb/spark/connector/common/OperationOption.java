@@ -50,7 +50,17 @@ public enum OperationOption implements SparkOption {
     /**
      * YDB max batch rows for ingestion.
      */
-    BATCH_SIZE("batchsize"),
+    BATCH_ROWS("batch.rows"),
+
+    /**
+     * Limit for batch request size in bytes
+     */
+    BATCH_LIMIT("batch.sizelimit"),
+
+    /**
+     * Count of parallel batch requests per one writer
+     */
+    BATCH_CONCURRENCY("batch.concurrency"),
 
     /**
      * YDB table's primary key, as a comma-delimited list of column names.
