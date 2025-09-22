@@ -27,26 +27,34 @@ import tech.ydb.table.values.Value;
  * @author zinal
  */
 public abstract class YdbDataWriter implements DataWriter<InternalRow> {
+    static final int MAX_ROWS_COUNT = 10000;
+    static final int MAX_BYTES_SIZE = 10 * 1024 * 1024;
+    static final int CONCURRENCY = 2;
+
     private static final Logger logger = LoggerFactory.getLogger(YdbDataWriter.class);
 
     private final YdbTypes types;
     private final StructType structType;
     private final ValueReader[] readers;
 
-    private final int maxBatchSize;
+    private final int maxRowsCount;
+    private final int maxBytesSize;
     private final int maxConcurrency;
     private final Semaphore semaphore;
 
     private final Map<CompletableFuture<?>, CompletableFuture<?>> writesInFly = new ConcurrentHashMap<>();
     private List<Value<?>> currentBatch = new ArrayList<>();
+    private int currentBatchSize = 0;
     private volatile Status lastError = null;
 
-    public YdbDataWriter(YdbTypes types, StructType structType, ValueReader[] readers, int maxBatchSize) {
+    public YdbDataWriter(YdbTypes types, StructType structType, ValueReader[] readers,
+            int batchRowsCount, int batchBytesSize, int batchConcurrency) {
         this.types = types;
         this.structType = structType;
         this.readers = readers;
-        this.maxBatchSize = maxBatchSize;
-        this.maxConcurrency = 2;
+        this.maxRowsCount = batchRowsCount;
+        this.maxBytesSize = batchBytesSize;
+        this.maxConcurrency = batchConcurrency;
         this.semaphore = new Semaphore(maxConcurrency);
     }
 
@@ -62,10 +70,11 @@ public abstract class YdbDataWriter implements DataWriter<InternalRow> {
         Value<?>[] row = new Value<?>[readers.length];
         for (int idx = 0; idx < row.length; ++idx) {
             row[idx] = readers[idx].read(types, record);
+            currentBatchSize += row[idx].toPb().getSerializedSize();
         }
 
         currentBatch.add(structType.newValueUnsafe(row));
-        if (currentBatch.size() >= maxBatchSize) {
+        if (currentBatch.size() >= maxRowsCount || currentBatchSize >= maxBytesSize) {
             writeBatch();
         }
     }
@@ -98,6 +107,7 @@ public abstract class YdbDataWriter implements DataWriter<InternalRow> {
     }
 
     private void writeBatch() {
+        currentBatchSize = 0;
         if (currentBatch.isEmpty()) {
             return;
         }

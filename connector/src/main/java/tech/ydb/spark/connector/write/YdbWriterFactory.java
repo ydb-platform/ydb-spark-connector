@@ -40,13 +40,17 @@ public class YdbWriterFactory implements DataWriterFactory {
 
     private final IngestMethod method;
     private final String autoPkName;
-    private final int maxBatchSize;
+    private final int batchRowsCount;
+    private final int batchBytesLimit;
+    private final int batchConcurrency;
 
     public YdbWriterFactory(YdbTable table, LogicalWriteInfo logical, PhysicalWriteInfo physical) {
         this.table = table;
         this.types = new YdbTypes(logical.options());
         this.method = OperationOption.INGEST_METHOD.readEnum(logical.options(), IngestMethod.BULK_UPSERT);
-        this.maxBatchSize = OperationOption.BATCH_SIZE.readInt(logical.options(), 10000);
+        this.batchRowsCount = OperationOption.BATCH_ROWS.readInt(logical.options(), YdbDataWriter.MAX_ROWS_COUNT);
+        this.batchBytesLimit = OperationOption.BATCH_LIMIT.readInt(logical.options(), YdbDataWriter.MAX_BYTES_SIZE);
+        this.batchConcurrency = OperationOption.BATCH_CONCURRENCY.readInt(logical.options(), YdbDataWriter.CONCURRENCY);
         this.autoPkName = OperationOption.TABLE_AUTOPK_NAME.read(logical.options(), OperationOption.DEFAULT_AUTO_PK);
         this.schema = logical.schema();
     }
@@ -94,7 +98,7 @@ public class YdbWriterFactory implements DataWriterFactory {
         }
 
         if (method == IngestMethod.BULK_UPSERT) {
-            return new YdbDataWriter(types, structType, readers, maxBatchSize) {
+            return new YdbDataWriter(types, structType, readers, batchRowsCount, batchBytesLimit, batchConcurrency) {
                 @Override
                 CompletableFuture<Status> executeWrite(ListValue batch) {
                     return table.getCtx().getExecutor().executeBulkUpsert(table.getTablePath(), batch);
@@ -103,7 +107,7 @@ public class YdbWriterFactory implements DataWriterFactory {
         }
 
         String writeQuery = makeBatchSql(method.name(), table.getTablePath(), structType);
-        return new YdbDataWriter(types, structType, readers, maxBatchSize) {
+        return new YdbDataWriter(types, structType, readers, batchRowsCount, batchBytesLimit, batchConcurrency) {
             @Override
             CompletableFuture<Status> executeWrite(ListValue batch) {
                 return table.getCtx().getExecutor().executeDataQuery(writeQuery, Params.of("$input", batch));
