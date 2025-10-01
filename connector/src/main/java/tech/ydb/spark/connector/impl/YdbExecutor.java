@@ -77,6 +77,14 @@ public class YdbExecutor implements AutoCloseable {
         transport.close();
     }
 
+    public TableClient getTableClient() {
+        return tableClient;
+    }
+
+    public QueryClient getQueryClient() {
+        return queryClient;
+    }
+
     public String extractPath(String name) {
         if (name == null) {
             return transport.getDatabase();

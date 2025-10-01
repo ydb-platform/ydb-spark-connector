@@ -1,5 +1,6 @@
 package tech.ydb.spark.connector.write;
 
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -10,17 +11,23 @@ import org.apache.spark.sql.connector.write.DataWriterFactory;
 import org.apache.spark.sql.connector.write.LogicalWriteInfo;
 import org.apache.spark.sql.connector.write.PhysicalWriteInfo;
 import org.apache.spark.sql.types.StructField;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import scala.collection.Iterator;
 
+import tech.ydb.core.Result;
 import tech.ydb.core.Status;
 import tech.ydb.spark.connector.YdbTable;
 import tech.ydb.spark.connector.YdbTypes;
 import tech.ydb.spark.connector.common.FieldInfo;
 import tech.ydb.spark.connector.common.IngestMethod;
 import tech.ydb.spark.connector.common.OperationOption;
+import tech.ydb.table.SessionRetryContext;
 import tech.ydb.table.query.Params;
+import tech.ydb.table.settings.BulkUpsertSettings;
+import tech.ydb.table.settings.ExecuteDataQuerySettings;
+import tech.ydb.table.transaction.TxControl;
 import tech.ydb.table.values.ListValue;
 import tech.ydb.table.values.PrimitiveType;
 import tech.ydb.table.values.StructType;
@@ -43,6 +50,7 @@ public class YdbWriterFactory implements DataWriterFactory {
     private final int batchRowsCount;
     private final int batchBytesLimit;
     private final int batchConcurrency;
+    private final int retryCount;
 
     public YdbWriterFactory(YdbTable table, LogicalWriteInfo logical, PhysicalWriteInfo physical) {
         this.table = table;
@@ -52,6 +60,7 @@ public class YdbWriterFactory implements DataWriterFactory {
         this.batchBytesLimit = OperationOption.BATCH_LIMIT.readInt(logical.options(), YdbDataWriter.MAX_BYTES_SIZE);
         this.batchConcurrency = OperationOption.BATCH_CONCURRENCY.readInt(logical.options(), YdbDataWriter.CONCURRENCY);
         this.autoPkName = OperationOption.TABLE_AUTOPK_NAME.read(logical.options(), OperationOption.DEFAULT_AUTO_PK);
+        this.retryCount = OperationOption.WRITE_RETRY_COUNT.readInt(logical.options(), YdbDataWriter.WRITE_RETRY_COUNT);
         this.schema = logical.schema();
     }
 
@@ -98,19 +107,26 @@ public class YdbWriterFactory implements DataWriterFactory {
         }
 
         if (method == IngestMethod.BULK_UPSERT) {
-            return new YdbDataWriter(types, structType, readers, batchRowsCount, batchBytesLimit, batchConcurrency) {
+            return new AbstractWriter(structType, readers) {
+                final BulkUpsertSettings settings = new BulkUpsertSettings();
                 @Override
                 CompletableFuture<Status> executeWrite(ListValue batch) {
-                    return table.getCtx().getExecutor().executeBulkUpsert(table.getTablePath(), batch);
+                    return retryCtx.supplyStatus(s -> s.executeBulkUpsert(
+                            table.getTablePath(), batch, settings));
                 }
             };
         }
 
         String writeQuery = makeBatchSql(method.name(), table.getTablePath(), structType);
-        return new YdbDataWriter(types, structType, readers, batchRowsCount, batchBytesLimit, batchConcurrency) {
+        return new AbstractWriter(structType, readers) {
+            final ExecuteDataQuerySettings settings = new ExecuteDataQuerySettings();
             @Override
             CompletableFuture<Status> executeWrite(ListValue batch) {
-                return table.getCtx().getExecutor().executeDataQuery(writeQuery, Params.of("$input", batch));
+                Params params = Params.of("$input", batch);
+                return retryCtx.supplyStatus(
+                        s -> s.executeDataQuery(writeQuery, TxControl.serializableRw(), params, settings)
+                                .thenApply(Result::getStatus)
+                );
             }
         };
     }
@@ -128,5 +144,20 @@ public class YdbWriterFactory implements DataWriterFactory {
         sb.append(">>;\n");
         sb.append(command).append(" INTO `").append(tablePath).append("`  SELECT * FROM AS_TABLE($input);");
         return sb.toString();
+    }
+
+    abstract class AbstractWriter extends YdbDataWriter {
+
+        protected final SessionRetryContext retryCtx;
+
+        AbstractWriter(StructType structType, ValueReader[] readers) {
+            super(types, structType, readers, batchRowsCount, batchBytesLimit, batchConcurrency);
+            this.retryCtx = SessionRetryContext.create(table.getCtx().getExecutor().getTableClient())
+                .sessionCreationTimeout(Duration.ofMinutes(5))
+                .idempotent(true)
+                .maxRetries(retryCount)
+                .build();
+        }
+
     }
 }

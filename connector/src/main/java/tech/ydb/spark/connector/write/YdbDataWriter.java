@@ -30,6 +30,7 @@ public abstract class YdbDataWriter implements DataWriter<InternalRow> {
     static final int MAX_ROWS_COUNT = 10000;
     static final int MAX_BYTES_SIZE = 10 * 1024 * 1024;
     static final int CONCURRENCY = 2;
+    static final int WRITE_RETRY_COUNT = 10;
 
     private static final Logger logger = LoggerFactory.getLogger(YdbDataWriter.class);
 

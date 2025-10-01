@@ -8,9 +8,9 @@ package tech.ydb.spark.connector.common;
  */
 public enum OperationOption implements SparkOption {
     /**
-     * Use single partition for scanning each table, if true. Default false.
+     * Number of retries for atomic write operations. Default 10.
      */
-    SCAN_SINGLE("scan.single"),
+    WRITE_RETRY_COUNT("write.retry.count"),
 
     /**
      * Scan queue depth for each executor. Default 10, minimum 2.
