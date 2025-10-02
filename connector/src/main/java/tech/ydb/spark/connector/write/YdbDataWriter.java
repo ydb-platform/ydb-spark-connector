@@ -17,6 +17,8 @@ import org.slf4j.LoggerFactory;
 import tech.ydb.core.Status;
 import tech.ydb.core.StatusCode;
 import tech.ydb.spark.connector.YdbTypes;
+import tech.ydb.table.Session;
+import tech.ydb.table.SessionRetryContext;
 import tech.ydb.table.values.ListValue;
 import tech.ydb.table.values.StructType;
 import tech.ydb.table.values.Value;
@@ -30,9 +32,11 @@ public abstract class YdbDataWriter implements DataWriter<InternalRow> {
     static final int MAX_ROWS_COUNT = 10000;
     static final int MAX_BYTES_SIZE = 10 * 1024 * 1024;
     static final int CONCURRENCY = 2;
+    static final int WRITE_RETRY_COUNT = 10;
 
     private static final Logger logger = LoggerFactory.getLogger(YdbDataWriter.class);
 
+    private final SessionRetryContext retryCtx;
     private final YdbTypes types;
     private final StructType structType;
     private final ValueReader[] readers;
@@ -47,8 +51,9 @@ public abstract class YdbDataWriter implements DataWriter<InternalRow> {
     private int currentBatchSize = 0;
     private volatile Status lastError = null;
 
-    public YdbDataWriter(YdbTypes types, StructType structType, ValueReader[] readers,
+    public YdbDataWriter(SessionRetryContext retryCtx, YdbTypes types, StructType structType, ValueReader[] readers,
             int batchRowsCount, int batchBytesSize, int batchConcurrency) {
+        this.retryCtx = retryCtx;
         this.types = types;
         this.structType = structType;
         this.readers = readers;
@@ -58,7 +63,7 @@ public abstract class YdbDataWriter implements DataWriter<InternalRow> {
         this.semaphore = new Semaphore(maxConcurrency);
     }
 
-    abstract CompletableFuture<Status> executeWrite(ListValue batch);
+    abstract CompletableFuture<Status> executeWrite(Session session, ListValue batch);
 
     @Override
     public void write(InternalRow record) throws IOException {
@@ -121,7 +126,8 @@ public abstract class YdbDataWriter implements DataWriter<InternalRow> {
             return;
         }
 
-        CompletableFuture<Status> future = executeWrite(ListValue.of(copy));
+        ListValue batch = ListValue.of(copy);
+        CompletableFuture<Status> future = retryCtx.supplyStatus(session -> executeWrite(session, batch));
         writesInFly.put(future, future);
 
         future.whenComplete((st, th) -> {

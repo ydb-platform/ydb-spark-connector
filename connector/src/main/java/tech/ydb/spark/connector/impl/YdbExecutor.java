@@ -25,13 +25,11 @@ import tech.ydb.table.Session;
 import tech.ydb.table.SessionRetryContext;
 import tech.ydb.table.TableClient;
 import tech.ydb.table.description.TableDescription;
-import tech.ydb.table.query.Params;
 import tech.ydb.table.result.ResultSetReader;
 import tech.ydb.table.settings.AlterTableSettings;
 import tech.ydb.table.settings.BulkUpsertSettings;
 import tech.ydb.table.settings.CreateTableSettings;
 import tech.ydb.table.settings.DescribeTableSettings;
-import tech.ydb.table.transaction.TxControl;
 import tech.ydb.table.values.ListValue;
 
 /**
@@ -88,15 +86,17 @@ public class YdbExecutor implements AutoCloseable {
         return transport.getDatabase() + "/" + name;
     }
 
+    public SessionRetryContext createRetryCtx(int retryCount, boolean idempotent) {
+        return SessionRetryContext.create(tableClient)
+                .sessionCreationTimeout(Duration.ofMinutes(5))
+                .idempotent(idempotent)
+                .maxRetries(retryCount)
+                .build();
+    }
+
     public CompletableFuture<Status> executeBulkUpsert(String tablePath, ListValue batch) {
         BulkUpsertSettings settings = new BulkUpsertSettings();
         return retryCtx.supplyStatus(s -> s.executeBulkUpsert(tablePath, batch, settings));
-    }
-
-    public CompletableFuture<Status> executeDataQuery(String query, Params params) {
-        return retryCtx.supplyStatus(
-                s -> s.executeDataQuery(query, TxControl.serializableRw(), params).thenApply(Result::getStatus)
-        );
     }
 
     public CompletableFuture<Status> executeSchemeQuery(String query) {

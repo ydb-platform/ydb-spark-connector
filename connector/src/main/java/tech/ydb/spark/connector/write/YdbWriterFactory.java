@@ -14,13 +14,19 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import scala.collection.Iterator;
 
+import tech.ydb.core.Result;
 import tech.ydb.core.Status;
 import tech.ydb.spark.connector.YdbTable;
 import tech.ydb.spark.connector.YdbTypes;
 import tech.ydb.spark.connector.common.FieldInfo;
 import tech.ydb.spark.connector.common.IngestMethod;
 import tech.ydb.spark.connector.common.OperationOption;
+import tech.ydb.table.Session;
+import tech.ydb.table.SessionRetryContext;
 import tech.ydb.table.query.Params;
+import tech.ydb.table.settings.BulkUpsertSettings;
+import tech.ydb.table.settings.ExecuteDataQuerySettings;
+import tech.ydb.table.transaction.TxControl;
 import tech.ydb.table.values.ListValue;
 import tech.ydb.table.values.PrimitiveType;
 import tech.ydb.table.values.StructType;
@@ -43,6 +49,7 @@ public class YdbWriterFactory implements DataWriterFactory {
     private final int batchRowsCount;
     private final int batchBytesLimit;
     private final int batchConcurrency;
+    private final int retryCount;
 
     public YdbWriterFactory(YdbTable table, LogicalWriteInfo logical, PhysicalWriteInfo physical) {
         this.table = table;
@@ -52,6 +59,7 @@ public class YdbWriterFactory implements DataWriterFactory {
         this.batchBytesLimit = OperationOption.BATCH_LIMIT.readInt(logical.options(), YdbDataWriter.MAX_BYTES_SIZE);
         this.batchConcurrency = OperationOption.BATCH_CONCURRENCY.readInt(logical.options(), YdbDataWriter.CONCURRENCY);
         this.autoPkName = OperationOption.TABLE_AUTOPK_NAME.read(logical.options(), OperationOption.DEFAULT_AUTO_PK);
+        this.retryCount = OperationOption.WRITE_RETRY_COUNT.readInt(logical.options(), YdbDataWriter.WRITE_RETRY_COUNT);
         this.schema = logical.schema();
     }
 
@@ -97,20 +105,31 @@ public class YdbWriterFactory implements DataWriterFactory {
             readers[idx] = columnReadeds.get(structType.getMemberName(idx));
         }
 
+        boolean idempotent = method != IngestMethod.INSERT;
+        SessionRetryContext retryCtx = table.getCtx().getExecutor().createRetryCtx(retryCount, idempotent);
+
         if (method == IngestMethod.BULK_UPSERT) {
-            return new YdbDataWriter(types, structType, readers, batchRowsCount, batchBytesLimit, batchConcurrency) {
+            return new YdbDataWriter(retryCtx, types, structType, readers, batchRowsCount, batchBytesLimit,
+                    batchConcurrency) {
+                private final BulkUpsertSettings settings = new BulkUpsertSettings();
+
                 @Override
-                CompletableFuture<Status> executeWrite(ListValue batch) {
-                    return table.getCtx().getExecutor().executeBulkUpsert(table.getTablePath(), batch);
+                CompletableFuture<Status> executeWrite(Session session, ListValue batch) {
+                    return session.executeBulkUpsert(table.getTablePath(), batch, settings);
                 }
             };
         }
 
-        String writeQuery = makeBatchSql(method.name(), table.getTablePath(), structType);
-        return new YdbDataWriter(types, structType, readers, batchRowsCount, batchBytesLimit, batchConcurrency) {
+        return new YdbDataWriter(retryCtx, types, structType, readers, batchRowsCount, batchBytesLimit,
+                batchConcurrency) {
+            private final String query = makeBatchSql(method.name(), table.getTablePath(), structType);
+            private final ExecuteDataQuerySettings settings = new ExecuteDataQuerySettings();
+
             @Override
-            CompletableFuture<Status> executeWrite(ListValue batch) {
-                return table.getCtx().getExecutor().executeDataQuery(writeQuery, Params.of("$input", batch));
+            CompletableFuture<Status> executeWrite(Session session, ListValue batch) {
+                Params prms = Params.of("$input", batch);
+                return session.executeDataQuery(query, TxControl.serializableRw(), prms, settings)
+                        .thenApply(Result::getStatus);
             }
         };
     }

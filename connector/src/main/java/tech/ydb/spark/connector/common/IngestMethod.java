@@ -8,5 +8,6 @@ package tech.ydb.spark.connector.common;
 public enum IngestMethod {
     UPSERT,
     REPLACE,
+    INSERT,
     BULK_UPSERT;
 }
