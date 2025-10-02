@@ -1,6 +1,5 @@
 package tech.ydb.spark.connector.write;
 
-import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -22,6 +21,7 @@ import tech.ydb.spark.connector.YdbTypes;
 import tech.ydb.spark.connector.common.FieldInfo;
 import tech.ydb.spark.connector.common.IngestMethod;
 import tech.ydb.spark.connector.common.OperationOption;
+import tech.ydb.table.Session;
 import tech.ydb.table.SessionRetryContext;
 import tech.ydb.table.query.Params;
 import tech.ydb.table.settings.BulkUpsertSettings;
@@ -105,27 +105,31 @@ public class YdbWriterFactory implements DataWriterFactory {
             readers[idx] = columnReadeds.get(structType.getMemberName(idx));
         }
 
+        boolean idempotent = method != IngestMethod.INSERT;
+        SessionRetryContext retryCtx = table.getCtx().getExecutor().createRetryCtx(retryCount, idempotent);
+
         if (method == IngestMethod.BULK_UPSERT) {
-            return new AbstractWriter(structType, readers) {
-                final BulkUpsertSettings settings = new BulkUpsertSettings();
+            return new YdbDataWriter(retryCtx, types, structType, readers, batchRowsCount, batchBytesLimit,
+                    batchConcurrency) {
+                private final BulkUpsertSettings settings = new BulkUpsertSettings();
+
                 @Override
-                CompletableFuture<Status> executeWrite(ListValue batch) {
-                    return retryCtx.supplyStatus(s -> s.executeBulkUpsert(
-                            table.getTablePath(), batch, settings));
+                CompletableFuture<Status> executeWrite(Session session, ListValue batch) {
+                    return session.executeBulkUpsert(table.getTablePath(), batch, settings);
                 }
             };
         }
 
-        String writeQuery = makeBatchSql(method.name(), table.getTablePath(), structType);
-        return new AbstractWriter(structType, readers) {
-            final ExecuteDataQuerySettings settings = new ExecuteDataQuerySettings();
+        return new YdbDataWriter(retryCtx, types, structType, readers, batchRowsCount, batchBytesLimit,
+                batchConcurrency) {
+            private final String query = makeBatchSql(method.name(), table.getTablePath(), structType);
+            private final ExecuteDataQuerySettings settings = new ExecuteDataQuerySettings();
+
             @Override
-            CompletableFuture<Status> executeWrite(ListValue batch) {
-                Params params = Params.of("$input", batch);
-                return retryCtx.supplyStatus(
-                        s -> s.executeDataQuery(writeQuery, TxControl.serializableRw(), params, settings)
-                                .thenApply(Result::getStatus)
-                );
+            CompletableFuture<Status> executeWrite(Session session, ListValue batch) {
+                Params prms = Params.of("$input", batch);
+                return session.executeDataQuery(query, TxControl.serializableRw(), prms, settings)
+                        .thenApply(Result::getStatus);
             }
         };
     }
@@ -143,20 +147,5 @@ public class YdbWriterFactory implements DataWriterFactory {
         sb.append(">>;\n");
         sb.append(command).append(" INTO `").append(tablePath).append("`  SELECT * FROM AS_TABLE($input);");
         return sb.toString();
-    }
-
-    abstract class AbstractWriter extends YdbDataWriter {
-
-        protected final SessionRetryContext retryCtx;
-
-        AbstractWriter(StructType structType, ValueReader[] readers) {
-            super(types, structType, readers, batchRowsCount, batchBytesLimit, batchConcurrency);
-            this.retryCtx = SessionRetryContext.create(table.getCtx().getExecutor().getTableClient())
-                .sessionCreationTimeout(Duration.ofMinutes(5))
-                .idempotent(true)
-                .maxRetries(retryCount)
-                .build();
-        }
-
     }
 }
