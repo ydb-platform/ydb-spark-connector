@@ -36,6 +36,7 @@ import tech.ydb.table.TableClient;
  * @author Aleksandr Gorshenin
  */
 public class YdbContext implements Serializable, AutoCloseable {
+
     private static final Logger logger = LoggerFactory.getLogger(YdbContext.class);
 
     private static final long serialVersionUID = 6522842483896983993L;
@@ -64,7 +65,7 @@ public class YdbContext implements Serializable, AutoCloseable {
 
     public YdbContext(Map<String, String> options) {
         this.connectionString = ConnectionOption.URL.read(options);
-        if (connectionString  == null || this.connectionString .trim().isEmpty()) {
+        if (connectionString == null || this.connectionString.trim().isEmpty()) {
             throw new IllegalArgumentException("Incorrect value for property " + ConnectionOption.URL);
         }
 
@@ -93,7 +94,7 @@ public class YdbContext implements Serializable, AutoCloseable {
     @Override
     public int hashCode() {
         return Objects.hash(
-                connectionString, caCertBytes, useMetadata, useEnv, token, saKey, username, password, sessionPoolSize
+                connectionString, useMetadata, useEnv, token, saKey, username, password, sessionPoolSize
         );
     }
 
@@ -110,15 +111,15 @@ public class YdbContext implements Serializable, AutoCloseable {
         }
 
         YdbContext o = (YdbContext) other;
-        return Objects.equals(connectionString, o.connectionString) &&
-                Arrays.equals(caCertBytes, o.caCertBytes) &&
-                Objects.equals(token, o.token) &&
-                Objects.equals(saKey, o.saKey) &&
-                Objects.equals(username, o.username) &&
-                Objects.equals(password, o.password) &&
-                useMetadata == o.useMetadata &&
-                useEnv == o.useEnv &&
-                sessionPoolSize == sessionPoolSize;
+        return Objects.equals(connectionString, o.connectionString)
+                && Arrays.equals(caCertBytes, o.caCertBytes)
+                && Objects.equals(token, o.token)
+                && Objects.equals(saKey, o.saKey)
+                && Objects.equals(username, o.username)
+                && Objects.equals(password, o.password)
+                && useMetadata == o.useMetadata
+                && useEnv == o.useEnv
+                && sessionPoolSize == sessionPoolSize;
     }
 
     @Override
@@ -172,7 +173,7 @@ public class YdbContext implements Serializable, AutoCloseable {
             return CloudAuthHelper.getMetadataAuthProvider();
         }
 
-        if (token != null && !token.trim().isEmpty())  {
+        if (token != null && !token.trim().isEmpty()) {
             return new TokenAuthProvider(token.trim());
         }
 
