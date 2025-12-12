@@ -75,6 +75,7 @@ abstract class StreamReader implements PartitionReader<InternalRow> {
     }
 
     protected void onNextPart(ResultSetReader reader) {
+        readedRows.addAndGet(reader.getRowCount());
         queue.add(new QueueItem(reader));
     }
 
