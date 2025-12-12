@@ -95,8 +95,12 @@ public enum OperationOption implements SparkOption {
     /**
      * YDB table's truncate option when writing to the existing table.
      */
-    TABLE_TRUNCATE("table.truncate");
+    TABLE_TRUNCATE("table.truncate"),
 
+    PUSHDOWN_PREDICATE("pushDownPredicate"),
+    PUSHDOWN_AGGREGATE("pushDownAggregate"),
+    PUSHDOWN_LIMIT("pushDownLimit"),
+    PUSHDOWN_OFFSET("pushDownOffset");
 
     public static final String DEFAULT_AUTO_PK = "_spark_key";
 

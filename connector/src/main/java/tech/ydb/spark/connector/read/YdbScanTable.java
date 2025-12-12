@@ -34,6 +34,7 @@ import tech.ydb.query.settings.ExecuteQuerySettings;
 import tech.ydb.spark.connector.YdbTable;
 import tech.ydb.spark.connector.YdbTypes;
 import tech.ydb.spark.connector.common.KeysRange;
+import tech.ydb.spark.connector.common.OperationOption;
 import tech.ydb.table.query.Params;
 
 /**
@@ -51,6 +52,11 @@ public class YdbScanTable implements Batch, Scan, ScanBuilder, SupportsReportPar
     private final YdbTypes types;
     private final int queueMaxSize;
 
+    private final boolean pushDownPredicate;
+//    private final boolean pushDownAggregate;
+    private final boolean pushDownLimit;
+//    private final boolean pushDownOffset;
+
     private StructType readSchema;
 
     public YdbScanTable(YdbTable table, CaseInsensitiveStringMap options) {
@@ -60,6 +66,11 @@ public class YdbScanTable implements Batch, Scan, ScanBuilder, SupportsReportPar
 
         this.queueMaxSize = StreamReader.readQueueMaxSize(options);
         this.readSchema = table.schema();
+
+        this.pushDownPredicate = OperationOption.PUSHDOWN_PREDICATE.readBoolean(options, true);
+//        this.pushDownAggregate = OperationOption.PUSHDOWN_AGGREGATE.readBoolean(options, true);
+        this.pushDownLimit = OperationOption.PUSHDOWN_LIMIT.readBoolean(options, true);
+//        this.pushDownOffset = OperationOption.PUSHDOWN_OFFSET.readBoolean(options, true);
     }
 
     @Override
@@ -91,7 +102,17 @@ public class YdbScanTable implements Batch, Scan, ScanBuilder, SupportsReportPar
     @Override
     public Predicate[] pushPredicates(Predicate[] predicates) {
         logger.debug("push predicates {}", Arrays.toString(predicates));
-        return predicates; // all predicates should be re-checked
+
+        if (pushDownPredicate) {
+            YqlExpressionBuilder yql = new YqlExpressionBuilder();
+            for (Predicate p: predicates) {
+                String filter = yql.build(p);
+                if (!filter.isEmpty()) {
+                    query.addExpression("(" + filter + ")");
+                }
+            }
+        }
+        return predicates;
     }
 
     @Override
@@ -120,7 +141,9 @@ public class YdbScanTable implements Batch, Scan, ScanBuilder, SupportsReportPar
     @Override
     public boolean pushLimit(int limit) {
         logger.debug("push limit {}", limit);
-        query.withRowLimit(limit);
+        if (pushDownLimit) {
+            query.withRowLimit(limit);
+        }
         return false; // limit should be re-applied
     }
 
