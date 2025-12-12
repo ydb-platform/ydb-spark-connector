@@ -25,11 +25,13 @@ import tech.ydb.table.Session;
 import tech.ydb.table.SessionRetryContext;
 import tech.ydb.table.TableClient;
 import tech.ydb.table.description.TableDescription;
+import tech.ydb.table.query.DataQueryResult;
 import tech.ydb.table.result.ResultSetReader;
 import tech.ydb.table.settings.AlterTableSettings;
 import tech.ydb.table.settings.BulkUpsertSettings;
 import tech.ydb.table.settings.CreateTableSettings;
 import tech.ydb.table.settings.DescribeTableSettings;
+import tech.ydb.table.transaction.TxControl;
 import tech.ydb.table.values.ListValue;
 
 /**
@@ -192,6 +194,24 @@ public class YdbExecutor implements AutoCloseable {
 
         result.getStatus().expectSuccess("Cannot describe directory " + path);
         return result.getValue();
+    }
+
+    public ResultSetReader describeQuery(String query) {
+        String describeQuery = QueryParser.describeYQL(query);
+
+        if (describeQuery == null) {
+            return null;
+        }
+
+        Result<DataQueryResult> result = retryCtx
+                .supplyResult(session -> session.executeDataQuery(describeQuery, TxControl.snapshotRo()))
+                .join();
+
+        if (!result.getStatus().isSuccess()) {
+            return null;
+        }
+
+        return result.getValue().getResultSet(0);
     }
 
     public boolean removeDirectory(String path) {

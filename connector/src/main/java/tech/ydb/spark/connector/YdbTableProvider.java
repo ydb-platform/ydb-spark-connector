@@ -8,11 +8,13 @@ import org.apache.spark.sql.connector.catalog.TableProvider;
 import org.apache.spark.sql.connector.expressions.Expressions;
 import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.sources.DataSourceRegister;
+import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 import tech.ydb.spark.connector.common.OperationOption;
 import tech.ydb.table.description.TableDescription;
+import tech.ydb.table.result.ResultSetReader;
 
 /**
  * YDB table provider. Registered under the "ydb" name via the following file:
@@ -53,6 +55,15 @@ public class YdbTableProvider implements TableProvider, DataSourceRegister {
         YdbContext ctx = new YdbContext(options);
         YdbTypes types = new YdbTypes(options);
 
+        String query = OperationOption.DBQUERY.read(options);
+        if (query != null && !query.trim().isEmpty()) {
+            ResultSetReader rs = ctx.getExecutor().describeQuery(query.trim());
+            if (rs == null) {
+                return new StructType(new StructField[0]);
+            }
+            return types.toSparkSchema(rs);
+        }
+
         String tableName = exractTableName(options);
         String tablePath = ctx.getExecutor().extractPath(tableName);
         TableDescription td =  ctx.getExecutor().describeTable(tablePath, false);
@@ -65,6 +76,11 @@ public class YdbTableProvider implements TableProvider, DataSourceRegister {
     @Override
     public Transform[] inferPartitioning(CaseInsensitiveStringMap options) {
         YdbContext ctx = new YdbContext(options);
+
+        String query = OperationOption.DBQUERY.read(options);
+        if (query != null && !query.trim().isEmpty()) {
+            return new Transform[0];
+        }
 
         String tableName = exractTableName(options);
         String tablePath = ctx.getExecutor().extractPath(tableName);
@@ -91,8 +107,13 @@ public class YdbTableProvider implements TableProvider, DataSourceRegister {
         CaseInsensitiveStringMap options = new CaseInsensitiveStringMap(properties);
 
         YdbContext ctx = new YdbContext(options);
-        YdbTypes types = new YdbTypes(options);
 
+        String query = OperationOption.DBQUERY.read(options);
+        if (query != null && !query.trim().isEmpty()) {
+            return getQueryTable(ctx, schema, query.trim());
+        }
+
+        YdbTypes types = new YdbTypes(options);
         String tableName = exractTableName(options);
         String tablePath = ctx.getExecutor().extractPath(tableName);
         TableDescription td =  ctx.getExecutor().describeTable(tablePath, true);
@@ -108,5 +129,9 @@ public class YdbTableProvider implements TableProvider, DataSourceRegister {
         }
 
         return new YdbTable(ctx, types, tableName, tablePath, td);
+    }
+
+    private Table getQueryTable(YdbContext ctx, StructType schema, String query) {
+        return new YdbQueryTable(ctx, query, schema);
     }
 }
