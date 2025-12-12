@@ -195,4 +195,50 @@ public class PredicatesTest {
         Row r3 = readYdb().option("query", "SELECT * FROM column_table ORDER BY step DESC LIMIT 1").load().first();
         Assert.assertEquals(Long.valueOf(327), r3.getAs("sv"));
     }
+
+    @Test
+    public void pushDownPredicateTest() {
+        long c1 = readYdb().option("pushDownPredicate", "true").load("row_table1").filter("step > 115").count();
+        long c2 = readYdb().option("pushDownPredicate", "false").load("row_table1").filter("step > 115").count();
+        Assert.assertEquals(c1, c2);
+
+        long c3 = readYdb().option("pushDownPredicate", "true").load("row_table2").filter("sv = 97").count();
+        long c4 = readYdb().option("pushDownPredicate", "false").load("row_table2").filter("sv = 97").count();
+        Assert.assertEquals(c3, c4);
+
+        long c5 = readYdb().option("pushDownPredicate", "true").load("column_table")
+                .filter("step > 120").filter("sv < 200 OR sv > 300").count();
+        long c6 = readYdb().option("pushDownPredicate", "false").load("column_table")
+                .filter("step > 120").filter("sv < 200 OR sv > 300").count();
+        Assert.assertEquals(c5, c6);
+
+        Assert.assertEquals(3, c1);
+        Assert.assertEquals(3, c2);
+        Assert.assertEquals(119, c3);
+        Assert.assertEquals(119, c4);
+        Assert.assertEquals(192, c5);
+        Assert.assertEquals(192, c6);
+    }
+
+    @Test
+    public void pushDownLimitTest() {
+        long c1 = readYdb().option("pushDownLimit", "true").load("row_table1").limit(10).count();
+        long c2 = readYdb().option("pushDownLimit", "false").load("row_table1").limit(10).count();
+        Assert.assertEquals(c1, c2);
+
+        long c3 = readYdb().option("pushDownLimit", "true").load("row_table2").limit(10).count();
+        long c4 = readYdb().option("pushDownLimit", "false").load("row_table2").limit(10).count();
+        Assert.assertEquals(c3, c4);
+
+        long c5 = readYdb().option("pushDownLimit", "true").load("column_table").limit(100).count();
+        long c6 = readYdb().option("pushDownLimit", "false").load("column_table").limit(100).count();
+        Assert.assertEquals(c5, c6);
+
+        Assert.assertEquals(10, c1);
+        Assert.assertEquals(10, c2);
+        Assert.assertEquals(10, c3);
+        Assert.assertEquals(10, c4);
+        Assert.assertEquals(100, c5);
+        Assert.assertEquals(100, c6);
+    }
 }

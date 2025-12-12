@@ -115,15 +115,15 @@ public class SelectQuery implements Serializable {
         }
         sb.append(" FROM `").append(tableName).append("`");
 
+        if (withExpression != null) {
+            sb.append(" WITH ").append(withExpression);
+        }
+
         String eDep = " WHERE ";
         for (String exp: expressions) {
             sb.append(eDep);
             sb.append(exp);
             eDep = " AND ";
-        }
-
-        if (withExpression != null) {
-            sb.append(" WITH ").append(withExpression);
         }
 
         if (rowLimit > 0) {
