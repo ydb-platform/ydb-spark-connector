@@ -38,6 +38,11 @@ public enum OperationOption implements SparkOption {
     DBTABLE("dbtable"),
 
     /**
+     * YQL query text for executing
+     */
+    DBQUERY("query"),
+
+    /**
      * YDB data ingestion method: upsert/replace/bulk.
      */
     INGEST_METHOD("method"),

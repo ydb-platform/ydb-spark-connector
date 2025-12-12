@@ -29,6 +29,7 @@ import org.apache.spark.unsafe.types.UTF8String;
 import tech.ydb.spark.connector.common.FieldInfo;
 import tech.ydb.spark.connector.common.OperationOption;
 import tech.ydb.table.description.TableColumn;
+import tech.ydb.table.result.ResultSetReader;
 import tech.ydb.table.result.ValueReader;
 import tech.ydb.table.values.DecimalType;
 import tech.ydb.table.values.DecimalValue;
@@ -90,6 +91,19 @@ public final class YdbTypes implements Serializable {
             DataType dataType = mapTypeYdb2Spark(tc.getType());
             if (dataType != null) {
                 fields.add(new StructField(tc.getName(), dataType, mapNullable(tc.getType()), Metadata.empty()));
+            }
+        }
+        return new StructType(fields.toArray(new StructField[0]));
+    }
+
+    public StructType toSparkSchema(ResultSetReader rs) {
+        final List<StructField> fields = new ArrayList<>();
+        for (int idx = 0; idx < rs.getColumnCount(); idx += 1) {
+            String name = rs.getColumnName(idx);
+            Type type = rs.getColumnType(idx);
+            DataType dataType = mapTypeYdb2Spark(type);
+            if (dataType != null) {
+                fields.add(new StructField(name, dataType, mapNullable(type), Metadata.empty()));
             }
         }
         return new StructType(fields.toArray(new StructField[0]));
