@@ -97,6 +97,9 @@ public enum OperationOption implements SparkOption {
      */
     TABLE_TRUNCATE("table.truncate"),
 
+    TABLE_USE_SIGNED_DATETYPES("table.useSignedDatetypes"),
+
+
     PUSHDOWN_PREDICATE("pushDownPredicate"),
     PUSHDOWN_AGGREGATE("pushDownAggregate"),
     PUSHDOWN_LIMIT("pushDownLimit"),
