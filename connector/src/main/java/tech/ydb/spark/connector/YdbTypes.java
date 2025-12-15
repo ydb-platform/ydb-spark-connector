@@ -52,9 +52,11 @@ public final class YdbTypes implements Serializable {
     public static final DataType SPARK_UINT64 = DataTypes.createDecimalType(22, 0);
 
     private final boolean dateAsString;
+    private final boolean useSignedDatetypes;
 
     public YdbTypes(CaseInsensitiveStringMap options) {
         this.dateAsString = OperationOption.DATE_AS_STRING.readBoolean(options, false);
+        this.useSignedDatetypes = OperationOption.TABLE_USE_SIGNED_DATETYPES.readBoolean(options, false);
     }
 
     private boolean mapNullable(tech.ydb.table.values.Type yt) {
@@ -259,13 +261,13 @@ public final class YdbTypes implements Serializable {
             return PrimitiveType.Text;
         }
         if (DataTypes.DateType.sameType(type)) {
-            return PrimitiveType.Date;
+            return useSignedDatetypes ? PrimitiveType.Date32 : PrimitiveType.Date;
         }
         if (DataTypes.TimestampType.sameType(type)) {
-            return PrimitiveType.Timestamp;
+            return useSignedDatetypes ? PrimitiveType.Timestamp64 : PrimitiveType.Timestamp;
         }
         if (DataTypes.CalendarIntervalType.sameType(type)) {
-            return PrimitiveType.Interval;
+            return useSignedDatetypes ? PrimitiveType.Interval64 : PrimitiveType.Interval;
         }
         return null;
     }
