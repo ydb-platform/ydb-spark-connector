@@ -239,6 +239,27 @@ public class PredicatesTest {
         );
     }
 
+    @Test
+    public void pushDownLikeTest() {
+        DataFrameReader pushOn = readYdb().option("pushDownLimit", "true");
+        DataFrameReader pushOff = readYdb().option("pushDownLimit", "false");
+
+        assertDfEquals("Like startsWith", 14,
+                pushOn.load("row_table1").filter("hash LIKE '00%'").orderBy("hash"),
+                pushOff.load("row_table1").filter("hash LIKE '00%'").orderBy("hash")
+        );
+
+        assertDfEquals("Like endsWith", 15,
+                pushOn.load("row_table2").filter("hash LIKE '%ff'").orderBy("hash"),
+                pushOff.load("row_table2").filter("hash LIKE '%ff'").orderBy("hash")
+        );
+
+        assertDfEquals("Like contains", 9,
+                pushOn.load("column_table").filter("hash LIKE '%dead%'").orderBy("hash"),
+                pushOff.load("column_table").filter("hash LIKE '%dead%'").orderBy("hash")
+        );
+    }
+
     private void assertDfEquals(String message, int totalCount, Dataset<Row> ds1, Dataset<Row> ds2) {
         try {
             StructType schema = ds1.schema();
