@@ -11,8 +11,6 @@ import org.apache.spark.sql.connector.read.Scan;
 import org.apache.spark.sql.connector.read.ScanBuilder;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import tech.ydb.common.transaction.TxMode;
 import tech.ydb.core.Result;
@@ -29,7 +27,6 @@ import tech.ydb.table.query.Params;
  * @author zinal
  */
 public class YdbQueryScan implements Scan, Batch, ScanBuilder, PartitionReaderFactory {
-    private static final Logger logger = LoggerFactory.getLogger(YdbReadTable.class);
     private static final long serialVersionUID = 9149595384600250661L;
 
     private final YdbQueryTable query;
@@ -87,8 +84,6 @@ public class YdbQueryScan implements Scan, Batch, ScanBuilder, PartitionReaderFa
             if (!session.isSuccess()) {
                 onComplete(session.getStatus(), null);
             }
-
-            logger.debug("execute YQL [{}]", yql);
 
             ExecuteQuerySettings settings = ExecuteQuerySettings.newBuilder()
                     .withGrpcFlowControl(flowControl)

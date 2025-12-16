@@ -71,7 +71,7 @@ abstract class StreamReader implements PartitionReader<InternalRow> {
             finishStatus = Status.of(StatusCode.CLIENT_INTERNAL_ERROR, th);
         }
         COUNTER.decrementAndGet();
-        logger.info("[{}] got {} rows in {} ms", id, readedRows.get(), ms);
+        logger.debug("[{}] got {} rows in {} ms", id, readedRows.get(), ms);
     }
 
     protected void onNextPart(ResultSetReader reader) {
@@ -84,7 +84,7 @@ abstract class StreamReader implements PartitionReader<InternalRow> {
         if (id == null) {
             startedAt = System.currentTimeMillis();
             id = start();
-            logger.debug("[{}] started, {} total", id, COUNTER.incrementAndGet());
+            logger.trace("[{}] started, {} total", id, COUNTER.incrementAndGet());
         }
 
         while (true) {

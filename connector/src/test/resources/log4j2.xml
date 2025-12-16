@@ -27,6 +27,10 @@
             <AppenderRef ref="Console"/>
         </Logger>
 
+        <Logger name="org.apache.spark.scheduler.TaskSetManager" level="off" additivity="false">
+            <AppenderRef ref="Console"/>
+        </Logger>
+
         <Logger name="org.sparkproject" level="info" additivity="false">
             <AppenderRef ref="Console"/>
         </Logger>

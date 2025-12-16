@@ -23,6 +23,7 @@ import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.Test;
 
+import tech.ydb.spark.connector.impl.YdbExecutor;
 import tech.ydb.test.junit4.YdbHelperRule;
 
 /**
@@ -65,12 +66,11 @@ public class DataTypesTest {
             spark.close();
         }
 
+        YdbExecutor executor = new YdbContext(ydbCreds).getExecutor();
+        executor.removeDirectory(executor.extractPath("datetypes"));
+
         YdbRegistry.closeAll();
     }
-
-//    private static DataFrameReader readYdb() {
-//        return spark.read().format("ydb").options(ydbCreds);
-//    }
 
     @Test
     public void datetimeTest() {

@@ -101,9 +101,9 @@ public class YdbScanTable implements Batch, Scan, ScanBuilder, SupportsReportPar
 
     @Override
     public Predicate[] pushPredicates(Predicate[] predicates) {
-        logger.debug("push predicates {}", Arrays.toString(predicates));
 
         if (pushDownPredicate) {
+            logger.debug("push predicates {}", Arrays.toString(predicates));
             YqlExpressionBuilder yql = new YqlExpressionBuilder();
             for (Predicate p: predicates) {
                 String filter = yql.build(p);
@@ -140,8 +140,8 @@ public class YdbScanTable implements Batch, Scan, ScanBuilder, SupportsReportPar
 
     @Override
     public boolean pushLimit(int limit) {
-        logger.debug("push limit {}", limit);
         if (pushDownLimit) {
+            logger.debug("push limit {}", limit);
             query.withRowLimit(limit);
         }
         return false; // limit should be re-applied
@@ -149,9 +149,9 @@ public class YdbScanTable implements Batch, Scan, ScanBuilder, SupportsReportPar
 
     @Override
     public void pruneColumns(StructType requiredSchema) {
-        logger.debug("prune columns {}", Arrays.toString(requiredSchema.names()));
         this.readSchema = requiredSchema;
         if (requiredSchema.length() > 0) {
+            logger.debug("prune columns {}", Arrays.toString(requiredSchema.names()));
             query.replacePredicates(requiredSchema.names());
         }
     }
@@ -198,7 +198,7 @@ public class YdbScanTable implements Batch, Scan, ScanBuilder, SupportsReportPar
                     InputPartition[] partitions = new InputPartition[tablets.size()];
                     int idx = 0;
                     for (String id: tablets) {
-                        logger.debug("create tablet {} partition", id);
+                        logger.trace("create tablet {} partition", id);
                         partitions[idx++] = YdbPartition.tabletId(id);
                     }
                     return shuffle(partitions);
@@ -211,7 +211,7 @@ public class YdbScanTable implements Batch, Scan, ScanBuilder, SupportsReportPar
                 if (ranges.length > 0) {
                     InputPartition[] partitions = new InputPartition[ranges.length];
                     for (int idx = 0; idx < ranges.length; idx++) {
-                        logger.debug("create range {} partition", ranges[idx]);
+                        logger.trace("create range {} partition", ranges[idx]);
                         partitions[idx] = YdbPartition.keysRange(types, table.getKeyColumns(), ranges[idx]);
                     }
                     return shuffle(partitions);

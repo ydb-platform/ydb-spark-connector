@@ -65,7 +65,7 @@ public class YdbWriterFactory implements DataWriterFactory {
 
     @Override
     public DataWriter<InternalRow> createWriter(int partitionId, long taskId) {
-        logger.debug("New writer for table {}, partition {}, task {}", table.getTablePath(), partitionId, taskId);
+        logger.trace("New writer for table {}, partition {}, task {}", table.getTablePath(), partitionId, taskId);
 
         Map<String, FieldInfo> tableTypes = new HashMap<>();
         for (FieldInfo column : table.getAllColumns()) {
