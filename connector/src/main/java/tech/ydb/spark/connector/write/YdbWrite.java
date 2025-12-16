@@ -39,13 +39,13 @@ public class YdbWrite implements WriteBuilder, SupportsTruncate, Write, BatchWri
 
     @Override
     public WriteBuilder truncate() {
-        logger.debug("Truncation requested for table {}", table.getTablePath());
+        logger.info("Truncation requested for table {}", table.getTablePath());
         return new YdbWrite(table, logicalInfo, true);
     }
 
     @Override
     public BatchWrite toBatch() {
-        logger.debug("YdbWrite converted to BatchWrite for table {}", table.getTablePath());
+        logger.trace("YdbWrite converted to BatchWrite for table {}", table.getTablePath());
         return this;
     }
 
@@ -55,7 +55,7 @@ public class YdbWrite implements WriteBuilder, SupportsTruncate, Write, BatchWri
 
     @Override
     public DataWriterFactory createBatchWriterFactory(PhysicalWriteInfo physicalInfo) {
-        logger.debug("YdbWrite converted to DataWriterFactory for table {}", table.getTablePath());
+        logger.trace("YdbWrite converted to DataWriterFactory for table {}", table.getTablePath());
         YdbWriterFactory factory = new YdbWriterFactory(table, logicalInfo, physicalInfo);
         // TODO: create the COW copy of the destination table
         if (truncate) {

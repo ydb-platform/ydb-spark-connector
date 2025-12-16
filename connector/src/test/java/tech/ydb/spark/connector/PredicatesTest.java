@@ -3,6 +3,7 @@ package tech.ydb.spark.connector;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
 
 import com.google.common.hash.Hashing;
@@ -198,47 +199,96 @@ public class PredicatesTest {
 
     @Test
     public void pushDownPredicateTest() {
-        long c1 = readYdb().option("pushDownPredicate", "true").load("row_table1").filter("step > 115").count();
-        long c2 = readYdb().option("pushDownPredicate", "false").load("row_table1").filter("step > 115").count();
-        Assert.assertEquals(c1, c2);
+        DataFrameReader pushOn = readYdb().option("pushDownPredicate", "true");
+        DataFrameReader pushOff = readYdb().option("pushDownPredicate", "false");
 
-        long c3 = readYdb().option("pushDownPredicate", "true").load("row_table2").filter("sv = 97").count();
-        long c4 = readYdb().option("pushDownPredicate", "false").load("row_table2").filter("sv = 97").count();
-        Assert.assertEquals(c3, c4);
+        assertDfEquals("Simple filter", 3,
+                pushOn.load("row_table1").filter("step > 115").orderBy("hash"),
+                pushOff.load("row_table1").filter("step > 115").orderBy("hash")
+        );
 
-        long c5 = readYdb().option("pushDownPredicate", "true").load("column_table")
-                .filter("step > 120").filter("sv < 200 OR sv > 300").count();
-        long c6 = readYdb().option("pushDownPredicate", "false").load("column_table")
-                .filter("step > 120").filter("sv < 200 OR sv > 300").count();
-        Assert.assertEquals(c5, c6);
+        assertDfEquals("Multipli filters", 18,
+                pushOn.load("row_table2").filter("sv = 97").filter("step > 100").orderBy("hash"),
+                pushOff.load("row_table2").filter("sv = 97").filter("step > 100").orderBy("hash")
+        );
 
-        Assert.assertEquals(3, c1);
-        Assert.assertEquals(3, c2);
-        Assert.assertEquals(119, c3);
-        Assert.assertEquals(119, c4);
-        Assert.assertEquals(192, c5);
-        Assert.assertEquals(192, c6);
+        assertDfEquals("Column table filters", 192,
+                pushOn.load("column_table").filter("step > 120").filter("sv < 200 OR sv > 300").orderBy("hash"),
+                pushOff.load("column_table").filter("step > 120").filter("sv < 200 OR sv > 300").orderBy("hash")
+        );
     }
 
     @Test
     public void pushDownLimitTest() {
-        long c1 = readYdb().option("pushDownLimit", "true").load("row_table1").limit(10).count();
-        long c2 = readYdb().option("pushDownLimit", "false").load("row_table1").limit(10).count();
-        Assert.assertEquals(c1, c2);
+        DataFrameReader pushOn = readYdb().option("pushDownLimit", "true");
+        DataFrameReader pushOff = readYdb().option("pushDownLimit", "false");
 
-        long c3 = readYdb().option("pushDownLimit", "true").load("row_table2").limit(10).count();
-        long c4 = readYdb().option("pushDownLimit", "false").load("row_table2").limit(10).count();
-        Assert.assertEquals(c3, c4);
+        assertDfEquals("Small limit", 10,
+                pushOn.load("row_table1").orderBy("hash").limit(10),
+                pushOff.load("row_table1").orderBy("hash").limit(10)
+        );
 
-        long c5 = readYdb().option("pushDownLimit", "true").load("column_table").limit(100).count();
-        long c6 = readYdb().option("pushDownLimit", "false").load("column_table").limit(100).count();
-        Assert.assertEquals(c5, c6);
+        assertDfEquals("Big limit", 3242,
+                pushOn.load("row_table2").orderBy("hash").limit(3500),
+                pushOff.load("row_table2").orderBy("hash").limit(3500)
+        );
 
-        Assert.assertEquals(10, c1);
-        Assert.assertEquals(10, c2);
-        Assert.assertEquals(10, c3);
-        Assert.assertEquals(10, c4);
-        Assert.assertEquals(100, c5);
-        Assert.assertEquals(100, c6);
+        assertDfEquals("Column table limit", 1000,
+                pushOn.load("column_table").orderBy("hash").limit(1000),
+                pushOff.load("column_table").orderBy("hash").limit(1000)
+        );
+    }
+
+    @Test
+    public void pushDownLikeTest() {
+        DataFrameReader pushOn = readYdb().option("pushDownLimit", "true");
+        DataFrameReader pushOff = readYdb().option("pushDownLimit", "false");
+
+        assertDfEquals("Like startsWith", 14,
+                pushOn.load("row_table1").filter("hash LIKE '00%'").orderBy("hash"),
+                pushOff.load("row_table1").filter("hash LIKE '00%'").orderBy("hash")
+        );
+
+        assertDfEquals("Like endsWith", 15,
+                pushOn.load("row_table2").filter("hash LIKE '%ff'").orderBy("hash"),
+                pushOff.load("row_table2").filter("hash LIKE '%ff'").orderBy("hash")
+        );
+
+        assertDfEquals("Like contains", 9,
+                pushOn.load("column_table").filter("hash LIKE '%dead%'").orderBy("hash"),
+                pushOff.load("column_table").filter("hash LIKE '%dead%'").orderBy("hash")
+        );
+    }
+
+    private void assertDfEquals(String message, int totalCount, Dataset<Row> ds1, Dataset<Row> ds2) {
+        try {
+            StructType schema = ds1.schema();
+            Assert.assertEquals("[" + message + "] must have equals schemas", schema, ds2.schema());
+
+            Iterator<Row> it1 = ds1.toLocalIterator();
+            Iterator<Row> it2 = ds2.toLocalIterator();
+            int count = 0;
+            while (it1.hasNext()) {
+                Assert.assertTrue("[" + message + "] ds1 has more rows then ds2", it2.hasNext());
+                count++;
+
+                Row r1 = it1.next();
+                Row r2 = it2.next();
+
+                for (int idx = 0; idx < schema.size(); idx += 1) {
+                    String name = schema.fieldNames()[idx];
+                    Assert.assertEquals("[" + message + "] row " + count + " column " + name + " must be equals",
+                            r1.get(idx), r2.get(idx)
+                    );
+                }
+            }
+
+            Assert.assertFalse("[" + message + "] ds1 has less rows then ds2", it2.hasNext());
+            Assert.assertEquals("[" + message + "] check rows count", totalCount, count);
+        } catch (AssertionError ex) {
+            ds1.show();
+            ds2.show();
+            throw ex;
+        }
     }
 }
