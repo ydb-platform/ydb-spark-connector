@@ -241,8 +241,8 @@ public class PredicatesTest {
 
     @Test
     public void pushDownLikeTest() {
-        DataFrameReader pushOn = readYdb().option("pushDownLimit", "true");
-        DataFrameReader pushOff = readYdb().option("pushDownLimit", "false");
+        DataFrameReader pushOn = readYdb().option("pushDownPredicate", "true");
+        DataFrameReader pushOff = readYdb().option("pushDownPredicate", "false");
 
         assertDfEquals("Like startsWith", 14,
                 pushOn.load("row_table1").filter("hash LIKE '00%'").orderBy("hash"),
@@ -257,6 +257,63 @@ public class PredicatesTest {
         assertDfEquals("Like contains", 9,
                 pushOn.load("column_table").filter("hash LIKE '%dead%'").orderBy("hash"),
                 pushOff.load("column_table").filter("hash LIKE '%dead%'").orderBy("hash")
+        );
+    }
+
+    @Test
+    public void pushDownSubstringTest() {
+        DataFrameReader pushOn = readYdb().option("pushDownPredicate", "true");
+        DataFrameReader pushOff = readYdb().option("pushDownPredicate", "false");
+
+        assertDfEquals("substring(hash, 10, 2)", 10,
+                pushOn.load("row_table1").filter("SUBSTRING(hash, 10, 2) = '00'").orderBy("hash"),
+                pushOff.load("row_table1").filter("SUBSTRING(hash, 10, 2) = '00'").orderBy("hash")
+        );
+        assertDfEquals("substring(hash, 1, 4)", 3,
+                pushOn.load("row_table1").filter("SUBSTRING(hash, 1, 4) = '4e0a'").orderBy("hash"),
+                pushOff.load("row_table1").filter("SUBSTRING(hash, 1, 4) = '4e0a'").orderBy("hash")
+        );
+        assertDfEquals("substring(hash, 61)", 3,
+                pushOn.load("row_table1").filter("SUBSTRING(hash, 61) = '0bc8'").orderBy("hash"),
+                pushOff.load("row_table1").filter("SUBSTRING(hash, 61) = '0bc8'").orderBy("hash")
+        );
+
+        assertDfEquals("substring(hash, 10, 2)", 10,
+                pushOn.load("row_table2").filter("SUBSTRING(hash, 10, 2) = '00'").orderBy("hash"),
+                pushOff.load("row_table2").filter("SUBSTRING(hash, 10, 2) = '00'").orderBy("hash")
+        );
+
+        assertDfEquals("substring(hash, 10, 2)", 86,
+                pushOn.load("column_table").filter("SUBSTRING(hash, 10, 2) = '00'").orderBy("hash"),
+                pushOff.load("column_table").filter("SUBSTRING(hash, 10, 2) = '00'").orderBy("hash")
+        );
+        assertDfEquals("substring(hash, 1, 4)", 3,
+                pushOn.load("column_table").filter("SUBSTRING(hash, 1, 4) = '4e0a'").orderBy("hash"),
+                pushOff.load("column_table").filter("SUBSTRING(hash, 1, 4) = '4e0a'").orderBy("hash")
+        );
+        assertDfEquals("substring(hash, 61)", 3,
+                pushOn.load("column_table").filter("SUBSTRING(hash, 61) = '0bc8'").orderBy("hash"),
+                pushOff.load("column_table").filter("SUBSTRING(hash, 61) = '0bc8'").orderBy("hash")
+        );
+    }
+
+    @Test
+    public void pushDownSubstringLikeTest() {
+        DataFrameReader pushOn = readYdb().option("pushDownPredicate", "true");
+
+        assertDfEquals("substring(hash, 1, 4)", 3,
+                pushOn.load("row_table1").filter("SUBSTRING(hash, 1, 4) = '4e0a'").orderBy("hash"),
+                pushOn.load("row_table1").filter("hash LIKE '4e0a%'").orderBy("hash")
+        );
+
+        assertDfEquals("substring(hash, 61)", 3,
+                pushOn.load("row_table1").filter("SUBSTRING(hash, 61) = '0bc8'").orderBy("hash"),
+                pushOn.load("row_table1").filter("hash LIKE '%0bc8'").orderBy("hash")
+        );
+
+        assertDfEquals("substring(hash, 61)", 3,
+                pushOn.load("column_table").filter("SUBSTRING(hash, 61) = '0bc8'").orderBy("hash"),
+                pushOn.load("column_table").filter("hash LIKE '%0bc8'").orderBy("hash")
         );
     }
 

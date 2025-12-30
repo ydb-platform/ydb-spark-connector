@@ -101,7 +101,6 @@ public class YdbScanTable implements Batch, Scan, ScanBuilder, SupportsReportPar
 
     @Override
     public Predicate[] pushPredicates(Predicate[] predicates) {
-
         if (pushDownPredicate) {
             logger.debug("push predicates {}", Arrays.toString(predicates));
             YqlExpressionBuilder yql = new YqlExpressionBuilder();
