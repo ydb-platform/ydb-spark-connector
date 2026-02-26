@@ -22,6 +22,7 @@ import tech.ydb.table.values.Value;
  * @author zinal
  */
 public class KeysRange implements Serializable {
+
     private static final long serialVersionUID = 20250904001L;
 
     public static final KeysRange UNRESTRICTED = new KeysRange(Limit.UNSTRICTED, Limit.UNSTRICTED);
@@ -53,15 +54,24 @@ public class KeysRange implements Serializable {
     }
 
     public boolean hasFromValue() {
-        return from != null && from.values != null;
+        return from != null && from.hasValue();
     }
 
     public boolean hasToValue() {
-        return to != null && to.values != null;
+        return to != null && to.hasValue();
     }
 
     public boolean isUnrestricted() {
-        return from != null && to != null && from.values == null && to.values == null;
+        if (isEmpty()) {
+            return false;
+        }
+        if (hasFromValue()) {
+            return false;
+        }
+        if (hasToValue()) {
+            return false;
+        }
+        return true;
     }
 
     public boolean includesFromValue() {
@@ -128,6 +138,9 @@ public class KeysRange implements Serializable {
             return nullValue;
         }
         if (value.length == 1) {
+            if (value[0] == null) {
+                return nullValue;
+            }
             return value[0].toString();
         }
 
@@ -204,13 +217,13 @@ public class KeysRange implements Serializable {
         }
 
         int cmp = compareValues(from.values, to.values);
-        if (cmp < 0) { // from < to is always valid range
+        if (cmp < 0) { // from < to is always a valid range
             return true;
         }
-        if (cmp > 0) { // from > to is always invalid range
+        if (cmp > 0) { // from > to is always an invalid range
             return false;
         }
-        // range from single value valids only both bound are inclusive
+        // range for a single value is valid only when both bounds are inclusive
         return from.inclusive && to.inclusive;
     }
 
@@ -235,19 +248,34 @@ public class KeysRange implements Serializable {
         return out;
     }
 
+    public static boolean hasValue(Serializable[] values) {
+        if (values == null || values.length == 0) {
+            return false;
+        }
+        // TODO: validate over table with nullable PK and actual NULL prefix
+        for (int pos = 0; pos < values.length; ++pos) {
+            if (values[pos] != null) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private static class Limit implements Serializable {
+
+        private static final long serialVersionUID = 20260226001L;
         private static final Limit UNSTRICTED = new Limit(Optional.empty(), null);
-        private static final long serialVersionUID = -9050443235398158196L;
 
         private final Serializable[] values;
         private final boolean inclusive;
 
-        private Limit(Serializable[] values, boolean inclusive) {
+        Limit(Serializable[] values, boolean inclusive) {
             this.values = values;
-            this.inclusive = values != null && inclusive; // inf cannot be inclusive
+            // inf cannot be inclusive
+            this.inclusive = inclusive && KeysRange.hasValue(values);
         }
 
-        private Limit(Optional<KeyBound> key, YdbTypes types) {
+        Limit(Optional<KeyBound> key, YdbTypes types) {
             if (key.isPresent()) {
                 this.values = readTuple(key.get().getValue(), types);
                 this.inclusive = key.get().isInclusive();
@@ -255,6 +283,10 @@ public class KeysRange implements Serializable {
                 this.values = null;
                 this.inclusive = false;
             }
+        }
+
+        boolean hasValue() {
+            return KeysRange.hasValue(values);
         }
 
         @Override
@@ -277,7 +309,7 @@ public class KeysRange implements Serializable {
             return this.inclusive == other.inclusive && Arrays.equals(this.values, other.values);
         }
 
-        public Limit leftMerge(Limit other) {
+        Limit leftMerge(Limit other) {
             if (values == null) {
                 return other;
             }
@@ -296,7 +328,7 @@ public class KeysRange implements Serializable {
             return new Limit(values, inclusive && other.inclusive);
         }
 
-        public Limit rightMerge(Limit other) {
+        Limit rightMerge(Limit other) {
             if (values == null) {
                 return other;
             }
@@ -315,7 +347,7 @@ public class KeysRange implements Serializable {
             return new Limit(values, inclusive && other.inclusive);
         }
 
-        public TupleValue writeTuple(YdbTypes types, FieldInfo[] columns) {
+        TupleValue writeTuple(YdbTypes types, FieldInfo[] columns) {
             final List<Value<?>> l = new ArrayList<>(values.length);
             for (int i = 0; i < values.length; ++i) {
                 Value<?> v = types.convertToYdb(values[i], columns[i].getType());

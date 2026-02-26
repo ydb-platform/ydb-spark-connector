@@ -51,8 +51,9 @@ import tech.ydb.table.values.TupleValue;
  */
 public class YdbReadTable implements Batch, Scan, ScanBuilder, SupportsReportPartitioning, PartitionReaderFactory,
         SupportsPushDownV2Filters, SupportsPushDownRequiredColumns, SupportsPushDownLimit {
+
+    private static final long serialVersionUID = 20260226001L;
     private static final Logger logger = LoggerFactory.getLogger(YdbReadTable.class);
-    private static final long serialVersionUID = -5790675592880793417L;
 
     private final YdbTable table;
     private final YdbTypes types;
@@ -146,9 +147,11 @@ public class YdbReadTable implements Batch, Scan, ScanBuilder, SupportsReportPar
         if (partitions.length == 0) {
             logger.warn("Missing partitioning information for table {}", table.getTablePath());
             // Single partition with possible limits taken from the predicates.
-            return new InputPartition[] {new ShardPartition(0, KeysRange.UNRESTRICTED)};
+            return new InputPartition[]{new ShardPartition(0, KeysRange.UNRESTRICTED)};
         }
-        logger.debug("Input table partitions: {}", Arrays.toString(partitions));
+        if (logger.isDebugEnabled()) {
+            logger.debug("Input table partitions: {}", Arrays.toString(partitions));
+        }
         final Random random = new Random();
         ShardPartition[] out = Stream.of(partitions)
                 .map(kr -> kr.intersect(predicateRange))
@@ -156,15 +159,18 @@ public class YdbReadTable implements Batch, Scan, ScanBuilder, SupportsReportPar
                 .map(kr -> new ShardPartition(random.nextInt(999999999), kr))
                 .toArray(ShardPartition[]::new);
 
-        logger.debug("Input partitions count {}, filtered partitions count {}", partitions.length, out.length);
-        logger.debug("Filtered partition ranges: {}", Arrays.toString(out));
+        if (logger.isDebugEnabled()) {
+            logger.debug("Input partitions count {}, filtered partitions count {}", partitions.length, out.length);
+            logger.debug("Filtered partition ranges: {}", Arrays.toString(out));
+        }
         // Random ordering is better for multiple  concurrent scans with limited parallelism.
         Arrays.sort(out, (p1, p2) -> Integer.compare(p1.getOrderingKey(), p2.getOrderingKey()));
         return out;
     }
 
     /**
-     * Put all predicates connected with AND directly into the list of predicates, recursively.
+     * Put all predicates connected with AND directly into the list of
+     * predicates, recursively.
      *
      * @param filters Input filters
      * @return Flattened predicates
@@ -178,7 +184,8 @@ public class YdbReadTable implements Batch, Scan, ScanBuilder, SupportsReportPar
     }
 
     /**
-     * Put all filters connected with AND directly into the list of filters, recursively.
+     * Put all filters connected with AND directly into the list of filters,
+     * recursively.
      *
      * @param f Input filter to be processed
      * @param retval The resulting list of flattened filters
@@ -194,8 +201,9 @@ public class YdbReadTable implements Batch, Scan, ScanBuilder, SupportsReportPar
     }
 
     /**
-     * Very basic filter-to-range conversion logic. Currently covers N equality conditions + 1
-     * optional following range condition. Does NOT handle complex cases like N-dimensional ranges.
+     * Very basic filter-to-range conversion logic. Currently covers N equality
+     * conditions + 1 optional following range condition. Does NOT handle
+     * complex cases like N-dimensional ranges.
      *
      * @param predicates input list of filters
      */
@@ -277,8 +285,12 @@ public class YdbReadTable implements Batch, Scan, ScanBuilder, SupportsReportPar
             }
         }
 
-        predicateRange = new KeysRange(rangeBegin, true, rangeEnd, true);
-        logger.debug("Calculated scan ranges {}", predicateRange);
+        if (KeysRange.hasValue(rangeBegin) || KeysRange.hasValue(rangeEnd)) {
+            predicateRange = new KeysRange(rangeBegin, true, rangeEnd, true);
+            logger.debug("Calculated scan range {}", predicateRange);
+        } else {
+            logger.debug("Remained unrestricted scan range {}", predicateRange);
+        }
     }
 
     /**
@@ -324,6 +336,7 @@ public class YdbReadTable implements Batch, Scan, ScanBuilder, SupportsReportPar
     }
 
     private final class ReadTableReader extends StreamReader {
+
         private final String id;
         private final String tablePath;
         private final ReadTableSettings settings;

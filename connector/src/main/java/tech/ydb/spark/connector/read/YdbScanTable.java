@@ -1,6 +1,5 @@
 package tech.ydb.spark.connector.read;
 
-
 import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
@@ -43,7 +42,8 @@ import tech.ydb.table.query.Params;
  * @author zinal
  */
 public class YdbScanTable implements Batch, Scan, ScanBuilder, SupportsReportPartitioning, PartitionReaderFactory,
-        SupportsPushDownV2Filters, SupportsPushDownRequiredColumns, SupportsPushDownLimit, SupportsPushDownAggregates  {
+        SupportsPushDownV2Filters, SupportsPushDownRequiredColumns, SupportsPushDownLimit, SupportsPushDownAggregates {
+
     private static final long serialVersionUID = 6752417702512593851L;
     private static final Logger logger = LoggerFactory.getLogger(YdbScanTable.class);
 
@@ -103,9 +103,11 @@ public class YdbScanTable implements Batch, Scan, ScanBuilder, SupportsReportPar
     public Predicate[] pushPredicates(Predicate[] predicates) {
 
         if (pushDownPredicate) {
-            logger.debug("push predicates {}", Arrays.toString(predicates));
+            if (logger.isDebugEnabled()) {
+                logger.debug("push predicates {}", Arrays.toString(predicates));
+            }
             YqlExpressionBuilder yql = new YqlExpressionBuilder();
-            for (Predicate p: predicates) {
+            for (Predicate p : predicates) {
                 String filter = yql.build(p);
                 if (!filter.isEmpty()) {
                     query.addExpression("(" + filter + ")");
@@ -117,19 +119,23 @@ public class YdbScanTable implements Batch, Scan, ScanBuilder, SupportsReportPar
 
     @Override
     public boolean supportCompletePushDown(Aggregation aggregation) {
-        logger.debug("request complete aggregation {} with group by {}",
-                Arrays.toString(aggregation.aggregateExpressions()),
-                Arrays.toString(aggregation.groupByExpressions())
-        );
+        if (logger.isDebugEnabled()) {
+            logger.debug("request complete aggregation {} with group by {}",
+                    Arrays.toString(aggregation.aggregateExpressions()),
+                    Arrays.toString(aggregation.groupByExpressions())
+            );
+        }
         return false;
     }
 
     @Override
     public boolean pushAggregation(Aggregation aggregation) {
-        logger.debug("push aggregation {} with group by {}",
-                Arrays.toString(aggregation.aggregateExpressions()),
-                Arrays.toString(aggregation.groupByExpressions())
-        );
+        if (logger.isDebugEnabled()) {
+            logger.debug("push aggregation {} with group by {}",
+                    Arrays.toString(aggregation.aggregateExpressions()),
+                    Arrays.toString(aggregation.groupByExpressions())
+            );
+        }
         return false;
     }
 
@@ -151,7 +157,9 @@ public class YdbScanTable implements Batch, Scan, ScanBuilder, SupportsReportPar
     public void pruneColumns(StructType requiredSchema) {
         this.readSchema = requiredSchema;
         if (requiredSchema.length() > 0) {
-            logger.debug("prune columns {}", Arrays.toString(requiredSchema.names()));
+            if (logger.isDebugEnabled()) {
+                logger.debug("prune columns {}", Arrays.toString(requiredSchema.names()));
+            }
             query.replacePredicates(requiredSchema.names());
         }
     }
@@ -197,7 +205,7 @@ public class YdbScanTable implements Batch, Scan, ScanBuilder, SupportsReportPar
                 if (!tablets.isEmpty()) {
                     InputPartition[] partitions = new InputPartition[tablets.size()];
                     int idx = 0;
-                    for (String id: tablets) {
+                    for (String id : tablets) {
                         logger.trace("create tablet {} partition", id);
                         partitions[idx++] = YdbPartition.tabletId(id);
                     }
@@ -223,6 +231,7 @@ public class YdbScanTable implements Batch, Scan, ScanBuilder, SupportsReportPar
     }
 
     private final class QueryServiceReader extends StreamReader {
+
         private final String query;
         private final Params params;
         private volatile QueryStream stream = null;
