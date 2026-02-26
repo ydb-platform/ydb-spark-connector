@@ -119,7 +119,7 @@ public class YdbContext implements Serializable, AutoCloseable {
                 && Objects.equals(password, o.password)
                 && useMetadata == o.useMetadata
                 && useEnv == o.useEnv
-                && sessionPoolSize == sessionPoolSize;
+                && sessionPoolSize == o.sessionPoolSize;
     }
 
     @Override

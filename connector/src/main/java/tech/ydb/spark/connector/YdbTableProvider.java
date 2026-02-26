@@ -23,6 +23,7 @@ import tech.ydb.table.result.ResultSetReader;
  * @author zinal
  */
 public class YdbTableProvider implements TableProvider, DataSourceRegister {
+
     private static final String SPARK_PATH_OPTION = "path";
 
     @Override
@@ -35,7 +36,7 @@ public class YdbTableProvider implements TableProvider, DataSourceRegister {
         return true;
     }
 
-    private String exractTableName(CaseInsensitiveStringMap options) {
+    private String extractTableName(CaseInsensitiveStringMap options) {
         // Check that table path is provided
         String table = OperationOption.DBTABLE.read(options);
         if (table != null && !table.trim().isEmpty()) {
@@ -64,9 +65,9 @@ public class YdbTableProvider implements TableProvider, DataSourceRegister {
             return types.toSparkSchema(rs);
         }
 
-        String tableName = exractTableName(options);
+        String tableName = extractTableName(options);
         String tablePath = ctx.getExecutor().extractPath(tableName);
-        TableDescription td =  ctx.getExecutor().describeTable(tablePath, false);
+        TableDescription td = ctx.getExecutor().describeTable(tablePath, false);
         if (td == null) {
             throw new RuntimeException("Table " + tablePath + " not found");
         }
@@ -82,7 +83,7 @@ public class YdbTableProvider implements TableProvider, DataSourceRegister {
             return new Transform[0];
         }
 
-        String tableName = exractTableName(options);
+        String tableName = extractTableName(options);
         String tablePath = ctx.getExecutor().extractPath(tableName);
         TableDescription td = ctx.getExecutor().describeTable(tablePath, true);
         if (td == null) {
@@ -93,11 +94,11 @@ public class YdbTableProvider implements TableProvider, DataSourceRegister {
 
         String[] keys = new String[keyColumns.size()];
         int idx = 0;
-        for (String key: keyColumns) {
+        for (String key : keyColumns) {
             keys[idx++] = key;
         }
 
-        return new Transform[] {
+        return new Transform[]{
             Expressions.bucket(td.getKeyRanges().size(), keys)
         };
     }
@@ -114,9 +115,9 @@ public class YdbTableProvider implements TableProvider, DataSourceRegister {
         }
 
         YdbTypes types = new YdbTypes(options);
-        String tableName = exractTableName(options);
+        String tableName = extractTableName(options);
         String tablePath = ctx.getExecutor().extractPath(tableName);
-        TableDescription td =  ctx.getExecutor().describeTable(tablePath, true);
+        TableDescription td = ctx.getExecutor().describeTable(tablePath, true);
         if (td == null) {
             boolean useAutoCreate = OperationOption.TABLE_AUTOCREATE.readBoolean(options, true);
             if (!useAutoCreate) {

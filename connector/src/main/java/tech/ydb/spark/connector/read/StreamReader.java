@@ -27,6 +27,7 @@ import tech.ydb.table.result.ResultSetReader;
  * @author Aleksandr Gorshenin
  */
 abstract class StreamReader implements PartitionReader<InternalRow> {
+
     private static final Logger logger = LoggerFactory.getLogger(StreamReader.class);
     private static final AtomicInteger COUNTER = new AtomicInteger(0);
 
@@ -127,6 +128,7 @@ abstract class StreamReader implements PartitionReader<InternalRow> {
     }
 
     private class GrpcCall implements GrpcFlowControl.Call {
+
         private final IntConsumer req;
 
         GrpcCall(IntConsumer req) {
@@ -149,6 +151,7 @@ abstract class StreamReader implements PartitionReader<InternalRow> {
     }
 
     private class QueueItem {
+
         private final ResultSetReader reader;
         private final int[] columnIndexes;
 
@@ -156,7 +159,7 @@ abstract class StreamReader implements PartitionReader<InternalRow> {
             this.reader = reader;
             this.columnIndexes = new int[outColumns.length];
             int idx = 0;
-            for (String column: outColumns) {
+            for (String column : outColumns) {
                 columnIndexes[idx++] = reader.getColumnIndex(column);
             }
         }
@@ -171,7 +174,9 @@ abstract class StreamReader implements PartitionReader<InternalRow> {
             }
             InternalRow row = new GenericInternalRow(columnIndexes.length);
             for (int i = 0; i < columnIndexes.length; ++i) {
-                types.setRowValue(row, i, reader.getColumn(columnIndexes[i]));
+                if (columnIndexes[i] >= 0) {
+                    types.setRowValue(row, i, reader.getColumn(columnIndexes[i]));
+                }
             }
             return row;
         }
