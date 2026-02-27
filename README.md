@@ -38,14 +38,14 @@ and YDB Java SDK. That artifact is available in the Maven Global repository and 
 (requires network connection).
 
 ```bash
-./bin/spark-shell --packages tech.ydb.spark:ydb-spark-connector:2.0.1
+./bin/spark-shell --packages tech.ydb.spark:ydb-spark-connector:2.1.1
 ```
 
 Additionally, for greater convenience, the connector artifact can be downloaded from the
 [releases section](https://github.com/ydb-platform/ydb-spark-connector/releases) and used locally by placing to the jars
 folder in the Spark distribution or passing it as the --jars argument.
 ```bash
-./bin/spark-shell --jars ydb-spark-connector-shaded-2.0.1.jar
+./bin/spark-shell --jars ydb-spark-connector-shaded-2.1.1.jar
 ```
 
 ## Connector usage
