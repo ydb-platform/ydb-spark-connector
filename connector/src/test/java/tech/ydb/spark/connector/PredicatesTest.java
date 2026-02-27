@@ -6,6 +6,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 
+import com.google.common.hash.HashCode;
 import com.google.common.hash.Hashing;
 import org.apache.spark.SparkConf;
 import org.apache.spark.sql.DataFrameReader;
@@ -14,6 +15,7 @@ import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SaveMode;
 import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema;
+import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
@@ -37,7 +39,8 @@ public class PredicatesTest {
                 + " idx Uint32 NOT NULL," // global index of row
                 + " step Uint32 NOT NULL,"  // step of current sequence
                 + " is_last Int32 NOT NULL, " // flag if the value is last in sequence, bool is not supported by CS yet
-                + " hash Text NOT NULL,"; // sha256(sv, cv, idx, step)
+                + " hash Text NOT NULL,"  // sha256(sv, cv, idx, step)
+                + " data Bytes NOT NULL,"; // sv, cv, idx, step
 
     @ClassRule
     public static final YdbHelperRule YDB = new YdbHelperRule();
@@ -131,7 +134,8 @@ public class PredicatesTest {
             new StructField("idx", DataTypes.IntegerType, false, Metadata.empty()),
             new StructField("step", DataTypes.IntegerType, false, Metadata.empty()),
             new StructField("is_last", DataTypes.IntegerType, false, Metadata.empty()),
-            new StructField("hash", DataTypes.StringType, false, Metadata.empty())
+            new StructField("hash", DataTypes.StringType, false, Metadata.empty()),
+            new StructField("data", DataTypes.BinaryType, false, Metadata.empty()),
         });
 
         ArrayList<Row> rows = new ArrayList<>();
@@ -147,9 +151,9 @@ public class PredicatesTest {
             bb.putInt(4, cs);
             bb.putInt(8, idx++);
             bb.putInt(12, step);
-            String hash = Hashing.sha256().hashBytes(bb).toString();
-
-            rows.add(new GenericRowWithSchema(new Object[]{ sv, cs, idx, step, cs == 1 ? 1 : 0, hash }, schema));
+            HashCode hash = Hashing.sha256().hashBytes(bb);
+            Object[] row = new Object[]{ sv, cs, idx, step, cs == 1 ? 1 : 0, hash.toString(), bb.array() };
+            rows.add(new GenericRowWithSchema(row, schema));
 
             if (cs == 1) {
                 sv = sv + 1;
@@ -241,8 +245,8 @@ public class PredicatesTest {
 
     @Test
     public void pushDownLikeTest() {
-        DataFrameReader pushOn = readYdb().option("pushDownLimit", "true");
-        DataFrameReader pushOff = readYdb().option("pushDownLimit", "false");
+        DataFrameReader pushOn = readYdb().option("pushDownPredicate", "true");
+        DataFrameReader pushOff = readYdb().option("pushDownPredicate", "false");
 
         assertDfEquals("Like startsWith", 14,
                 pushOn.load("row_table1").filter("hash LIKE '00%'").orderBy("hash"),
@@ -257,6 +261,84 @@ public class PredicatesTest {
         assertDfEquals("Like contains", 9,
                 pushOn.load("column_table").filter("hash LIKE '%dead%'").orderBy("hash"),
                 pushOff.load("column_table").filter("hash LIKE '%dead%'").orderBy("hash")
+        );
+    }
+
+    @Test
+    public void pushDownSubstringTest() {
+        DataFrameReader pushOn = readYdb().option("pushDownPredicate", "true");
+        DataFrameReader pushOff = readYdb().option("pushDownPredicate", "false");
+
+        assertDfEquals("substring(hash, 10, 2)", 10,
+                pushOn.load("row_table1").filter("SUBSTRING(hash, 10, 2) = '00'").orderBy("hash"),
+                pushOff.load("row_table1").filter("SUBSTRING(hash, 10, 2) = '00'").orderBy("hash")
+        );
+        assertDfEquals("substring(hash, 1, 4)", 3,
+                pushOn.load("row_table1").filter("SUBSTRING(hash, 1, 4) = '4e0a'").orderBy("hash"),
+                pushOff.load("row_table1").filter("SUBSTRING(hash, 1, 4) = '4e0a'").orderBy("hash")
+        );
+        assertDfEquals("substring(hash, 61)", 3,
+                pushOn.load("row_table1").filter("SUBSTRING(hash, 61) = '0bc8'").orderBy("hash"),
+                pushOff.load("row_table1").filter("SUBSTRING(hash, 61) = '0bc8'").orderBy("hash")
+        );
+
+        assertDfEquals("substring(hash, 10, 2)", 10,
+                pushOn.load("row_table2").filter("SUBSTRING(hash, 10, 2) = '00'").orderBy("hash"),
+                pushOff.load("row_table2").filter("SUBSTRING(hash, 10, 2) = '00'").orderBy("hash")
+        );
+
+        assertDfEquals("substring(hash, 10, 2)", 86,
+                pushOn.load("column_table").filter("SUBSTRING(hash, 10, 2) = '00'").orderBy("hash"),
+                pushOff.load("column_table").filter("SUBSTRING(hash, 10, 2) = '00'").orderBy("hash")
+        );
+        assertDfEquals("substring(hash, 1, 4)", 3,
+                pushOn.load("column_table").filter("SUBSTRING(hash, 1, 4) = '4e0a'").orderBy("hash"),
+                pushOff.load("column_table").filter("SUBSTRING(hash, 1, 4) = '4e0a'").orderBy("hash")
+        );
+        assertDfEquals("substring(hash, 61)", 3,
+                pushOn.load("column_table").filter("SUBSTRING(hash, 61) = '0bc8'").orderBy("hash"),
+                pushOff.load("column_table").filter("SUBSTRING(hash, 61) = '0bc8'").orderBy("hash")
+        );
+    }
+
+    @Test
+    public void pushDownSubstringBytesTest() {
+        DataFrameReader pushOn = readYdb().option("pushDownPredicate", "true");
+        DataFrameReader pushOff = readYdb().option("pushDownPredicate", "false");
+
+        assertDfEquals("substring(data, 5, 4)", 100,
+                pushOn.load("row_table1").filter("SUBSTRING(data, 5, 4) = X'00000001'").orderBy("data"),
+                pushOff.load("row_table1").filter("SUBSTRING(data, 5, 4) = X'00000001'").orderBy("data")
+        );
+
+        assertDfEquals("substring(data, 5, 4)", 100,
+                pushOn.load("row_table2").filter("SUBSTRING(data, 5, 4) = X'00000001'").orderBy("data"),
+                pushOff.load("row_table2").filter("SUBSTRING(data, 5, 4) = X'00000001'").orderBy("data")
+        );
+
+        assertDfEquals("substring(data, 5, 4)", 500,
+                pushOn.load("column_table").filter("SUBSTRING(data, 5, 4) = X'00000001'").orderBy("data"),
+                pushOff.load("column_table").filter("SUBSTRING(data, 5, 4) = X'00000001'").orderBy("data")
+        );
+    }
+
+    @Test
+    public void pushDownSubstringLikeTest() {
+        DataFrameReader pushOn = readYdb().option("pushDownPredicate", "true");
+
+        assertDfEquals("substring(hash, 1, 4)", 3,
+                pushOn.load("row_table1").filter("SUBSTRING(hash, 1, 4) = '4e0a'").orderBy("hash"),
+                pushOn.load("row_table1").filter("hash LIKE '4e0a%'").orderBy("hash")
+        );
+
+        assertDfEquals("substring(hash, 61)", 3,
+                pushOn.load("row_table1").filter("SUBSTRING(hash, 61) = '0bc8'").orderBy("hash"),
+                pushOn.load("row_table1").filter("hash LIKE '%0bc8'").orderBy("hash")
+        );
+
+        assertDfEquals("substring(hash, 61)", 3,
+                pushOn.load("column_table").filter("SUBSTRING(hash, 61) = '0bc8'").orderBy("hash"),
+                pushOn.load("column_table").filter("hash LIKE '%0bc8'").orderBy("hash")
         );
     }
 
@@ -277,9 +359,16 @@ public class PredicatesTest {
 
                 for (int idx = 0; idx < schema.size(); idx += 1) {
                     String name = schema.fieldNames()[idx];
-                    Assert.assertEquals("[" + message + "] row " + count + " column " + name + " must be equals",
-                            r1.get(idx), r2.get(idx)
-                    );
+                    DataType type = schema.fields()[idx].dataType();
+                    if (type.sameType(DataTypes.BinaryType)) {
+                        Assert.assertArrayEquals("[" + message + "] row " + count + " column " + name + " must be equals",
+                                (byte[]) r1.get(idx), (byte[]) r2.get(idx)
+                        );
+                    } else {
+                        Assert.assertEquals("[" + message + "] row " + count + " column " + name + " must be equals",
+                                r1.get(idx), r2.get(idx)
+                        );
+                    }
                 }
             }
 
