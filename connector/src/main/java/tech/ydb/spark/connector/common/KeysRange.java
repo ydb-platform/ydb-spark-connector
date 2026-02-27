@@ -214,7 +214,12 @@ public class KeysRange implements Serializable {
         return from.inclusive && to.inclusive;
     }
 
-    public static Serializable[] readTuple(Value<?> value, YdbTypes types) {
+    public static Serializable[] readTuple(Optional<KeyBound> key, YdbTypes types) {
+        if (!key.isPresent()) {
+            return null;
+        }
+
+        Value<?> value = key.get().getValue();
         if (!(value instanceof TupleValue)) {
             throw new IllegalArgumentException();
         }
@@ -235,6 +240,25 @@ public class KeysRange implements Serializable {
         return out;
     }
 
+    public static Serializable[] validateTuple(Serializable[] value) {
+        if (value == null || value.length == 0 || value[0] == null) {
+            return null;
+        }
+
+        int len = 0;
+        while (len < value.length && value[len] != null) {
+            len += 1;
+        }
+
+        if (len == value.length) {
+            return value;
+        }
+
+        Serializable[] validated = new Serializable[len];
+        System.arraycopy(value, 0, validated, 0, len);
+        return validated;
+    }
+
     private static class Limit implements Serializable {
         private static final Limit UNSTRICTED = new Limit(Optional.empty(), null);
         private static final long serialVersionUID = -9050443235398158196L;
@@ -242,19 +266,15 @@ public class KeysRange implements Serializable {
         private final Serializable[] values;
         private final boolean inclusive;
 
-        private Limit(Serializable[] values, boolean inclusive) {
-            this.values = values;
-            this.inclusive = values != null && inclusive; // inf cannot be inclusive
+        Limit(Serializable[] values, boolean inclusive) {
+            this.values = validateTuple(values);
+            // inf cannot be inclusive
+            this.inclusive = this.values != null && inclusive;
         }
 
-        private Limit(Optional<KeyBound> key, YdbTypes types) {
-            if (key.isPresent()) {
-                this.values = readTuple(key.get().getValue(), types);
-                this.inclusive = key.get().isInclusive();
-            } else {
-                this.values = null;
-                this.inclusive = false;
-            }
+        Limit(Optional<KeyBound> key, YdbTypes types) {
+            this.values = readTuple(key, types);
+            this.inclusive = key.isPresent() && key.get().isInclusive();
         }
 
         @Override
