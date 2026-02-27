@@ -46,7 +46,8 @@ import tech.ydb.table.values.Value;
  * @author zinal
  */
 public final class YdbTypes implements Serializable {
-    private static final long serialVersionUID = 20250904001L;
+
+    private static final long serialVersionUID = -8428087969141751487L;
 
     public static final DataType SPARK_DECIMAL = DataTypes.createDecimalType(38, 10);
     public static final DataType SPARK_UINT64 = DataTypes.createDecimalType(22, 0);
@@ -274,7 +275,8 @@ public final class YdbTypes implements Serializable {
 
     /**
      * Conversion from YDB value to the comparable and serializable format.
-     * Currently used in the KeysRange class only to perform key-to-key operations.
+     * Currently used in the KeysRange class only to perform key-to-key
+     * operations.
      *
      * @param v YDB value
      * @return POJO value supporting Serializable and Comparable interfaces
@@ -798,7 +800,6 @@ public final class YdbTypes implements Serializable {
 
         if (type.getKind() == Type.Kind.DECIMAL) {
             DecimalType decimal = (DecimalType) type;
-            Decimal.apply(vr.getDecimal().toBigDecimal());
             row.setDecimal(i, Decimal.apply(vr.getDecimal().toBigDecimal()), decimal.getPrecision());
             return;
         }
@@ -927,7 +928,8 @@ public final class YdbTypes implements Serializable {
     }
 
     public static class Bytes implements Comparable<Bytes>, Serializable {
-        private static final long serialVersionUID = 20250904001L;
+
+        private static final long serialVersionUID = -7571707707813203159L;
 
         private final byte[] data;
 

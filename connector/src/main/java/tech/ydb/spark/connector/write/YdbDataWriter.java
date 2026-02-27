@@ -29,6 +29,7 @@ import tech.ydb.table.values.Value;
  * @author zinal
  */
 public abstract class YdbDataWriter implements DataWriter<InternalRow> {
+
     static final int MAX_ROWS_COUNT = 10000;
     static final int MAX_BYTES_SIZE = 10 * 1024 * 1024;
     static final int CONCURRENCY = 2;
@@ -67,9 +68,10 @@ public abstract class YdbDataWriter implements DataWriter<InternalRow> {
 
     @Override
     public void write(InternalRow record) throws IOException {
-        if (lastError != null) {
-            logger.warn("ydb writer got error {} on write", lastError);
-            lastError.expectSuccess("Cannot execute write");
+        Status localError = lastError;
+        if (localError != null) {
+            logger.warn("ydb writer got error {} on write", localError);
+            localError.expectSuccess("Cannot execute write");
         }
 
         Value<?>[] row = new Value<?>[readers.length];
@@ -91,9 +93,10 @@ public abstract class YdbDataWriter implements DataWriter<InternalRow> {
         semaphore.acquireUninterruptibly(maxConcurrency);
         semaphore.release(maxConcurrency);
 
-        if (lastError != null) {
-            logger.warn("ydb writer got error {} on commit", lastError);
-            lastError.expectSuccess("cannot commit write");
+        Status localError = lastError;
+        if (localError != null) {
+            logger.warn("ydb writer got error {} on commit", localError);
+            localError.expectSuccess("cannot commit write");
         }
 
         // All rows have been written successfully
