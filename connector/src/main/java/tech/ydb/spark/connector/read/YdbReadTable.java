@@ -152,6 +152,7 @@ public class YdbReadTable implements Batch, Scan, ScanBuilder, SupportsReportPar
         if (logger.isDebugEnabled()) {
             logger.debug("Input table partitions: {}", Arrays.toString(partitions));
         }
+        // TODO: maybe switch to deterministic shuffle
         final Random random = new Random();
         ShardPartition[] out = Stream.of(partitions)
                 .map(kr -> kr.intersect(predicateRange))

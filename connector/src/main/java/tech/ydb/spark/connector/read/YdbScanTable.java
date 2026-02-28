@@ -185,6 +185,7 @@ public class YdbScanTable implements Batch, Scan, ScanBuilder, SupportsReportPar
     }
 
     private static <T> T[] shuffle(T[] array) {
+        // TODO: maybe switch to deterministic shuffle
         Random rnd = new Random();
         int count = array.length;
         for (int i = count; i > 1; i--) {
@@ -253,7 +254,7 @@ public class YdbScanTable implements Batch, Scan, ScanBuilder, SupportsReportPar
                 stream = session.getValue().createQuery(query, TxMode.SNAPSHOT_RO, params, settings);
                 stream.execute(part -> onNextPart(part.getResultSetReader())).whenComplete((res, th) -> {
                     session.getValue().close();
-                    onComplete(res.getStatus(), th);
+                    onComplete((res == null) ? null : res.getStatus(), th);
                 });
             }
             StringBuilder sb = new StringBuilder(query);
