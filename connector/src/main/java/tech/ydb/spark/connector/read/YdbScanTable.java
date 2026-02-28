@@ -246,17 +246,16 @@ public class YdbScanTable implements Batch, Scan, ScanBuilder, SupportsReportPar
             Result<QuerySession> session = table.getCtx().getExecutor().createQuerySession();
             if (!session.isSuccess()) {
                 onComplete(session.getStatus(), null);
+            } else {
+                ExecuteQuerySettings settings = ExecuteQuerySettings.newBuilder()
+                        .withGrpcFlowControl(flowControl)
+                        .build();
+                stream = session.getValue().createQuery(query, TxMode.SNAPSHOT_RO, params, settings);
+                stream.execute(part -> onNextPart(part.getResultSetReader())).whenComplete((res, th) -> {
+                    session.getValue().close();
+                    onComplete(res.getStatus(), th);
+                });
             }
-
-            ExecuteQuerySettings settings = ExecuteQuerySettings.newBuilder()
-                    .withGrpcFlowControl(flowControl)
-                    .build();
-            stream = session.getValue().createQuery(query, TxMode.SNAPSHOT_RO, params, settings);
-            stream.execute(part -> onNextPart(part.getResultSetReader())).whenComplete((res, th) -> {
-                session.getValue().close();
-                onComplete(res.getStatus(), th);
-            });
-
             StringBuilder sb = new StringBuilder(query);
             params.values().forEach((k, v) -> {
                 sb.append(", ").append(k).append("=").append(v);

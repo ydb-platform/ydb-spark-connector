@@ -387,14 +387,13 @@ public class YdbReadTable implements Batch, Scan, ScanBuilder, SupportsReportPar
             Result<Session> session = table.getCtx().getExecutor().createTableSession();
             if (!session.isSuccess()) {
                 onComplete(session.getStatus(), null);
+            } else {
+                this.stream = session.getValue().executeReadTable(tablePath, settings);
+                stream.start(part -> onNextPart(part.getResultSetReader())).whenComplete((status, th) -> {
+                    session.getValue().close();
+                    onComplete(status, th);
+                });
             }
-
-            this.stream = session.getValue().executeReadTable(tablePath, settings);
-            stream.start(part -> onNextPart(part.getResultSetReader())).whenComplete((status, th) -> {
-                session.getValue().close();
-                onComplete(status, th);
-            });
-
             return id;
         }
 

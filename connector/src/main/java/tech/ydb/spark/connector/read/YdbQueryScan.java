@@ -83,17 +83,16 @@ public class YdbQueryScan implements Scan, Batch, ScanBuilder, PartitionReaderFa
             Result<QuerySession> session = query.getCtx().getExecutor().createQuerySession();
             if (!session.isSuccess()) {
                 onComplete(session.getStatus(), null);
+            } else {
+                ExecuteQuerySettings settings = ExecuteQuerySettings.newBuilder()
+                        .withGrpcFlowControl(flowControl)
+                        .build();
+                stream = session.getValue().createQuery(yql, TxMode.NONE, Params.empty(), settings);
+                stream.execute(part -> onNextPart(part.getResultSetReader())).whenComplete((res, th) -> {
+                    session.getValue().close();
+                    onComplete(res.getStatus(), th);
+                });
             }
-
-            ExecuteQuerySettings settings = ExecuteQuerySettings.newBuilder()
-                    .withGrpcFlowControl(flowControl)
-                    .build();
-            stream = session.getValue().createQuery(yql, TxMode.NONE, Params.empty(), settings);
-            stream.execute(part -> onNextPart(part.getResultSetReader())).whenComplete((res, th) -> {
-                session.getValue().close();
-                onComplete(res.getStatus(), th);
-            });
-
             return yql;
         }
 
