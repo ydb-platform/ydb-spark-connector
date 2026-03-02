@@ -306,9 +306,9 @@ public class PredicatesTest {
         DataFrameReader pushOn = readYdb().option("pushDownPredicate", "true");
         DataFrameReader pushOff = readYdb().option("pushDownPredicate", "false");
 
-        assertDfEquals("substring(data, 5, 4)", 100,
-                pushOn.load("row_table1").filter("SUBSTRING(data, 5, 4) = X'00000001'").orderBy("data"),
-                pushOff.load("row_table1").filter("SUBSTRING(data, 5, 4) = X'00000001'").orderBy("data")
+        assertDfEquals("substring(data, 5, 4)", 28,
+                pushOn.load("row_table1").filter("SUBSTRING(data, 5, 4) = X'000000A0'").orderBy("data"),
+                pushOff.load("row_table1").filter("SUBSTRING(data, 5, 4) = X'000000A0'").orderBy("data")
         );
 
         assertDfEquals("substring(data, 5, 4)", 100,

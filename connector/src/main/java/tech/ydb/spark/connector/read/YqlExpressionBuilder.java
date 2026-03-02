@@ -46,7 +46,7 @@ public class YqlExpressionBuilder extends V2ExpressionSQLBuilder {
             byte[] bytes = (byte[]) literal.value();
             StringBuilder sb = new StringBuilder("\"");
             for (byte b: bytes) {
-                sb.append("\\x").append(HEX_ARRAY[(b & 0xFF) >>> 4]).append(HEX_ARRAY[b & 0x0F]);
+                sb.append("\\x").append(HEX_ARRAY[(b & 0xF0) >>> 4]).append(HEX_ARRAY[b & 0x0F]);
             }
             sb.append("\"");
             return sb.toString();
