@@ -1,7 +1,5 @@
 package tech.ydb.spark.connector.read;
 
-
-
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.connector.read.Batch;
 import org.apache.spark.sql.connector.read.InputPartition;
@@ -27,6 +25,7 @@ import tech.ydb.table.query.Params;
  * @author zinal
  */
 public class YdbQueryScan implements Scan, Batch, ScanBuilder, PartitionReaderFactory {
+
     private static final long serialVersionUID = 9149595384600250661L;
 
     private final YdbQueryTable query;
@@ -71,6 +70,7 @@ public class YdbQueryScan implements Scan, Batch, ScanBuilder, PartitionReaderFa
     }
 
     private final class QueryReader extends StreamReader {
+
         private volatile QueryStream stream = null;
 
         QueryReader() {
@@ -83,6 +83,7 @@ public class YdbQueryScan implements Scan, Batch, ScanBuilder, PartitionReaderFa
             Result<QuerySession> session = query.getCtx().getExecutor().createQuerySession();
             if (!session.isSuccess()) {
                 onComplete(session.getStatus(), null);
+                return yql;
             }
 
             ExecuteQuerySettings settings = ExecuteQuerySettings.newBuilder()
@@ -91,9 +92,8 @@ public class YdbQueryScan implements Scan, Batch, ScanBuilder, PartitionReaderFa
             stream = session.getValue().createQuery(yql, TxMode.NONE, Params.empty(), settings);
             stream.execute(part -> onNextPart(part.getResultSetReader())).whenComplete((res, th) -> {
                 session.getValue().close();
-                onComplete(res.getStatus(), th);
+                onComplete((res == null) ? null : res.getStatus(), th);
             });
-
             return yql;
         }
 

@@ -85,7 +85,7 @@ public class YdbTable implements Serializable, Table, SupportsRead, SupportsWrit
         this.columns = new FieldInfo[td.getColumns().size()];
         Map<String, FieldInfo> columnsByName = new HashMap<>();
         int idx = 0;
-        for (TableColumn column: td.getColumns()) {
+        for (TableColumn column : td.getColumns()) {
             FieldInfo field = new FieldInfo(column);
             this.columns[idx++] = field;
             columnsByName.put(column.getName(), field);
@@ -93,7 +93,7 @@ public class YdbTable implements Serializable, Table, SupportsRead, SupportsWrit
 
         this.keyColumns = new FieldInfo[td.getPrimaryKeys().size()];
         idx = 0;
-        for (String keyColumn: td.getPrimaryKeys()) {
+        for (String keyColumn : td.getPrimaryKeys()) {
             keyColumns[idx++] = columnsByName.get(keyColumn);
         }
 
@@ -124,7 +124,7 @@ public class YdbTable implements Serializable, Table, SupportsRead, SupportsWrit
                 if (result.length > 1) {
                     logger.warn("Unrestricted partition for table {}, ignoring partition metadata", tablePath);
                 }
-                return new KeysRange[] {parsed};
+                return new KeysRange[]{parsed};
             }
             result[idx++] = new KeysRange(kr, types);
         }
@@ -160,7 +160,6 @@ public class YdbTable implements Serializable, Table, SupportsRead, SupportsWrit
     public KeysRange[] getPartitions() {
         return partitions;
     }
-
 
     @Override
     public String toString() {
@@ -208,7 +207,7 @@ public class YdbTable implements Serializable, Table, SupportsRead, SupportsWrit
             cols[idx++] = key.getName();
         }
 
-        return new Transform[] {
+        return new Transform[]{
             Expressions.bucket(partitions.length, cols)
         };
     }
@@ -307,8 +306,8 @@ public class YdbTable implements Serializable, Table, SupportsRead, SupportsWrit
                 break;
             case INDEX:
             default:
-                throw new IllegalArgumentException("Specified table type " + tableType +
-                        " is not supported for table creating");
+                throw new IllegalArgumentException("Specified table type " + tableType
+                        + " is not supported for table creating");
         }
 
         // Spark always uses a schema with all columns nullable

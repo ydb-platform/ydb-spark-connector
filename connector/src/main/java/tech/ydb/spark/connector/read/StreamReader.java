@@ -103,6 +103,7 @@ abstract class StreamReader implements PartitionReader<InternalRow> {
             try {
                 currentItem = queue.poll(100, TimeUnit.MILLISECONDS);
                 if (currentItem != null) {
+                    // call is never null if item has been read
                     call.requestNextMessage();
                 }
             } catch (InterruptedException e) {

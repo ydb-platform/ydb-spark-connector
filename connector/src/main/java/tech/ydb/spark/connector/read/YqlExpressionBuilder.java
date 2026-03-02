@@ -46,7 +46,7 @@ public class YqlExpressionBuilder extends V2ExpressionSQLBuilder {
             byte[] bytes = (byte[]) literal.value();
             StringBuilder sb = new StringBuilder("\"");
             for (byte b: bytes) {
-                sb.append("\\x").append(HEX_ARRAY[b >>> 4]).append(HEX_ARRAY[b & 0x0F]);
+                sb.append("\\x").append(HEX_ARRAY[(b & 0xF0) >>> 4]).append(HEX_ARRAY[b & 0x0F]);
             }
             sb.append("\"");
             return sb.toString();
@@ -74,7 +74,7 @@ public class YqlExpressionBuilder extends V2ExpressionSQLBuilder {
     protected String visitSQLFunction(String funcName, String[] inputs) {
         if ("SUBSTRING".equals(funcName) && (inputs.length == 2 || inputs.length == 3)) {
             StringJoiner joiner = new StringJoiner(", ", "SUBSTRING(", ")");
-            joiner.add("CAST(" + inputs[0] + " AS  String)");
+            joiner.add("CAST(" + inputs[0] + " AS String)");
             joiner.add("CAST((" + inputs[1] + " - 1) AS UInt32)");
             if (inputs.length == 3) {
                 joiner.add(inputs[2]);

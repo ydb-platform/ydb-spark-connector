@@ -152,6 +152,7 @@ public class YdbReadTable implements Batch, Scan, ScanBuilder, SupportsReportPar
         if (logger.isDebugEnabled()) {
             logger.debug("Input table partitions: {}", Arrays.toString(partitions));
         }
+        // TODO: maybe switch to deterministic shuffle
         final Random random = new Random();
         ShardPartition[] out = Stream.of(partitions)
                 .map(kr -> kr.intersect(predicateRange))
@@ -387,6 +388,7 @@ public class YdbReadTable implements Batch, Scan, ScanBuilder, SupportsReportPar
             Result<Session> session = table.getCtx().getExecutor().createTableSession();
             if (!session.isSuccess()) {
                 onComplete(session.getStatus(), null);
+                return id;
             }
 
             this.stream = session.getValue().executeReadTable(tablePath, settings);
@@ -394,7 +396,6 @@ public class YdbReadTable implements Batch, Scan, ScanBuilder, SupportsReportPar
                 session.getValue().close();
                 onComplete(status, th);
             });
-
             return id;
         }
 
