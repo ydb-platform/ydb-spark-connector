@@ -17,6 +17,7 @@ import tech.ydb.query.QueryStream;
 import tech.ydb.query.settings.ExecuteQuerySettings;
 import tech.ydb.spark.connector.YdbQueryTable;
 import tech.ydb.spark.connector.YdbTypes;
+import tech.ydb.spark.connector.common.OperationOption;
 import tech.ydb.table.query.Params;
 
 /**
@@ -31,12 +32,14 @@ public class YdbQueryScan implements Scan, Batch, ScanBuilder, PartitionReaderFa
     private final YdbQueryTable query;
     private final YdbTypes types;
     private final int queueMaxSize;
+    private final boolean useApacheArrow;
 
     public YdbQueryScan(YdbQueryTable query, CaseInsensitiveStringMap options) {
         this.query = query;
         this.types = new YdbTypes(options);
 
         this.queueMaxSize = StreamReader.readQueueMaxSize(options);
+        this.useApacheArrow = OperationOption.USE_APACHE_ARROW.readBoolean(options, false);
     }
 
     @Override
@@ -86,11 +89,14 @@ public class YdbQueryScan implements Scan, Batch, ScanBuilder, PartitionReaderFa
                 return yql;
             }
 
-            ExecuteQuerySettings settings = ExecuteQuerySettings.newBuilder()
-                    .withGrpcFlowControl(flowControl)
-                    .build();
-            stream = session.getValue().createQuery(yql, TxMode.NONE, Params.empty(), settings);
-            stream.execute(part -> onNextPart(part.getResultSetReader())).whenComplete((res, th) -> {
+            ExecuteQuerySettings.Builder settings = ExecuteQuerySettings.newBuilder()
+                    .withGrpcFlowControl(flowControl);
+            if (useApacheArrow) {
+                settings = settings.useApacheArrowFormat();
+            }
+
+            stream = session.getValue().createQuery(yql, TxMode.NONE, Params.empty(), settings.build());
+            stream.execute(new StreamPartsHandler(this)).whenComplete((res, th) -> {
                 session.getValue().close();
                 onComplete((res == null) ? null : res.getStatus(), th);
             });

@@ -51,6 +51,7 @@ public class YdbScanTable implements Batch, Scan, ScanBuilder, SupportsReportPar
     private final SelectQuery query;
     private final YdbTypes types;
     private final int queueMaxSize;
+    private final boolean useApacheArrow;
 
     private final boolean pushDownPredicate;
 //    private final boolean pushDownAggregate;
@@ -65,6 +66,7 @@ public class YdbScanTable implements Batch, Scan, ScanBuilder, SupportsReportPar
         this.types = new YdbTypes(options);
 
         this.queueMaxSize = StreamReader.readQueueMaxSize(options);
+        this.useApacheArrow = OperationOption.USE_APACHE_ARROW.readBoolean(options, false);
         this.readSchema = table.schema();
 
         this.pushDownPredicate = OperationOption.PUSHDOWN_PREDICATE.readBoolean(options, true);
@@ -248,11 +250,14 @@ public class YdbScanTable implements Batch, Scan, ScanBuilder, SupportsReportPar
             if (!session.isSuccess()) {
                 onComplete(session.getStatus(), null);
             } else {
-                ExecuteQuerySettings settings = ExecuteQuerySettings.newBuilder()
-                        .withGrpcFlowControl(flowControl)
-                        .build();
-                stream = session.getValue().createQuery(query, TxMode.SNAPSHOT_RO, params, settings);
-                stream.execute(part -> onNextPart(part.getResultSetReader())).whenComplete((res, th) -> {
+                ExecuteQuerySettings.Builder settings = ExecuteQuerySettings.newBuilder()
+                        .withGrpcFlowControl(flowControl);
+                if (useApacheArrow) {
+                    settings = settings.useApacheArrowFormat();
+                }
+
+                stream = session.getValue().createQuery(query, TxMode.SNAPSHOT_RO, params, settings.build());
+                stream.execute(new StreamPartsHandler(this)).whenComplete((res, th) -> {
                     session.getValue().close();
                     onComplete((res == null) ? null : res.getStatus(), th);
                 });

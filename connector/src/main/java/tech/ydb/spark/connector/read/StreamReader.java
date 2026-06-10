@@ -20,7 +20,6 @@ import tech.ydb.core.StatusCode;
 import tech.ydb.core.grpc.GrpcFlowControl;
 import tech.ydb.spark.connector.YdbTypes;
 import tech.ydb.spark.connector.common.OperationOption;
-import tech.ydb.table.result.ResultSetReader;
 
 /**
  *
@@ -31,10 +30,10 @@ abstract class StreamReader implements PartitionReader<InternalRow> {
     private static final Logger logger = LoggerFactory.getLogger(StreamReader.class);
     private static final AtomicInteger COUNTER = new AtomicInteger(0);
 
-    private final String[] outColumns;
+    private final String[] fieldNames;
     private final YdbTypes types;
 
-    private final BlockingQueue<QueueItem> queue;
+    private final BlockingQueue<StreamPart> queue;
     private final AtomicLong readedRows = new AtomicLong();
 
     protected final GrpcFlowControl flowControl;
@@ -42,11 +41,11 @@ abstract class StreamReader implements PartitionReader<InternalRow> {
     private volatile String id = null;
     private volatile GrpcCall call = null;
     private volatile long startedAt = System.currentTimeMillis();
-    private volatile QueueItem currentItem = null;
+    private volatile StreamPart currentItem = null;
     private volatile Status finishStatus = null;
 
     protected StreamReader(YdbTypes types, int maxQueueSize, StructType schema) {
-        this.outColumns = schema.fieldNames();
+        this.fieldNames = schema.fieldNames();
         this.types = types;
         this.queue = new ArrayBlockingQueue<>(maxQueueSize);
         this.flowControl = (req) -> {
@@ -59,7 +58,7 @@ abstract class StreamReader implements PartitionReader<InternalRow> {
 
     protected abstract void cancel();
 
-    protected void onComplete(Status status, Throwable th) {
+    void onComplete(Status status, Throwable th) {
         long ms = System.currentTimeMillis() - startedAt;
         if (status != null) {
             if (!status.isSuccess()) {
@@ -75,9 +74,9 @@ abstract class StreamReader implements PartitionReader<InternalRow> {
         logger.debug("[{}] got {} rows in {} ms", id, readedRows.get(), ms);
     }
 
-    protected void onNextPart(ResultSetReader reader) {
-        readedRows.addAndGet(reader.getRowCount());
-        queue.add(new QueueItem(reader));
+    void onNextPart(StreamPart part) {
+        readedRows.addAndGet(part.getRowCount());
+        queue.add(part);
     }
 
     @Override
@@ -96,8 +95,12 @@ abstract class StreamReader implements PartitionReader<InternalRow> {
                 }
             }
 
-            if (currentItem != null && currentItem.next()) {
-                return true;
+            if (currentItem != null) {
+                if (currentItem.next()) {
+                    return true;
+                }
+                currentItem.close();
+                currentItem = null;
             }
 
             try {
@@ -118,13 +121,28 @@ abstract class StreamReader implements PartitionReader<InternalRow> {
         if (currentItem == null) {
             throw new IllegalStateException("Nothing to read");
         }
-        return currentItem.get();
+
+        if (fieldNames.length == 0) {
+            return InternalRow.empty();
+        }
+        InternalRow row = new GenericInternalRow(fieldNames.length);
+        for (int i = 0; i < fieldNames.length; ++i) {
+            types.setRowValue(row, i, currentItem.getColumn(fieldNames[i]));
+        }
+        return row;
     }
 
     @Override
     public void close() {
         if (finishStatus == null) {
             cancel();
+        }
+        if (currentItem != null) {
+            currentItem.close();
+            currentItem = null;
+        }
+        for (StreamPart item = queue.poll(); item != null; item = queue.poll()) {
+            item.close();
         }
     }
 
@@ -148,38 +166,6 @@ abstract class StreamReader implements PartitionReader<InternalRow> {
 
         public void requestNextMessage() {
             req.accept(1);
-        }
-    }
-
-    private class QueueItem {
-
-        private final ResultSetReader reader;
-        private final int[] columnIndexes;
-
-        QueueItem(ResultSetReader reader) {
-            this.reader = reader;
-            this.columnIndexes = new int[outColumns.length];
-            int idx = 0;
-            for (String column : outColumns) {
-                columnIndexes[idx++] = reader.getColumnIndex(column);
-            }
-        }
-
-        public boolean next() {
-            return reader.next();
-        }
-
-        public InternalRow get() {
-            if (columnIndexes.length == 0) {
-                return InternalRow.empty();
-            }
-            InternalRow row = new GenericInternalRow(columnIndexes.length);
-            for (int i = 0; i < columnIndexes.length; ++i) {
-                if (columnIndexes[i] >= 0) {
-                    types.setRowValue(row, i, reader.getColumn(columnIndexes[i]));
-                }
-            }
-            return row;
         }
     }
 

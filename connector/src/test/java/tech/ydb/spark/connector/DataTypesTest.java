@@ -238,7 +238,7 @@ public class DataTypesTest {
     }
 
     @Test
-    public void writeApacheArrowTest() {
+    public void apacheArrowTest() {
         try {
             spark.read().format("ydb").options(ydbCreds)
                     .option("query", "DROP TABLE IF EXISTS `datetypes/arrow`")
@@ -256,7 +256,10 @@ public class DataTypesTest {
                     .option("useApacheArrow", true)
                     .mode(SaveMode.Append).save("datetypes/arrow");
 
-            TestData.assertEquals("arrow", 50000, origin, readYdb().load("datetypes/arrow").orderBy("id"));
+            TestData.assertEquals("arrow", 50000, origin,
+                    readYdb().option("useApacheArrow", false).load("datetypes/arrow").orderBy("id"));
+            TestData.assertEquals("arrow", 50000, origin,
+                    readYdb().option("useApacheArrow", true).load("datetypes/arrow").orderBy("id"));
         } finally {
             spark.read().format("ydb").options(ydbCreds)
                     .option("query", "DROP TABLE IF EXISTS `datetypes/arrow`")
