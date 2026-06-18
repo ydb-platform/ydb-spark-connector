@@ -4,7 +4,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>tech.ydb.spark</groupId>
     <artifactId>ydb-spark-parent</artifactId>
-    <version>2.1.2-SNAPSHOT</version>
+    <version>2.2.0</version>
 
     <name>YDB Spark Project</name>
     <description>Apache Spark Connector for YDB</description>
@@ -18,7 +18,7 @@
         <scala.version>2.13</scala.version>
         <spark.version>3.5.8</spark.version>
 
-        <ydb.sdk.version>2.4.4</ydb.sdk.version>
+        <ydb.sdk.version>2.4.6</ydb.sdk.version>
         <!-- Must be syncronized with YDB SDK version -->
         <grpc.version>1.68.3</grpc.version>
         <protobuf.version>3.25.5</protobuf.version>
