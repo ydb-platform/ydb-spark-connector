@@ -440,20 +440,38 @@ public final class YdbTypes implements Serializable {
             case Uint64:
                 return convertUint64ToYdb(v, t);
             case Text:
-                return convertTextToYdb(v);
+                return convertTextToYdb(v, t);
             case Json:
-                return convertJsonToYdb(v);
+                return convertJsonToYdb(v, t);
             default:
                 throw new IllegalArgumentException("Conversion to type " + t + " is not supported");
         }
     }
 
-    private Value<?> convertTextToYdb(Object v) {
-        return PrimitiveValue.newText(v.toString());
+    private Value<?> convertTextToYdb(Object v, PrimitiveType t) {
+        if (v instanceof String) {
+            return PrimitiveValue.newText((String) v);
+        }
+        if (v instanceof UTF8String) {
+            return PrimitiveValue.newText(((UTF8String) v).toString());
+        }
+        if (v instanceof byte[]) {
+            return PrimitiveValue.newText(new String((byte[]) v, StandardCharsets.UTF_8));
+        }
+        throw badConversion(v, t);
     }
 
-    private Value<?> convertJsonToYdb(Object v) {
-        return PrimitiveValue.newJson(v.toString());
+    private Value<?> convertJsonToYdb(Object v, PrimitiveType t) {
+        if (v instanceof String) {
+            return PrimitiveValue.newJson((String) v);
+        }
+        if (v instanceof UTF8String) {
+            return PrimitiveValue.newJson(((UTF8String) v).toString());
+        }
+        if (v instanceof byte[]) {
+            return PrimitiveValue.newJson(new String((byte[]) v, StandardCharsets.UTF_8));
+        }
+        throw badConversion(v, t);
     }
 
     private Value<?> convertUint8ToYdb(Object v, PrimitiveType t) {
