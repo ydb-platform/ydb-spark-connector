@@ -4,7 +4,10 @@ import java.io.IOException;
 import java.time.LocalDate;
 import java.time.Month;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 
 import org.apache.logging.log4j.Level;
@@ -23,6 +26,7 @@ import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
+import org.apache.spark.unsafe.types.UTF8String;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -84,6 +88,12 @@ public class DataTypesTest {
 
     private static DataFrameReader readYdb() {
         return spark.read().format("ydb").options(ydbCreds);
+    }
+
+    private static void dropTable(String tableName) {
+        spark.read().format("ydb").options(ydbCreds)
+                            .option("query", "DROP TABLE IF EXISTS `" + tableName + "`")
+                            .load().count();
     }
 
     @Test
@@ -239,13 +249,10 @@ public class DataTypesTest {
 
     @Test
     public void apacheArrowTest() {
+        dropTable("datetypes/arrow");
+        TestData data = new TestData(true);
+
         try {
-            spark.read().format("ydb").options(ydbCreds)
-                    .option("query", "DROP TABLE IF EXISTS `datetypes/arrow`")
-                    .load().count();
-
-            TestData data = new TestData(true);
-
             String createTable = "CREATE TABLE `datetypes/arrow`(" + data.toYqlColumns() + "PRIMARY KEY(id))"
                     + " WITH (STORE=COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT=4);";
             readYdb().option("query", createTable).load().count();
@@ -261,9 +268,117 @@ public class DataTypesTest {
             TestData.assertEquals("arrow", 50000, origin,
                     readYdb().option("useApacheArrow", true).load("datetypes/arrow").orderBy("id"));
         } finally {
-            spark.read().format("ydb").options(ydbCreds)
-                    .option("query", "DROP TABLE IF EXISTS `datetypes/arrow`")
-                    .load().count();
+            dropTable("datetypes/arrow");
+        }
+    }
+
+    @Test
+    public void ydbTextConvertTest() {
+        dropTable("datetypes/text_test");
+        try {
+            String createTable = "CREATE TABLE `datetypes/text_test`(id Int32, value Text, PRIMARY KEY(id));";
+            readYdb().option("query", createTable).load().count();
+
+            StructType t1 = new StructType(new StructField[]{
+                new StructField("id", DataTypes.IntegerType, false, Metadata.empty()),
+                new StructField("value", DataTypes.StringType, true, Metadata.empty()),
+            });
+            List<Row> rs1 = Arrays.asList(
+                new GenericRowWithSchema(new Object[] { 1, "value1" } , t1),
+                new GenericRowWithSchema(new Object[] { 2, "value2" } , t1)
+            );
+
+            spark.createDataFrame(rs1, t1).write().format("ydb").options(ydbCreds).mode(SaveMode.Append)
+                    .save("datetypes/text_test");
+
+            StructType t2 = new StructType(new StructField[]{
+                new StructField("id", DataTypes.IntegerType, false, Metadata.empty()),
+                new StructField("value", DataTypes.BinaryType, true, Metadata.empty()),
+            });
+            List<Row> rs2 = Arrays.asList(
+                new GenericRowWithSchema(new Object[] { 3, "value3".getBytes() } , t2),
+                new GenericRowWithSchema(new Object[] { 4, "value4".getBytes() } , t2)
+            );
+
+            spark.createDataFrame(rs2, t2).write().format("ydb").options(ydbCreds).mode(SaveMode.Append)
+                    .save("datetypes/text_test");
+
+            StructType t3 = new StructType(new StructField[]{
+                new StructField("id", DataTypes.IntegerType, false, Metadata.empty()),
+                new StructField("value", DataTypes.StringType, true, Metadata.empty()),
+            });
+            List<Row> rs3 = Arrays.asList(
+                new GenericRowWithSchema(new Object[] { 5, UTF8String.fromString("value5") } , t3),
+                new GenericRowWithSchema(new Object[] { 6, UTF8String.fromString("value6") } , t3)
+            );
+
+            spark.createDataFrame(rs3, t3).write().format("ydb").options(ydbCreds).mode(SaveMode.Append)
+                    .save("datetypes/text_test");
+
+            // Validate
+            Iterator<Row> it = readYdb().load("datetypes/text_test").select("value").orderBy("id").toLocalIterator();
+            for (int idx = 1; idx <= 6; idx++) {
+                Assert.assertTrue(it.hasNext());
+                Assert.assertEquals("value" + idx, it.next().getString(0));
+            }
+            Assert.assertFalse(it.hasNext());
+        } finally {
+            dropTable("datetypes/text_test");
+        }
+    }
+
+    @Test
+    public void ydbJsonConvertTest() {
+        dropTable("datetypes/json_test");
+        try {
+            String createTable = "CREATE TABLE `datetypes/json_test`(id Int32, value Json, PRIMARY KEY(id));";
+            readYdb().option("query", createTable).load().count();
+
+            StructType t1 = new StructType(new StructField[]{
+                new StructField("id", DataTypes.IntegerType, false, Metadata.empty()),
+                new StructField("value", DataTypes.StringType, true, Metadata.empty()),
+            });
+            List<Row> rs1 = Arrays.asList(
+                new GenericRowWithSchema(new Object[] { 1, "{ \"value1\": 1 }" } , t1),
+                new GenericRowWithSchema(new Object[] { 2, "{ \"value2\": 2 }" } , t1)
+            );
+
+            spark.createDataFrame(rs1, t1).write().format("ydb").options(ydbCreds).mode(SaveMode.Append)
+                    .save("datetypes/json_test");
+
+            StructType t2 = new StructType(new StructField[]{
+                new StructField("id", DataTypes.IntegerType, false, Metadata.empty()),
+                new StructField("value", DataTypes.BinaryType, true, Metadata.empty()),
+            });
+            List<Row> rs2 = Arrays.asList(
+                new GenericRowWithSchema(new Object[] { 3, "{ \"value3\": 3 }".getBytes() } , t2),
+                new GenericRowWithSchema(new Object[] { 4, "{ \"value4\": 4 }".getBytes() } , t2)
+            );
+
+            spark.createDataFrame(rs2, t2).write().format("ydb").options(ydbCreds).mode(SaveMode.Append)
+                    .save("datetypes/json_test");
+
+            StructType t3 = new StructType(new StructField[]{
+                new StructField("id", DataTypes.IntegerType, false, Metadata.empty()),
+                new StructField("value", DataTypes.StringType, true, Metadata.empty()),
+            });
+            List<Row> rs3 = Arrays.asList(
+                new GenericRowWithSchema(new Object[] { 5, UTF8String.fromString("{ \"value5\": 5 }") } , t3),
+                new GenericRowWithSchema(new Object[] { 6, UTF8String.fromString("{ \"value6\": 6 }") } , t3)
+            );
+
+            spark.createDataFrame(rs3, t3).write().format("ydb").options(ydbCreds).mode(SaveMode.Append)
+                    .save("datetypes/json_test");
+
+            // Validate
+            Iterator<Row> it = readYdb().load("datetypes/json_test").select("value").orderBy("id").toLocalIterator();
+            for (int idx = 1; idx <= 6; idx++) {
+                Assert.assertTrue(it.hasNext());
+                Assert.assertEquals("{ \"value" + idx + "\": " + idx + " }", it.next().getString(0));
+            }
+            Assert.assertFalse(it.hasNext());
+        } finally {
+            dropTable("datetypes/json_test");
         }
     }
 }
