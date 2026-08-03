@@ -81,6 +81,12 @@ public class YdbDataWriterFactory implements DataWriterFactory {
         String tablePath = table.getTablePath();
 
         if (method == IngestMethod.BULK_UPSERT) {
+            if (!table.isBulkUpsertAllowed()) {
+                logger.warn("cannot execute BulkUpsert to table {} with indexes, use UPSERT", tablePath);
+                String cmd = IngestMethod.UPSERT.name();
+                return new YdbWriterDataQuery(cmd, tablePath, types, batchRowsCount, batchBytesLimit, columns);
+            }
+
             if (useApacheArrow) {
                 return new YdbWriterArrow(tablePath, columns, batchRowsCount, batchBytesLimit);
             }

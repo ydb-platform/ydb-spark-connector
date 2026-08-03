@@ -73,6 +73,7 @@ public class YdbTable implements Serializable, Table, SupportsRead, SupportsWrit
     private final KeysRange[] partitions;
 
     private final HashMap<String, String> properties;
+    private final boolean bulkUpsertAllowed;
 
     public YdbTable(YdbContext ctx, YdbTypes types, String name, String path, TableDescription td,
             CaseInsensitiveStringMap options) {
@@ -110,6 +111,7 @@ public class YdbTable implements Serializable, Table, SupportsRead, SupportsWrit
             PartitionOption.writeAll(properties, ps);
         }
 
+        this.bulkUpsertAllowed = td.getIndexes().isEmpty();
         logger.debug("Loaded table {} with {} columns and {} partitions", this.path, schema.size(), partitions.length);
     }
 
@@ -137,6 +139,10 @@ public class YdbTable implements Serializable, Table, SupportsRead, SupportsWrit
     @Override
     public String name() {
         return name;
+    }
+
+    public boolean isBulkUpsertAllowed() {
+        return bulkUpsertAllowed;
     }
 
     public String getTablePath() {
