@@ -240,4 +240,29 @@ public class DataFramesTest {
             ctx.getExecutor().executeSchemeQuery("DROP TABLE `copy/column_table`;").join();
         }
     }
+
+    @Test
+    public void indexedTableAutoUpsertTest() {
+        Dataset<Row> origin = spark.read().format("ydb").options(ydbCreds).load("row_table");
+        Assert.assertEquals(10, origin.count());
+        Assert.assertEquals(2, origin.schema().length());
+        Assert.assertArrayEquals(new String[] {"id", "value"} , origin.schema().fieldNames());
+
+        ctx.getExecutor().executeSchemeQuery("CREATE TABLE `copy/indexed_table` ("
+                + " id Int32 NOT NULL,"
+                + " value Text NOT NULL,"
+                + " PRIMARY KEY(id),  "
+                + " INDEX value_idx GLOBAL SYNC ON (value) "
+                + ")").join().expectSuccess("cannot create test indexed table");
+
+        try {
+            origin.write().format("ydb").options(ydbCreds).mode(SaveMode.Append).save("copy/indexed_table");
+            Dataset<Row> copy = spark.read().format("ydb").options(ydbCreds).load("copy/indexed_table");
+
+            Assert.assertEquals(10, copy.count());
+            Assert.assertArrayEquals(new String[] {"id", "value" } , copy.schema().fieldNames());
+        } finally {
+            ctx.getExecutor().executeSchemeQuery("DROP TABLE `copy/indexed_table`;").join();
+        }
+    }
 }
