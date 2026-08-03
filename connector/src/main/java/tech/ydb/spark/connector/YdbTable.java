@@ -110,7 +110,6 @@ public class YdbTable implements Serializable, Table, SupportsRead, SupportsWrit
             PartitionOption.writeAll(properties, ps);
         }
 
-
         logger.debug("Loaded table {} with {} columns and {} partitions", this.path, schema.size(), partitions.length);
     }
 
