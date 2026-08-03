@@ -74,7 +74,8 @@ public class YdbTable implements Serializable, Table, SupportsRead, SupportsWrit
 
     private final HashMap<String, String> properties;
 
-    public YdbTable(YdbContext ctx, YdbTypes types, String name, String path, TableDescription td) {
+    public YdbTable(YdbContext ctx, YdbTypes types, String name, String path, TableDescription td,
+            CaseInsensitiveStringMap options) {
         this.ctx = ctx;
         this.name = name;
         this.path = path;
@@ -99,7 +100,7 @@ public class YdbTable implements Serializable, Table, SupportsRead, SupportsWrit
 
         this.partitions = parsePartitions(types, this.path, td.getKeyRanges());
 
-        this.properties = new HashMap<>();
+        this.properties = new HashMap<>(options);
         OperationOption.TABLE_PATH.write(properties, path);
         OperationOption.TABLE_TYPE.write(properties, type.name());
         String pkList = td.getPrimaryKeys().stream().collect(Collectors.joining(","));
@@ -108,6 +109,8 @@ public class YdbTable implements Serializable, Table, SupportsRead, SupportsWrit
         if (ps != null) {
             PartitionOption.writeAll(properties, ps);
         }
+
+
         logger.debug("Loaded table {} with {} columns and {} partitions", this.path, schema.size(), partitions.length);
     }
 

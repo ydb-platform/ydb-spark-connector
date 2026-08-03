@@ -1,7 +1,11 @@
 package tech.ydb.spark.connector;
 
 import java.io.IOException;
-import java.util.Collections;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.TreeSet;
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.sql.Dataset;
@@ -16,6 +20,7 @@ import org.junit.Test;
 import tech.ydb.spark.connector.impl.YdbExecutor;
 import tech.ydb.test.junit4.YdbHelperRule;
 
+
 /**
  *
  * @author Aleksandr Gorshenin
@@ -24,23 +29,24 @@ public class SparkSqlTest {
     @ClassRule
     public static final YdbHelperRule YDB = new YdbHelperRule();
 
-    private static String ydbURL;
     private static YdbContext ctx;
     private static SparkSession spark;
 
     @BeforeClass
     public static void prepare() {
-        StringBuilder url = new StringBuilder()
+        Map<String, String> ydbCreds = new HashMap<>();
+        ydbCreds.put("url", new StringBuilder()
                 .append(YDB.useTls() ? "grpcs://" : "grpc://")
                 .append(YDB.endpoint())
-                .append(YDB.database());
+                .append(YDB.database())
+                .toString());
 
         if (YDB.authToken() != null) {
-            url.append("?").append("token=").append(YDB.authToken());
+            ydbCreds.put("auth.token", YDB.authToken());
         }
 
-        ydbURL = url.toString();
-        ctx = new YdbContext(Collections.singletonMap("url", ydbURL));
+        ydbCreds.put("method", "UPSERT");
+        ctx = new YdbContext(ydbCreds);
 
         prepareTables(ctx.getExecutor());
 
@@ -48,8 +54,8 @@ public class SparkSqlTest {
                 .setMaster("local[4]")
                 .setAppName("ydb-spark-sql-test")
                 .set("spark.ui.enabled", "false")
-                .set("spark.sql.catalog.ydb", "tech.ydb.spark.connector.YdbCatalog")
-                .set("spark.sql.catalog.ydb.url", ydbURL);
+                .set("spark.sql.catalog.ydb", "tech.ydb.spark.connector.YdbCatalog");
+        ydbCreds.forEach((key, value) -> conf.set("spark.sql.catalog.ydb." + key, value));
 
         spark = SparkSession.builder()
                 .config(conf)
@@ -76,9 +82,13 @@ public class SparkSqlTest {
                 .join().expectSuccess("cannot create test table");
         executor.executeSchemeQuery("CREATE TABLE `test_dir/test2` (id Int32 NOT NULL, value Text, PRIMARY KEY(id))")
                 .join().expectSuccess("cannot create test table");
+        executor.executeSchemeQuery("CREATE TABLE `test_dir/test3` (id Int32 NOT NULL, value Text, PRIMARY KEY(id), "
+                + "INDEX value_idx GLOBAL SYNC ON (value))")
+                .join().expectSuccess("cannot create test table");
     }
 
     private static void cleanTables(YdbExecutor executor) {
+        executor.executeSchemeQuery("DROP TABLE `test_dir/test3`;").join();
         executor.executeSchemeQuery("DROP TABLE `test_dir/test2`;").join();
         executor.executeSchemeQuery("DROP TABLE test1;").join();
 
@@ -96,11 +106,24 @@ public class SparkSqlTest {
         Assert.assertEquals(Boolean.FALSE, test1.getAs("isTemporary"));
 
         Dataset<Row> testDir = spark.sql("show tables from ydb.test_dir");
-        Assert.assertEquals(1, testDir.count());
-        Row test2 = testDir.first();
-        Assert.assertEquals("test_dir", test2.getAs("namespace"));
-        Assert.assertEquals("test2", test2.getAs("tableName"));
-        Assert.assertEquals(Boolean.FALSE, test2.getAs("isTemporary"));
+        Assert.assertEquals(2, testDir.count());
+        Iterator<Row> it = testDir.toLocalIterator();
+
+        Collection<String> tables = new TreeSet<>();
+        Assert.assertTrue(it.hasNext());
+        Row next = it.next();
+        Assert.assertEquals("test_dir", next.getAs("namespace"));
+        tables.add(next.getAs("tableName"));
+        Assert.assertEquals(Boolean.FALSE, next.getAs("isTemporary"));
+
+        Assert.assertTrue(it.hasNext());
+        next = it.next();
+        Assert.assertEquals("test_dir", next.getAs("namespace"));
+        tables.add(next.getAs("tableName"));
+        Assert.assertEquals(Boolean.FALSE, next.getAs("isTemporary"));
+
+        Assert.assertFalse(it.hasNext());
+        Assert.assertArrayEquals(new String[] { "test2", "test3" }, tables.toArray(new String[0]));
 
         Dataset<Row> emptyDir = spark.sql("show tables from ydb.empty_dir");
         Assert.assertEquals(0, emptyDir.count());
@@ -110,6 +133,15 @@ public class SparkSqlTest {
     public void showNamespacesTest() {
         Dataset<Row> root = spark.sql("show namespaces from ydb");
         Assert.assertEquals(2, root.count());
+    }
+
+    @Test
+    public void insertTest() {
+        Dataset<Row> insert = spark.sql("INSERT INTO ydb.test_dir.test3 (id, value) VALUES (1, 'v1'), (2, 'v2')");
+        Assert.assertEquals(0, insert.count());
+
+        Dataset<Row> select = spark.sql("SELECT * FROM ydb.test_dir.test3");
+        Assert.assertEquals(2, select.count());
     }
 
 //    @Test

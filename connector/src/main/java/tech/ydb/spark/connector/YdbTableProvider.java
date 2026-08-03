@@ -129,7 +129,7 @@ public class YdbTableProvider implements TableProvider, DataSourceRegister {
             ctx.getExecutor().createTable(tablePath, td);
         }
 
-        return new YdbTable(ctx, types, tableName, tablePath, td);
+        return new YdbTable(ctx, types, tableName, tablePath, td, options);
     }
 
     private Table getQueryTable(YdbContext ctx, StructType schema, String query) {
