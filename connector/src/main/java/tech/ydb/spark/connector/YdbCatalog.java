@@ -33,6 +33,7 @@ import tech.ydb.scheme.description.DescribePathResult;
 import tech.ydb.scheme.description.Entry;
 import tech.ydb.scheme.description.EntryType;
 import tech.ydb.scheme.description.ListDirectoryResult;
+import tech.ydb.spark.connector.common.FieldInfo;
 import tech.ydb.spark.connector.common.OperationOption;
 import tech.ydb.spark.connector.impl.AlterTableBuilder;
 import tech.ydb.table.description.TableDescription;
@@ -56,6 +57,7 @@ public class YdbCatalog implements CatalogPlugin, TableCatalog, SupportsNamespac
     private YdbTypes types;
     private boolean listIndexes;
     private boolean listHidden;
+    private CaseInsensitiveStringMap catalogOptions;
 
     @Override
     public void initialize(String name, CaseInsensitiveStringMap options) {
@@ -65,6 +67,7 @@ public class YdbCatalog implements CatalogPlugin, TableCatalog, SupportsNamespac
         this.types = new YdbTypes(options);
         this.listIndexes = OperationOption.LIST_INDEXES.readBoolean(options, false);
         this.listHidden = OperationOption.LIST_HIDDEN.readBoolean(options, false);
+        this.catalogOptions = options;
     }
 
     @Override
@@ -144,7 +147,7 @@ public class YdbCatalog implements CatalogPlugin, TableCatalog, SupportsNamespac
             if (td == null) {
                 throw new NoSuchTableException(ident);
             }
-            return new YdbTable(ctx, types, toPath(ident), tablePath, td);
+            return new YdbTable(ctx, types, toPath(ident), tablePath, td, catalogOptions);
         }
         // Processing for regular tables.
         String tablePath = ctx.getExecutor().extractPath(toPath(ident));
@@ -153,7 +156,7 @@ public class YdbCatalog implements CatalogPlugin, TableCatalog, SupportsNamespac
             throw new NoSuchTableException(ident);
         }
 
-        return new YdbTable(ctx, types, tablePath, tablePath, td);
+        return new YdbTable(ctx, types, tablePath, tablePath, td, catalogOptions);
     }
 
     @Override
@@ -165,14 +168,18 @@ public class YdbCatalog implements CatalogPlugin, TableCatalog, SupportsNamespac
                     + "identifier " + ident);
         }
 
-        CaseInsensitiveStringMap options = new CaseInsensitiveStringMap(properties);
+        Map<String, String> options = new HashMap<>();
+        options.putAll(catalogOptions);
+        options.putAll(properties);
+
         String tablePath = ctx.getExecutor().extractPath(toPath(ident));
-        TableDescription td = YdbTable.buildTableDesctiption(types.fromSparkSchema(schema), options);
+        List<FieldInfo> fields = types.fromSparkSchema(schema);
+        TableDescription td = YdbTable.buildTableDesctiption(fields, new CaseInsensitiveStringMap(options));
         ctx.getExecutor().createTable(tablePath, td);
 
         // describe table to get information about shards
         TableDescription created = ctx.getExecutor().describeTable(tablePath, true);
-        return new YdbTable(ctx, types, tablePath, tablePath, created);
+        return new YdbTable(ctx, types, tablePath, tablePath, created, catalogOptions);
     }
 
     @Override
@@ -208,7 +215,7 @@ public class YdbCatalog implements CatalogPlugin, TableCatalog, SupportsNamespac
 
         // describe table to get information about shards
         TableDescription update = ctx.getExecutor().describeTable(tablePath, true);
-        return new YdbTable(ctx, types, tablePath, tablePath, update);
+        return new YdbTable(ctx, types, tablePath, tablePath, update, catalogOptions);
     }
 
     @Override

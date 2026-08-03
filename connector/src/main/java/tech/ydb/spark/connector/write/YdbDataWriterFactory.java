@@ -8,9 +8,9 @@ import java.util.Map;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.connector.write.DataWriter;
 import org.apache.spark.sql.connector.write.DataWriterFactory;
-import org.apache.spark.sql.connector.write.LogicalWriteInfo;
-import org.apache.spark.sql.connector.write.PhysicalWriteInfo;
 import org.apache.spark.sql.types.StructField;
+import org.apache.spark.sql.types.StructType;
+import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import scala.collection.Iterator;
@@ -39,7 +39,7 @@ public class YdbDataWriterFactory implements DataWriterFactory {
 
     private final YdbTable table;
     private final YdbTypes types;
-    private final org.apache.spark.sql.types.StructType schema;
+    private final StructType schema;
 
     private final IngestMethod method;
     private final boolean useApacheArrow;
@@ -49,17 +49,17 @@ public class YdbDataWriterFactory implements DataWriterFactory {
     private final int batchConcurrency;
     private final int retryCount;
 
-    public YdbDataWriterFactory(YdbTable table, LogicalWriteInfo logical, PhysicalWriteInfo physical) {
+    public YdbDataWriterFactory(YdbTable table, StructType schema, CaseInsensitiveStringMap options) {
         this.table = table;
-        this.types = new YdbTypes(logical.options());
-        this.method = OperationOption.INGEST_METHOD.readEnum(logical.options(), IngestMethod.BULK_UPSERT);
-        this.useApacheArrow = OperationOption.USE_APACHE_ARROW.readBoolean(logical.options(), false);
-        this.batchRowsCount = OperationOption.BATCH_ROWS.readInt(logical.options(), MAX_ROWS_COUNT);
-        this.batchBytesLimit = OperationOption.BATCH_LIMIT.readInt(logical.options(), MAX_BYTES_SIZE);
-        this.batchConcurrency = OperationOption.BATCH_CONCURRENCY.readInt(logical.options(), CONCURRENCY);
-        this.autoPkName = OperationOption.TABLE_AUTOPK_NAME.read(logical.options(), OperationOption.DEFAULT_AUTO_PK);
-        this.retryCount = OperationOption.WRITE_RETRY_COUNT.readInt(logical.options(), WRITE_RETRY_COUNT);
-        this.schema = logical.schema();
+        this.types = new YdbTypes(options);
+        this.method = OperationOption.INGEST_METHOD.readEnum(options, IngestMethod.BULK_UPSERT);
+        this.useApacheArrow = OperationOption.USE_APACHE_ARROW.readBoolean(options, false);
+        this.batchRowsCount = OperationOption.BATCH_ROWS.readInt(options, MAX_ROWS_COUNT);
+        this.batchBytesLimit = OperationOption.BATCH_LIMIT.readInt(options, MAX_BYTES_SIZE);
+        this.batchConcurrency = OperationOption.BATCH_CONCURRENCY.readInt(options, CONCURRENCY);
+        this.autoPkName = OperationOption.TABLE_AUTOPK_NAME.read(options, OperationOption.DEFAULT_AUTO_PK);
+        this.retryCount = OperationOption.WRITE_RETRY_COUNT.readInt(options, WRITE_RETRY_COUNT);
+        this.schema = schema;
 
         if (useApacheArrow && method != IngestMethod.BULK_UPSERT) {
             logger.warn("Arrow ingestion was disabled because it is only supported with method BULK_UPSERT");
