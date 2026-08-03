@@ -1,9 +1,11 @@
 package tech.ydb.spark.connector;
 
 import java.io.IOException;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.TreeSet;
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.sql.Dataset;
@@ -107,19 +109,21 @@ public class SparkSqlTest {
         Assert.assertEquals(2, testDir.count());
         Iterator<Row> it = testDir.toLocalIterator();
 
+        Collection<String> tables = new TreeSet<>();
         Assert.assertTrue(it.hasNext());
         Row next = it.next();
         Assert.assertEquals("test_dir", next.getAs("namespace"));
-        Assert.assertEquals("test2", next.getAs("tableName"));
+        tables.add(next.getAs("tableName"));
         Assert.assertEquals(Boolean.FALSE, next.getAs("isTemporary"));
 
         Assert.assertTrue(it.hasNext());
         next = it.next();
         Assert.assertEquals("test_dir", next.getAs("namespace"));
-        Assert.assertEquals("test3", next.getAs("tableName"));
+        tables.add(next.getAs("tableName"));
         Assert.assertEquals(Boolean.FALSE, next.getAs("isTemporary"));
 
         Assert.assertFalse(it.hasNext());
+        Assert.assertArrayEquals(new String[] { "test2", "test3" }, tables.toArray(new String[0]));
 
         Dataset<Row> emptyDir = spark.sql("show tables from ydb.empty_dir");
         Assert.assertEquals(0, emptyDir.count());
@@ -133,8 +137,11 @@ public class SparkSqlTest {
 
     @Test
     public void insertTest() {
-        Dataset<Row> root = spark.sql("INSERT INTO ydb.test_dir.test3 (id, value) VALUES (1, 'v1'), (2, 'v2')");
-        Assert.assertEquals(0, root.count());
+        Dataset<Row> insert = spark.sql("INSERT INTO ydb.test_dir.test3 (id, value) VALUES (1, 'v1'), (2, 'v2')");
+        Assert.assertEquals(0, insert.count());
+
+        Dataset<Row> select = spark.sql("SELECT * FROM ydb.test_dir.test3");
+        Assert.assertEquals(2, select.count());
     }
 
 //    @Test

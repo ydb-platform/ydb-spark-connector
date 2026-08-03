@@ -1,7 +1,9 @@
 package tech.ydb.spark.connector.read;
 
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 
 import org.apache.spark.sql.catalyst.InternalRow;
@@ -60,10 +62,17 @@ public class YdbScanTable implements Batch, Scan, ScanBuilder, SupportsReportPar
 
     private StructType readSchema;
 
-    public YdbScanTable(YdbTable table, CaseInsensitiveStringMap options) {
+    public YdbScanTable(YdbTable table, CaseInsensitiveStringMap scanOptions) {
         this.table = table;
         this.query = new SelectQuery(table);
+
+        Map<String, String> mergedOptions = new HashMap<>();
+        mergedOptions.putAll(table.properties());
+        mergedOptions.putAll(scanOptions);
+        CaseInsensitiveStringMap options = new CaseInsensitiveStringMap(mergedOptions);
+
         this.types = new YdbTypes(options);
+
 
         this.queueMaxSize = StreamReader.readQueueMaxSize(options);
         this.useApacheArrow = OperationOption.USE_APACHE_ARROW.readBoolean(options, false);

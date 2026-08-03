@@ -4,7 +4,9 @@ import java.io.Serializable;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -64,8 +66,13 @@ public class YdbReadTable implements Batch, Scan, ScanBuilder, SupportsReportPar
     private KeysRange predicateRange;
     private StructType readSchema;
 
-    public YdbReadTable(YdbTable table, CaseInsensitiveStringMap options) {
+    public YdbReadTable(YdbTable table, CaseInsensitiveStringMap scanOptions) {
         this.table = table;
+
+        Map<String, String> mergedOptions = new HashMap<>();
+        mergedOptions.putAll(table.properties());
+        mergedOptions.putAll(scanOptions);
+        CaseInsensitiveStringMap options = new CaseInsensitiveStringMap(mergedOptions);
 
         this.types = new YdbTypes(options);
         this.queueMaxSize = StreamReader.readQueueMaxSize(options);
