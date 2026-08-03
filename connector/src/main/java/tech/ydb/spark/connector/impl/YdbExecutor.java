@@ -18,11 +18,11 @@ import tech.ydb.core.grpc.GrpcTransport;
 import tech.ydb.query.QueryClient;
 import tech.ydb.query.QuerySession;
 import tech.ydb.query.tools.QueryReader;
+import tech.ydb.query.tools.SessionRetryContext;
 import tech.ydb.scheme.SchemeClient;
 import tech.ydb.scheme.description.DescribePathResult;
 import tech.ydb.scheme.description.ListDirectoryResult;
 import tech.ydb.table.Session;
-import tech.ydb.table.SessionRetryContext;
 import tech.ydb.table.TableClient;
 import tech.ydb.table.description.TableDescription;
 import tech.ydb.table.query.DataQueryResult;
@@ -48,8 +48,8 @@ public class YdbExecutor implements AutoCloseable {
     private final TableClient tableClient;
     private final QueryClient queryClient;
     private final SchemeClient schemeClient;
-    private final SessionRetryContext retryCtx;
-    private final tech.ydb.query.tools.SessionRetryContext queryRetryCtx;
+    private final SparkSessionRetryContext retryCtx;
+    private final SessionRetryContext queryRetryCtx;
 
     public YdbExecutor(GrpcTransport transport, TableClient tableClient, QueryClient queryClient) {
         this.transport = transport;
@@ -57,12 +57,12 @@ public class YdbExecutor implements AutoCloseable {
         this.queryClient = queryClient;
         this.schemeClient = SchemeClient.newClient(transport).build();
 
-        this.retryCtx = SessionRetryContext.create(tableClient)
+        this.retryCtx = SparkSessionRetryContext.create(tableClient)
                 .sessionCreationTimeout(Duration.ofMinutes(5))
                 .idempotent(true)
                 .maxRetries(20)
                 .build();
-        this.queryRetryCtx = tech.ydb.query.tools.SessionRetryContext.create(queryClient)
+        this.queryRetryCtx = SessionRetryContext.create(queryClient)
                 .sessionCreationTimeout(Duration.ofMinutes(5))
                 .idempotent(true)
                 .maxRetries(20)
@@ -88,8 +88,8 @@ public class YdbExecutor implements AutoCloseable {
         return transport.getDatabase() + "/" + name;
     }
 
-    public SessionRetryContext createRetryCtx(int retryCount, boolean idempotent) {
-        return SessionRetryContext.create(tableClient)
+    public SparkSessionRetryContext createRetryCtx(int retryCount, boolean idempotent) {
+        return SparkSessionRetryContext.create(tableClient)
                 .sessionCreationTimeout(Duration.ofMinutes(5))
                 .idempotent(idempotent)
                 .maxRetries(retryCount)

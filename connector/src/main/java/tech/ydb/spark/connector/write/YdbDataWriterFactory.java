@@ -20,7 +20,7 @@ import tech.ydb.spark.connector.YdbTypes;
 import tech.ydb.spark.connector.common.FieldInfo;
 import tech.ydb.spark.connector.common.IngestMethod;
 import tech.ydb.spark.connector.common.OperationOption;
-import tech.ydb.table.SessionRetryContext;
+import tech.ydb.spark.connector.impl.SparkSessionRetryContext;
 import tech.ydb.table.values.PrimitiveType;
 
 /**
@@ -71,7 +71,7 @@ public class YdbDataWriterFactory implements DataWriterFactory {
         logger.trace("New writer for table {}, partition {}, task {}", table.getTablePath(), partitionId, taskId);
 
         boolean idempotent = method != IngestMethod.INSERT;
-        SessionRetryContext retryCtx = table.getCtx().getExecutor().createRetryCtx(retryCount, idempotent);
+        SparkSessionRetryContext retryCtx = table.getCtx().getExecutor().createRetryCtx(retryCount, idempotent);
         YdbWriter writer = buildYdbWriter();
         return new YdbDataWriter(retryCtx, writer, batchConcurrency);
     }

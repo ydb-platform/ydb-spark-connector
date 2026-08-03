@@ -13,7 +13,7 @@ import org.slf4j.LoggerFactory;
 
 import tech.ydb.core.Status;
 import tech.ydb.core.StatusCode;
-import tech.ydb.table.SessionRetryContext;
+import tech.ydb.spark.connector.impl.SparkSessionRetryContext;
 
 /**
  * Common batching/retry/back-pressure scaffolding shared by all YDB data writers.
@@ -23,14 +23,14 @@ import tech.ydb.table.SessionRetryContext;
 public class YdbDataWriter implements DataWriter<InternalRow> {
     private static final Logger logger = LoggerFactory.getLogger(YdbDataWriter.class);
 
-    private final SessionRetryContext retryCtx;
+    private final SparkSessionRetryContext retryCtx;
     private final YdbWriter writer;
     private final int maxConcurrency;
     private final Semaphore semaphore;
 
     private volatile Status lastError = null;
 
-    YdbDataWriter(SessionRetryContext retryCtx, YdbWriter writer, int concurrency) {
+    YdbDataWriter(SparkSessionRetryContext retryCtx, YdbWriter writer, int concurrency) {
         this.retryCtx = retryCtx;
         this.writer = writer;
         this.maxConcurrency = concurrency;
