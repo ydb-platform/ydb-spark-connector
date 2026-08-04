@@ -18,12 +18,17 @@ import tech.ydb.table.values.Type;
 import tech.ydb.table.values.Value;
 
 class YdbWriterDataQuery extends YdbWriterProtobuf {
+    private final String command;
+    private final String tablePath;
     private final String query;
     private final ExecuteDataQuerySettings settings = new ExecuteDataQuerySettings();
 
     YdbWriterDataQuery(String command, String tablePath, YdbTypes types, int maxRowsCount, int maxBytesSize,
             List<ColumnEntry> columns) {
         super(types, columns, maxRowsCount, maxBytesSize);
+
+        this.command = command;
+        this.tablePath = tablePath;
 
         StringBuilder sb = new StringBuilder();
         sb.append("DECLARE $input AS List<Struct<");
@@ -37,6 +42,11 @@ class YdbWriterDataQuery extends YdbWriterProtobuf {
                 .append("`  SELECT * FROM AS_TABLE($input);");
 
         this.query = sb.toString();
+    }
+
+    @Override
+    public String toString() {
+        return "YdbWriterDataQuery[" + command + " to " + tablePath + "]";
     }
 
     @Override

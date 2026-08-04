@@ -35,6 +35,7 @@ public class YdbDataWriter implements DataWriter<InternalRow> {
         this.writer = writer;
         this.maxConcurrency = concurrency;
         this.semaphore = new Semaphore(maxConcurrency);
+        logger.debug("created YDB data writer {}", writer);
     }
 
     @Override
@@ -63,6 +64,13 @@ public class YdbDataWriter implements DataWriter<InternalRow> {
             logger.error("ydb writer got error on commit: {}", localError);
             localError.expectSuccess("cannot commit write");
         }
+
+        OutputMetrics metrics = TaskContext.get().taskMetrics().outputMetrics();
+        long batches = metrics._recordsWritten().count();
+        long records = metrics._recordsWritten().sum();
+        long bytes = metrics._bytesWritten().sum();
+
+        logger.debug("written {} batches with {} rows and {} total byte size", batches, records, bytes);
 
         // All rows have been written successfully
         return new YdbWriteCommit();
