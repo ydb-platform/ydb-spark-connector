@@ -17,7 +17,6 @@ import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.Test;
 
-import tech.ydb.spark.connector.impl.YdbExecutor;
 import tech.ydb.test.junit4.YdbHelperRule;
 
 
@@ -29,12 +28,11 @@ public class SparkSqlTest {
     @ClassRule
     public static final YdbHelperRule YDB = new YdbHelperRule();
 
-    private static YdbContext ctx;
+    private static final Map<String, String> ydbCreds = new HashMap<>();
     private static SparkSession spark;
 
     @BeforeClass
     public static void prepare() {
-        Map<String, String> ydbCreds = new HashMap<>();
         ydbCreds.put("url", new StringBuilder()
                 .append(YDB.useTls() ? "grpcs://" : "grpc://")
                 .append(YDB.endpoint())
@@ -46,54 +44,55 @@ public class SparkSqlTest {
         }
 
         ydbCreds.put("method", "UPSERT");
-        ctx = new YdbContext(ydbCreds);
-
-        prepareTables(ctx.getExecutor());
 
         SparkConf conf = new SparkConf()
                 .setMaster("local[4]")
                 .setAppName("ydb-spark-sql-test")
                 .set("spark.ui.enabled", "false")
                 .set("spark.sql.catalog.ydb", "tech.ydb.spark.connector.YdbCatalog");
+
         ydbCreds.forEach((key, value) -> conf.set("spark.sql.catalog.ydb." + key, value));
 
         spark = SparkSession.builder()
                 .config(conf)
                 .getOrCreate();
+
+        prepareTables();
     }
 
     @AfterClass
     public static void close() throws IOException {
         if (spark != null) {
+            cleanTables();
             spark.close();
         }
-        if (ctx != null) {
-            cleanTables(ctx.getExecutor());
-            ctx.close();
+    }
+
+    private static void executeSchemeQuery(String query) {
+        spark.read().format("ydb").options(ydbCreds).option("query", query).load().count();
+    }
+
+    private static void prepareTables() {
+        try (YdbContext ctx = new YdbContext(ydbCreds)) {
+            ctx.getExecutor().makeDirectory("test_dir");
+            ctx.getExecutor().makeDirectory("empty_dir");
         }
-        ctx.close();
+
+        executeSchemeQuery("CREATE TABLE test1 (id Int32 NOT NULL, value Text, PRIMARY KEY(id))");
+        executeSchemeQuery("CREATE TABLE `test_dir/test2` (id Int32 NOT NULL, value Text, PRIMARY KEY(id))");
+        executeSchemeQuery("CREATE TABLE `test_dir/test3` (id Int32 NOT NULL, value Text, PRIMARY KEY(id), "
+                + "INDEX value_idx GLOBAL SYNC ON (value))");
     }
 
-    private static void prepareTables(YdbExecutor executor) {
-        executor.makeDirectory(executor.extractPath("test_dir"));
-        executor.makeDirectory(executor.extractPath("empty_dir"));
+    private static void cleanTables() {
+        executeSchemeQuery("DROP TABLE IF EXISTS `test_dir/test3`");
+        executeSchemeQuery("DROP TABLE IF EXISTS `test_dir/test2`");
+        executeSchemeQuery("DROP TABLE IF EXISTS `test1`");
 
-        executor.executeSchemeQuery("CREATE TABLE test1 (id Int32 NOT NULL, value Text, PRIMARY KEY(id))")
-                .join().expectSuccess("cannot create test table");
-        executor.executeSchemeQuery("CREATE TABLE `test_dir/test2` (id Int32 NOT NULL, value Text, PRIMARY KEY(id))")
-                .join().expectSuccess("cannot create test table");
-        executor.executeSchemeQuery("CREATE TABLE `test_dir/test3` (id Int32 NOT NULL, value Text, PRIMARY KEY(id), "
-                + "INDEX value_idx GLOBAL SYNC ON (value))")
-                .join().expectSuccess("cannot create test table");
-    }
-
-    private static void cleanTables(YdbExecutor executor) {
-        executor.executeSchemeQuery("DROP TABLE `test_dir/test3`;").join();
-        executor.executeSchemeQuery("DROP TABLE `test_dir/test2`;").join();
-        executor.executeSchemeQuery("DROP TABLE test1;").join();
-
-        executor.removeDirectory(executor.extractPath("empty_dir"));
-        executor.removeDirectory(executor.extractPath("test_dir"));
+        try (YdbContext ctx = new YdbContext(ydbCreds)) {
+            ctx.getExecutor().removeDirectory("empty_dir");
+            ctx.getExecutor().removeDirectory("test_dir");
+        }
     }
 
     @Test
