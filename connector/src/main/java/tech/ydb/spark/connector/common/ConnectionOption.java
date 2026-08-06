@@ -64,7 +64,13 @@ public enum ConnectionOption implements SparkOption {
     /**
      * Session pool size limit. Default is 4x number of cores available.
      */
-    POOL_SIZE("pool.size");
+    POOL_SIZE("pool.size"),
+
+    /**
+     * Optional path prefix for all table operations. When set, all relative
+     * paths are resolved under this prefix instead of the database root.
+     */
+    PREFIX_PATH("useprefixpath");
 
     private final String code;
 

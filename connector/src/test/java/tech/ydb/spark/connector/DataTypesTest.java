@@ -81,7 +81,7 @@ public class DataTypesTest {
         }
 
         YdbExecutor executor = new YdbContext(ydbCreds).getExecutor();
-        executor.removeDirectory(executor.extractPath("datetypes"));
+        executor.removeDirectory("datetypes");
 
         YdbRegistry.closeAll();
     }

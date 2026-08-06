@@ -20,6 +20,11 @@ class YdbWriterBulkUpsert extends YdbWriterProtobuf {
     }
 
     @Override
+    public String toString() {
+        return "YdbWriterBulkUpsert[" + tablePath + "]";
+    }
+
+    @Override
     protected CompletableFuture<Status> writeData(Session session, ValueProtos.TypedValue data) {
         return session.executeBulkUpsert(tablePath, new BulkUpsertData(data), settings);
     }

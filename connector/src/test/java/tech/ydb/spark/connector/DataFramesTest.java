@@ -1,27 +1,29 @@
 package tech.ydb.spark.connector;
 
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
 import org.apache.spark.SparkConf;
+import org.apache.spark.sql.DataFrameReader;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SaveMode;
 import org.apache.spark.sql.SparkSession;
+import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema;
+import org.apache.spark.sql.types.DataTypes;
+import org.apache.spark.sql.types.Metadata;
+import org.apache.spark.sql.types.StructField;
+import org.apache.spark.sql.types.StructType;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.Test;
 
-import tech.ydb.spark.connector.impl.YdbExecutor;
 import tech.ydb.table.description.TableDescription;
-import tech.ydb.table.values.ListType;
-import tech.ydb.table.values.ListValue;
-import tech.ydb.table.values.PrimitiveType;
-import tech.ydb.table.values.PrimitiveValue;
-import tech.ydb.table.values.StructType;
 import tech.ydb.test.junit4.YdbHelperRule;
 
 /**
@@ -33,7 +35,6 @@ public class DataFramesTest {
     public static final YdbHelperRule YDB = new YdbHelperRule();
 
     private static Map<String, String> ydbCreds;
-    private static YdbContext ctx;
     private static SparkSession spark;
 
     @BeforeClass
@@ -48,9 +49,6 @@ public class DataFramesTest {
         if (YDB.authToken() != null) {
             ydbCreds.put("auth.token", YDB.authToken());
         }
-        ctx = new YdbContext(ydbCreds);
-
-        prepareTables(ctx.getExecutor());
 
         SparkConf conf = new SparkConf()
                 .setMaster("local[4]")
@@ -60,114 +58,137 @@ public class DataFramesTest {
         spark = SparkSession.builder()
                 .config(conf)
                 .getOrCreate();
+
+        prepareTables();
     }
 
     @AfterClass
     public static void close() throws IOException {
         if (spark != null) {
+            cleanTables();
             spark.close();
         }
-        if (ctx != null) {
-            cleanTables(ctx.getExecutor());
-            ctx.close();
-        }
-        ctx.close();
     }
 
-    private static void prepareTables(YdbExecutor executor) {
-        executor.makeDirectory(executor.extractPath("dir"));
-        executor.executeSchemeQuery("CREATE TABLE row_table ("
+    private static DataFrameReader readYdb() {
+        return spark.read().format("ydb").options(ydbCreds);
+    }
+
+    private static void prepareTables() {
+        readYdb().option("query", ""
+                + "CREATE TABLE row_table ("
                 + " id Int32 NOT NULL,"
                 + " value Text NOT NULL,"
                 + " PRIMARY KEY(id)  "
-                + ")").join().expectSuccess("cannot create test row table");
-        executor.executeSchemeQuery("CREATE TABLE column_table ("
+                + ")").load().count();
+
+        readYdb().option("query", ""
+                + "CREATE TABLE column_table ("
                 + " id Int32 NOT NULL,"
                 + " value Text,"
                 + " PRIMARY KEY(id)  "
-                + ") WITH (STORE=COLUMN)").join().expectSuccess("cannot create test column table");
-        executor.executeSchemeQuery("CREATE TABLE `dir/splitted` ("
+                + ") WITH (STORE=COLUMN)").load().count();
+
+        readYdb().option("query", ""
+                + "CREATE TABLE `dir/splitted` ("
                 + " id Int32 NOT NULL,"
                 + " value Text,"
                 + " PRIMARY KEY(id)  "
                 + ") WITH ("
                 + "  AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 7, "
                 + "  PARTITION_AT_KEYS = (11, 22, 33, 44, 55, 66) "
-                + ")").join().expectSuccess("cannot create test table");
+                + ")").load().count();
 
-        StructType struct = StructType.of("id", PrimitiveType.Int32, "value", PrimitiveType.Text);
-        ListValue initValues = ListType.of(struct).newValueOwn(
-            struct.newValue("id", PrimitiveValue.newInt32(1), "value", PrimitiveValue.newText("v1")),
-            struct.newValue("id", PrimitiveValue.newInt32(2), "value", PrimitiveValue.newText("v2")),
-            struct.newValue("id", PrimitiveValue.newInt32(10), "value", PrimitiveValue.newText("v3")),
-            struct.newValue("id", PrimitiveValue.newInt32(11), "value", PrimitiveValue.newText("v4")),
-            struct.newValue("id", PrimitiveValue.newInt32(12), "value", PrimitiveValue.newText("v5")),
-            struct.newValue("id", PrimitiveValue.newInt32(50), "value", PrimitiveValue.newText("v6")),
-            struct.newValue("id", PrimitiveValue.newInt32(51), "value", PrimitiveValue.newText("v7")),
-            struct.newValue("id", PrimitiveValue.newInt32(65), "value", PrimitiveValue.newText("v8")),
-            struct.newValue("id", PrimitiveValue.newInt32(66), "value", PrimitiveValue.newText("v9")),
-            struct.newValue("id", PrimitiveValue.newInt32(67), "value", PrimitiveValue.newText("v10"))
-        );
+        StructType schema = new StructType(new StructField[]{
+            new StructField("id", DataTypes.IntegerType, false, Metadata.empty()),
+            new StructField("value", DataTypes.StringType, true, Metadata.empty())
+        });
 
-        executor.executeBulkUpsert(executor.extractPath("row_table"), initValues).join()
-                .expectSuccess("cannot insert data to row_table");
-        executor.executeBulkUpsert(executor.extractPath("column_table"), initValues).join()
-                .expectSuccess("cannot insert data to column_table");
-        executor.executeBulkUpsert(executor.extractPath("dir/splitted"), initValues).join()
-                .expectSuccess("cannot insert data to dir/splitted");
+        Dataset<Row> initValues = spark.createDataFrame(Arrays.asList(
+                new GenericRowWithSchema(new Object[]{1, "v1"}, schema),
+                new GenericRowWithSchema(new Object[]{2, "v2"}, schema),
+                new GenericRowWithSchema(new Object[]{10, "v3"}, schema),
+                new GenericRowWithSchema(new Object[]{11, "v4"}, schema),
+                new GenericRowWithSchema(new Object[]{12, "v5"}, schema),
+                new GenericRowWithSchema(new Object[]{50, "v6"}, schema),
+                new GenericRowWithSchema(new Object[]{51, "v7"}, schema),
+                new GenericRowWithSchema(new Object[]{65, "v8"}, schema),
+                new GenericRowWithSchema(new Object[]{66, "v9"}, schema),
+                new GenericRowWithSchema(new Object[]{67, "v10"}, schema)
+        ), schema);
+
+        initValues.write().format("ydb").options(ydbCreds).mode(SaveMode.Append).save("row_table");
+        initValues.write().format("ydb").options(ydbCreds).mode(SaveMode.Append).save("column_table");
+        initValues.write().format("ydb").options(ydbCreds).mode(SaveMode.Append).save("dir/splitted");
     }
 
-    private static void cleanTables(YdbExecutor executor) {
-        executor.executeSchemeQuery("DROP TABLE `dir/splitted`;").join();
-        executor.executeSchemeQuery("DROP TABLE column_table;").join();
-        executor.executeSchemeQuery("DROP TABLE row_table;").join();
-        executor.removeDirectory(executor.extractPath("dir"));
-        executor.removeDirectory(executor.extractPath("copy"));
+    private static void cleanTables() {
+        readYdb().option("query", "DROP TABLE `dir/splitted`;").load().count();
+        readYdb().option("query", "DROP TABLE column_table;").load().count();
+        readYdb().option("query", "DROP TABLE row_table;").load().count();
+
+        try (YdbContext ctx = new YdbContext(ydbCreds)) {
+            ctx.getExecutor().removeDirectory("dir");
+            ctx.getExecutor().removeDirectory("copy");
+        }
     }
 
     private TableDescription describeTable(String path) {
-        String fullPath = ctx.getExecutor().extractPath(path);
-        return ctx.getExecutor().describeTable(fullPath, false);
+        try (YdbContext ctx = new YdbContext(ydbCreds)) {
+            return ctx.getExecutor().describeTable(path, false);
+        }
     }
 
     @Test
     public void countRowTableTest() {
-        long count = spark.read().format("ydb").options(ydbCreds).option("dbtable", "row_table").load().count();
+        long count = readYdb().option("dbtable", "row_table").load().count();
         Assert.assertEquals(10, count);
 
-        long count2 = spark.read().format("ydb").options(ydbCreds).load("row_table").count();
+        long count2 = readYdb().load("row_table").count();
         Assert.assertEquals(count, count2);
 
-        long count3 = spark.read().format("ydb").options(ydbCreds).option("useReadTable", "true")
+        long count3 = readYdb().option("useReadTable", "true")
                 .load("row_table").count();
         Assert.assertEquals(count2, count3);
     }
 
     @Test
     public void countColumnTableTest() {
-        long count = spark.read().format("ydb").options(ydbCreds).option("dbtable", "column_table").load().count();
+        long count = readYdb().option("dbtable", "column_table").load().count();
         Assert.assertEquals(10, count);
 
-        long count2 = spark.read().format("ydb").options(ydbCreds).load("column_table").count();
+        long count2 = readYdb().load("column_table").count();
         Assert.assertEquals(count, count2);
     }
 
     @Test
     public void countSplittedTableTest() {
-        long count = spark.read().format("ydb").options(ydbCreds).option("dbtable", "dir/splitted").load().count();
+        long count = readYdb().option("dbtable", "dir/splitted").load().count();
         Assert.assertEquals(10, count);
 
-        long count2 = spark.read().format("ydb").options(ydbCreds).load("dir/splitted").count();
+        long count2 = readYdb().load("dir/splitted").count();
         Assert.assertEquals(count, count2);
 
-        long count3 = spark.read().format("ydb").options(ydbCreds).option("useReadTable", "true")
+        long count3 = readYdb().option("useReadTable", "true")
                 .load("dir/splitted").count();
         Assert.assertEquals(count2, count3);
     }
 
     @Test
+    public void emptyWriteTest() {
+        Dataset<Row> origin = readYdb().load("row_table");
+
+        Assert.assertEquals(10, origin.count());
+
+        spark.createDataFrame(Collections.emptyList(), origin.schema())
+                .write().format("ydb").options(ydbCreds).mode(SaveMode.Append).save("row_table");
+
+        Assert.assertEquals(10, readYdb().load("row_table").count());
+    }
+
+    @Test
     public void tableAutoCreateTest() {
-        Dataset<Row> origin = spark.read().format("ydb").options(ydbCreds).load("row_table");
+        Dataset<Row> origin = readYdb().load("row_table");
 
         Assert.assertEquals(10, origin.count());
         Assert.assertEquals(2, origin.schema().length());
@@ -175,18 +196,18 @@ public class DataFramesTest {
 
         try {
             origin.write().format("ydb").options(ydbCreds).mode(SaveMode.Append).save("copy/row_table1");
-            Dataset<Row> copy = spark.read().format("ydb").options(ydbCreds).load("copy/row_table1");
+            Dataset<Row> copy = readYdb().load("copy/row_table1");
 
             Assert.assertEquals(10, copy.count());
             Assert.assertArrayEquals(new String[] {"id", "value", "_spark_key"} , copy.schema().fieldNames());
         } finally {
-            ctx.getExecutor().executeSchemeQuery("DROP TABLE `copy/row_table1`;").join();
+            readYdb().option("query", "DROP TABLE `copy/row_table1`;").load().count();
         }
     }
 
     @Test
     public void tableAutoCreateWithKeysTest() {
-        Dataset<Row> origin = spark.read().format("ydb").options(ydbCreds).load("row_table");
+        Dataset<Row> origin = readYdb().load("row_table");
 
         Assert.assertEquals(10, origin.count());
         Assert.assertEquals(2, origin.schema().length());
@@ -208,13 +229,13 @@ public class DataFramesTest {
             TableDescription desc = describeTable("copy/row_table2");
             Assert.assertEquals(TableDescription.StoreType.ROW, desc.getStoreType());
         } finally {
-            ctx.getExecutor().executeSchemeQuery("DROP TABLE `copy/row_table2`;").join();
+            readYdb().option("query", "DROP TABLE `copy/row_table2`;").load().count();
         }
     }
 
     @Test
     public void tableAutoCreateColumnTableTest() {
-        Dataset<Row> origin = spark.read().format("ydb").options(ydbCreds).load("row_table");
+        Dataset<Row> origin = readYdb().load("row_table");
 
         Assert.assertEquals(10, origin.count());
         Assert.assertEquals(2, origin.schema().length());
@@ -237,32 +258,32 @@ public class DataFramesTest {
             TableDescription desc = describeTable("copy/column_table");
             Assert.assertEquals(TableDescription.StoreType.COLUMN, desc.getStoreType());
         } finally {
-            ctx.getExecutor().executeSchemeQuery("DROP TABLE `copy/column_table`;").join();
+            readYdb().option("query", "DROP TABLE `copy/column_table`;").load().count();
         }
     }
 
     @Test
     public void indexedTableAutoUpsertTest() {
-        Dataset<Row> origin = spark.read().format("ydb").options(ydbCreds).load("row_table");
+        Dataset<Row> origin = readYdb().load("row_table");
         Assert.assertEquals(10, origin.count());
         Assert.assertEquals(2, origin.schema().length());
         Assert.assertArrayEquals(new String[] {"id", "value"} , origin.schema().fieldNames());
 
-        ctx.getExecutor().executeSchemeQuery("CREATE TABLE `copy/indexed_table` ("
+        readYdb().option("query", "CREATE TABLE `copy/indexed_table` ("
                 + " id Int32 NOT NULL,"
                 + " value Text NOT NULL,"
                 + " PRIMARY KEY(id),  "
                 + " INDEX value_idx GLOBAL SYNC ON (value) "
-                + ")").join().expectSuccess("cannot create test indexed table");
+                + ")").load().count();
 
         try {
             origin.write().format("ydb").options(ydbCreds).mode(SaveMode.Append).save("copy/indexed_table");
-            Dataset<Row> copy = spark.read().format("ydb").options(ydbCreds).load("copy/indexed_table");
+            Dataset<Row> copy = readYdb().load("copy/indexed_table");
 
             Assert.assertEquals(10, copy.count());
             Assert.assertArrayEquals(new String[] {"id", "value" } , copy.schema().fieldNames());
         } finally {
-            ctx.getExecutor().executeSchemeQuery("DROP TABLE `copy/indexed_table`;").join();
+            readYdb().option("query", "DROP TABLE `copy/indexed_table`;").load().count();
         }
     }
 }

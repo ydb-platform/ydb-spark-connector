@@ -57,6 +57,11 @@ public class YdbWriterArrow implements YdbWriter {
     }
 
     @Override
+    public String toString() {
+        return "YdbWriterArrow[" + tablePath + "]";
+    }
+
+    @Override
     public void appendRow(InternalRow record) {
         ApacheArrowWriter.Row row = batch.writeNextRow();
         for (ColumnEntry column: columns) {

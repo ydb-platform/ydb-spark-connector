@@ -23,11 +23,6 @@ import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.Test;
 
-import tech.ydb.core.Status;
-import tech.ydb.core.grpc.GrpcTransport;
-import tech.ydb.table.SessionRetryContext;
-import tech.ydb.table.TableClient;
-import tech.ydb.table.transaction.TxControl;
 import tech.ydb.test.junit4.YdbHelperRule;
 
 public class IntegrationTest {
@@ -35,10 +30,6 @@ public class IntegrationTest {
     public static final YdbHelperRule YDB = new YdbHelperRule();
 
     public static final String TEST_TABLE = "spark_test_table";
-
-    private static GrpcTransport transport;
-    private static TableClient tableClient;
-    private static SessionRetryContext retryCtx;
 
     private static final Map<String, String> options = new HashMap<>();
     private static SparkSession spark;
@@ -53,6 +44,7 @@ public class IntegrationTest {
             options.put("auth.mode", "NONE");
         }
         options.put("dbtable", TEST_TABLE);
+        options.put("usePrefixPath", "integration");
 
         SparkConf conf = new SparkConf()
                 .setMaster("local[4]")
@@ -60,10 +52,6 @@ public class IntegrationTest {
                 .set("spark.ui.enabled", "false")
                 .set("spark.sql.catalog.ydb", "tech.ydb.spark.connector.YdbCatalog");
         options.forEach((k, v) -> conf.set("spark.sql.catalog.ydb." + k, v));
-
-        transport = YDB.createTransport();
-        tableClient = TableClient.newClient(transport).build();
-        retryCtx = SessionRetryContext.create(tableClient).build();
 
         spark = SparkSession.builder()
                 .config(conf)
@@ -75,19 +63,13 @@ public class IntegrationTest {
         if (spark != null) {
             spark.close();
         }
-        if (tableClient != null) {
-            tableClient.close();
-        }
-        if (transport != null) {
-            transport.close();
-        }
     }
 
     @After
     public void cleanup() {
-        schemaQuery("drop table " + TEST_TABLE);
-        schemaQuery("drop table " + TEST_TABLE + "_original");
-        schemaQuery("drop table toster");
+        executeQuery("drop table if exists " + TEST_TABLE);
+        executeQuery("drop table if exists " + TEST_TABLE + "_original");
+        executeQuery("drop table if exists toster");
     }
 
     @Test
@@ -112,8 +94,8 @@ public class IntegrationTest {
 
     @Test
     public void testOverwrite() {
-        schemaQuery("create table " + TEST_TABLE + "(id Uint64, value Text, PRIMARY KEY(id))").expectSuccess();
-        dataQuery("upsert into " + TEST_TABLE + "(id, value) values (1, 'asdf'), (2, 'zxcv'), (3, 'fghj')");
+        executeQuery("create table " + TEST_TABLE + "(id Uint64, value Text, PRIMARY KEY(id))");
+        executeQuery("upsert into " + TEST_TABLE + "(id, value) values (1, 'asdf'), (2, 'zxcv'), (3, 'fghj')");
 
         Dataset<Row> dataFrame = sampleDataset();
 
@@ -143,8 +125,8 @@ public class IntegrationTest {
     @Test
     public void testCreateBySparkSQL() {
         String original = TEST_TABLE + "_original";
-        schemaQuery("create table " + original + "(id Uint64, value Text, PRIMARY KEY(id))").expectSuccess();
-        dataQuery("upsert into " + original + "(id, value) values (1, 'asdf'), (2, 'zxcv'), (3, 'fghj')");
+        executeQuery("create table " + original + "(id Uint64, value Text, PRIMARY KEY(id))");
+        executeQuery("upsert into " + original + "(id, value) values (1, 'asdf'), (2, 'zxcv'), (3, 'fghj')");
 
         spark.sql("create table ydb." + TEST_TABLE + "(id bigint, value string) ").queryExecution();
         spark.sql("insert into ydb." + TEST_TABLE + " select * from ydb." + original).queryExecution();
@@ -157,8 +139,8 @@ public class IntegrationTest {
     @Test
     public void testCreateWithSelect() {
         String original = TEST_TABLE + "_original";
-        schemaQuery("create table " + original + "(id Uint64, value Text, PRIMARY KEY(id))").expectSuccess();
-        dataQuery("upsert into " + original + "(id, value) values (1, 'asdf'), (2, 'zxcv'), (3, 'fghj')");
+        executeQuery("create table " + original + "(id Uint64, value Text, PRIMARY KEY(id))");
+        executeQuery("upsert into " + original + "(id, value) values (1, 'asdf'), (2, 'zxcv'), (3, 'fghj')");
 
         spark.sql("create table ydb." + TEST_TABLE + " as select * from ydb." + original)
                 .queryExecution();
@@ -190,7 +172,7 @@ public class IntegrationTest {
                 + "  PRIMARY KEY(a)\n"
                 + ")";
 
-        schemaQuery(createToster).expectSuccess();
+        executeQuery(createToster);
 
         String upsertToster = "UPSERT INTO toster(a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p) VALUES (\n"
                 + "  1001,\n"
@@ -228,7 +210,7 @@ public class IntegrationTest {
                 + "  Decimal(\"1023.456789\", 22, 9)\n"
                 + ")";
 
-        dataQuery(upsertToster);
+        executeQuery(upsertToster);
 
         List<Row> rows = spark.sql("SELECT * FROM ydb.toster")
                 .collectAsList();
@@ -245,12 +227,7 @@ public class IntegrationTest {
         return spark.createDataFrame(rows, schema);
     }
 
-    private void dataQuery(String query) {
-        retryCtx.supplyResult(session -> session.executeDataQuery(query, TxControl.serializableRw()))
-                .join().getStatus().expectSuccess();
-    }
-
-    private static Status schemaQuery(String query) {
-        return retryCtx.supplyStatus(session -> session.executeSchemeQuery(query)).join();
+    private static void executeQuery(String query) {
+        spark.read().format("ydb").options(options).option("query", query).load().count();
     }
 }

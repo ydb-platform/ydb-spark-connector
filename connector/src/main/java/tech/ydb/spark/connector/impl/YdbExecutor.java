@@ -4,7 +4,6 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,11 +27,9 @@ import tech.ydb.table.description.TableDescription;
 import tech.ydb.table.query.DataQueryResult;
 import tech.ydb.table.result.ResultSetReader;
 import tech.ydb.table.settings.AlterTableSettings;
-import tech.ydb.table.settings.BulkUpsertSettings;
 import tech.ydb.table.settings.CreateTableSettings;
 import tech.ydb.table.settings.DescribeTableSettings;
 import tech.ydb.table.transaction.TxControl;
-import tech.ydb.table.values.ListValue;
 
 /**
  * YDB Database Connector.
@@ -48,10 +45,14 @@ public class YdbExecutor implements AutoCloseable {
     private final TableClient tableClient;
     private final QueryClient queryClient;
     private final SchemeClient schemeClient;
+
     private final SparkSessionRetryContext retryCtx;
     private final SessionRetryContext queryRetryCtx;
 
-    public YdbExecutor(GrpcTransport transport, TableClient tableClient, QueryClient queryClient) {
+    private final String prefixPath;
+    private final String prefixPragma;
+
+    public YdbExecutor(GrpcTransport transport, TableClient tableClient, QueryClient queryClient, String prefix) {
         this.transport = transport;
         this.tableClient = tableClient;
         this.queryClient = queryClient;
@@ -67,6 +68,14 @@ public class YdbExecutor implements AutoCloseable {
                 .idempotent(true)
                 .maxRetries(20)
                 .build();
+
+        if (prefix == null || prefix.isEmpty()) {
+            this.prefixPath = transport.getDatabase();
+            this.prefixPragma = "";
+        } else {
+            this.prefixPath = prefix.startsWith("/") ? prefix : transport.getDatabase() + "/" + prefix;
+            this.prefixPragma = "PRAGMA TablePathPrefix = \"" + prefixPath + "\"; ";
+        }
     }
 
     @Override
@@ -77,15 +86,19 @@ public class YdbExecutor implements AutoCloseable {
         transport.close();
     }
 
+    public String getPrefixPragma() {
+        return prefixPragma;
+    }
+
     public String extractPath(String name) {
         if (name == null) {
-            return transport.getDatabase();
+            return prefixPath;
         }
         if (name.startsWith("/")) {
             return name;
         }
 
-        return transport.getDatabase() + "/" + name;
+        return prefixPath + "/" + name;
     }
 
     public SparkSessionRetryContext createRetryCtx(int retryCount, boolean idempotent) {
@@ -96,17 +109,8 @@ public class YdbExecutor implements AutoCloseable {
                 .build();
     }
 
-    public CompletableFuture<Status> executeBulkUpsert(String tablePath, ListValue batch) {
-        BulkUpsertSettings settings = new BulkUpsertSettings();
-        return retryCtx.supplyStatus(s -> s.executeBulkUpsert(tablePath, batch, settings));
-    }
-
-    public CompletableFuture<Status> executeSchemeQuery(String query) {
-        return retryCtx.supplyStatus(s -> s.executeSchemeQuery(query));
-    }
-
     public boolean truncateTable(String tablePath) {
-        final YdbTruncateTable action = new YdbTruncateTable(tablePath);
+        final YdbTruncateTable action = new YdbTruncateTable(extractPath(tablePath));
         retryCtx.supplyStatus(session -> action.run(session)).join().expectSuccess();
         return true;
     }
@@ -114,31 +118,32 @@ public class YdbExecutor implements AutoCloseable {
     public TableDescription describeTable(String tablePath, boolean includeKeyShards) {
         DescribeTableSettings settings = new DescribeTableSettings();
         settings.setIncludeShardKeyBounds(includeKeyShards);
-        Result<TableDescription> result = retryCtx.supplyResult(s -> s.describeTable(tablePath, settings)).join();
+        String path = extractPath(tablePath);
+        Result<TableDescription> result = retryCtx.supplyResult(s -> s.describeTable(path, settings)).join();
 
         if (result.getStatus().getCode() == StatusCode.SCHEME_ERROR) { // usally not found
             return null;
         }
 
-        result.getStatus().expectSuccess("Cannot describe table " + tablePath);
+        result.getStatus().expectSuccess("Cannot describe table " + path);
         return result.getValue();
     }
 
     public void createTable(String tablePath, TableDescription description) {
         CreateTableSettings settings = new CreateTableSettings();
-        retryCtx.supplyStatus(session -> session.createTable(tablePath, description, settings))
+        retryCtx.supplyStatus(session -> session.createTable(extractPath(tablePath), description, settings))
                 .join()
                 .expectSuccess("Cannot create table " + tablePath);
     }
 
     public void alterTable(String tablePath, AlterTableSettings settings) {
-        retryCtx.supplyStatus(session -> session.alterTable(tablePath, settings))
+        retryCtx.supplyStatus(session -> session.alterTable(extractPath(tablePath), settings))
                 .join()
                 .expectSuccess("Cannot alter table " + tablePath);
     }
 
     public boolean dropTable(String tablePath) {
-        Status status = retryCtx.supplyStatus(session -> session.dropTable(tablePath)).join();
+        Status status = retryCtx.supplyStatus(session -> session.dropTable(extractPath(tablePath))).join();
         if (status.isSuccess()) {
             return true;
         }
@@ -147,14 +152,14 @@ public class YdbExecutor implements AutoCloseable {
     }
 
     public void renameTable(String path1, String path2) {
-        retryCtx.supplyStatus(session -> session.renameTable(path1, path2, false))
+        retryCtx.supplyStatus(session -> session.renameTable(extractPath(path1), extractPath(path2), false))
                 .join()
                 .expectSuccess("Cannot rename table " + path1);
     }
 
     public ListDirectoryResult listDirectory(String path) {
         Result<ListDirectoryResult> result = retryCtx
-                .supplyResult(session -> schemeClient.listDirectory(path))
+                .supplyResult(session -> schemeClient.listDirectory(extractPath(path)))
                 .join();
 
         if (result.getStatus().getCode() == StatusCode.SCHEME_ERROR) { // usally not found
@@ -167,7 +172,7 @@ public class YdbExecutor implements AutoCloseable {
 
     public boolean makeDirectory(String path) {
         Status status = retryCtx
-                .supplyStatus(session -> schemeClient.makeDirectory(path))
+                .supplyStatus(session -> schemeClient.makeDirectory(extractPath(path)))
                 .join();
 
         if (status.isSuccess() && status.getIssues() != null) {
@@ -185,7 +190,7 @@ public class YdbExecutor implements AutoCloseable {
 
     public DescribePathResult describeDirectory(String path) {
         Result<DescribePathResult> result = retryCtx
-                .supplyResult(session -> schemeClient.describePath(path))
+                .supplyResult(session -> schemeClient.describePath(extractPath(path)))
                 .join();
 
         if (result.getStatus().getCode() == StatusCode.SCHEME_ERROR) { // usally not found
@@ -204,7 +209,7 @@ public class YdbExecutor implements AutoCloseable {
         }
 
         Result<DataQueryResult> result = retryCtx
-                .supplyResult(session -> session.executeDataQuery(describeQuery, TxControl.snapshotRo()))
+                .supplyResult(session -> session.executeDataQuery(prefixPragma + describeQuery, TxControl.snapshotRo()))
                 .join();
 
         if (!result.getStatus().isSuccess()) {
@@ -216,7 +221,7 @@ public class YdbExecutor implements AutoCloseable {
 
     public boolean removeDirectory(String path) {
         return retryCtx
-                .supplyStatus(session -> schemeClient.removeDirectory(path))
+                .supplyStatus(session -> schemeClient.removeDirectory(extractPath(path)))
                 .join()
                 .isSuccess();
     }
