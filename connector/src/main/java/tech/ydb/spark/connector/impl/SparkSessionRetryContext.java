@@ -108,14 +108,14 @@ public class SparkSessionRetryContext {
             case CLIENT_CANCELLED:
             case CLIENT_INTERNAL_ERROR:
             case SESSION_BUSY:
-            case TRANSPORT_UNAVAILABLE:
-            case UNAVAILABLE:
             case UNDETERMINED:
                 // Fast backoff
                 return fastBackoffTimeMillis(retryNumber);
             case NOT_FOUND:
             case OVERLOADED:
             case TIMEOUT:
+            case TRANSPORT_UNAVAILABLE:
+            case UNAVAILABLE:
             case CLIENT_RESOURCE_EXHAUSTED:
             default:
                 // Slow backoff
