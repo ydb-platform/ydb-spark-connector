@@ -66,6 +66,10 @@ public enum ConnectionOption implements SparkOption {
      */
     POOL_SIZE("pool.size"),
 
+    /**
+     * Optional path prefix for all table operations. When set, all relative
+     * paths are resolved under this prefix instead of the database root.
+     */
     PREFIX_PATH("useprefixpath");
 
     private final String code;

@@ -110,7 +110,7 @@ public class YdbExecutor implements AutoCloseable {
     }
 
     public boolean truncateTable(String tablePath) {
-        final YdbTruncateTable action = new YdbTruncateTable(tablePath);
+        final YdbTruncateTable action = new YdbTruncateTable(extractPath(tablePath));
         retryCtx.supplyStatus(session -> action.run(session)).join().expectSuccess();
         return true;
     }

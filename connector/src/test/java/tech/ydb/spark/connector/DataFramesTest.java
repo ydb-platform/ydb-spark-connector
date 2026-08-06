@@ -106,7 +106,6 @@ public class DataFramesTest {
 
         Dataset<Row> initValues = spark.createDataFrame(Arrays.asList(
                 new GenericRowWithSchema(new Object[]{1, "v1"}, schema),
-                new GenericRowWithSchema(new Object[]{1, "v1"}, schema),
                 new GenericRowWithSchema(new Object[]{2, "v2"}, schema),
                 new GenericRowWithSchema(new Object[]{10, "v3"}, schema),
                 new GenericRowWithSchema(new Object[]{11, "v4"}, schema),
