@@ -45,10 +45,14 @@ public class YdbExecutor implements AutoCloseable {
     private final TableClient tableClient;
     private final QueryClient queryClient;
     private final SchemeClient schemeClient;
+
     private final SparkSessionRetryContext retryCtx;
     private final SessionRetryContext queryRetryCtx;
 
-    public YdbExecutor(GrpcTransport transport, TableClient tableClient, QueryClient queryClient) {
+    private final String prefixPath;
+    private final String prefixPragma;
+
+    public YdbExecutor(GrpcTransport transport, TableClient tableClient, QueryClient queryClient, String prefix) {
         this.transport = transport;
         this.tableClient = tableClient;
         this.queryClient = queryClient;
@@ -64,6 +68,14 @@ public class YdbExecutor implements AutoCloseable {
                 .idempotent(true)
                 .maxRetries(20)
                 .build();
+
+        if (prefix == null || prefix.isEmpty()) {
+            this.prefixPath = transport.getDatabase();
+            this.prefixPragma = "";
+        } else {
+            this.prefixPath = prefix.startsWith("/") ? prefix : transport.getDatabase() + "/" + prefix;
+            this.prefixPragma = "PRAGMA TablePathPrefix = \"" + prefixPath + "\"; ";
+        }
     }
 
     @Override
@@ -74,15 +86,19 @@ public class YdbExecutor implements AutoCloseable {
         transport.close();
     }
 
+    public String getPrefixPragma() {
+        return prefixPragma;
+    }
+
     public String extractPath(String name) {
         if (name == null) {
-            return transport.getDatabase();
+            return prefixPath;
         }
         if (name.startsWith("/")) {
             return name;
         }
 
-        return transport.getDatabase() + "/" + name;
+        return prefixPath + "/" + name;
     }
 
     public SparkSessionRetryContext createRetryCtx(int retryCount, boolean idempotent) {
@@ -136,7 +152,7 @@ public class YdbExecutor implements AutoCloseable {
     }
 
     public void renameTable(String path1, String path2) {
-        retryCtx.supplyStatus(session -> session.renameTable(path1, path2, false))
+        retryCtx.supplyStatus(session -> session.renameTable(extractPath(path1), extractPath(path2), false))
                 .join()
                 .expectSuccess("Cannot rename table " + path1);
     }
@@ -193,7 +209,7 @@ public class YdbExecutor implements AutoCloseable {
         }
 
         Result<DataQueryResult> result = retryCtx
-                .supplyResult(session -> session.executeDataQuery(describeQuery, TxControl.snapshotRo()))
+                .supplyResult(session -> session.executeDataQuery(prefixPragma + describeQuery, TxControl.snapshotRo()))
                 .join();
 
         if (!result.getStatus().isSuccess()) {

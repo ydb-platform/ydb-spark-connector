@@ -37,6 +37,7 @@ public class SparkSqlTest {
                 .append(YDB.useTls() ? "grpcs://" : "grpc://")
                 .append(YDB.endpoint())
                 .append(YDB.database())
+                .append("?usePrefixPath=sql_test")
                 .toString());
 
         if (YDB.authToken() != null) {

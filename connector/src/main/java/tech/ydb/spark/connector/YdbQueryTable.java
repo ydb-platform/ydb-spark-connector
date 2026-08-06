@@ -26,7 +26,7 @@ public class YdbQueryTable implements Serializable, Table, SupportsRead {
 
     public YdbQueryTable(YdbContext ctx, String query, StructType schema) {
         this.ctx = ctx;
-        this.query = query;
+        this.query = ctx.getExecutor().getPrefixPragma() + query;
         this.schema = schema;
     }
 

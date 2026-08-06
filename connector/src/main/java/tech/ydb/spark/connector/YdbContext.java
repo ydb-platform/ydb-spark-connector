@@ -65,6 +65,7 @@ public class YdbContext implements Serializable, AutoCloseable {
     private final String password;
 
     private final int sessionPoolSize;
+    private final String prefixPath;
 
     public YdbContext(Map<String, String> options) {
         this.connectionString = ConnectionOption.URL.read(options);
@@ -87,6 +88,7 @@ public class YdbContext implements Serializable, AutoCloseable {
         this.password = ConnectionOption.AUTH_PASSWORD.read(parameters);
 
         this.sessionPoolSize = ConnectionOption.POOL_SIZE.readInt(parameters, 0);
+        this.prefixPath = ConnectionOption.PREFIX_PATH.read(parameters, null);
     }
 
     @Override
@@ -97,7 +99,7 @@ public class YdbContext implements Serializable, AutoCloseable {
     @Override
     public int hashCode() {
         return Objects.hash(
-                connectionString, useMetadata, useEnv, token, saKey, username, password, sessionPoolSize
+                connectionString, useMetadata, useEnv, token, saKey, username, password, sessionPoolSize, prefixPath
         );
     }
 
@@ -122,7 +124,8 @@ public class YdbContext implements Serializable, AutoCloseable {
                 && Objects.equals(password, o.password)
                 && useMetadata == o.useMetadata
                 && useEnv == o.useEnv
-                && sessionPoolSize == o.sessionPoolSize;
+                && sessionPoolSize == o.sessionPoolSize
+                && Objects.equals(prefixPath, o.prefixPath);
     }
 
     @Override
@@ -145,7 +148,7 @@ public class YdbContext implements Serializable, AutoCloseable {
         QueryClient queryClient = QueryClient.newClient(transport)
                 .sessionPoolMaxSize(maxPoolSize)
                 .build();
-        return new YdbExecutor(transport, tableClient, queryClient);
+        return new YdbExecutor(transport, tableClient, queryClient, prefixPath);
     }
 
     private GrpcTransport createGrpcTransport() {
@@ -266,6 +269,9 @@ public class YdbContext implements Serializable, AutoCloseable {
                 }
                 if (key.equalsIgnoreCase(JDBC_USE_METADATA)) {
                     params.put(ConnectionOption.AUTH_METADATA.getCode(), values.get(0));
+                }
+                if (key.equalsIgnoreCase(ConnectionOption.PREFIX_PATH.getCode())) {
+                    params.put(ConnectionOption.PREFIX_PATH.getCode(), values.get(0));
                 }
             });
         } catch (URISyntaxException ex) {
