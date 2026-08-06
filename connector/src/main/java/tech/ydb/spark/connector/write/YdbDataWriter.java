@@ -8,6 +8,7 @@ import org.apache.spark.executor.OutputMetrics;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.connector.write.DataWriter;
 import org.apache.spark.sql.connector.write.WriterCommitMessage;
+import org.apache.spark.util.LongAccumulator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -27,6 +28,7 @@ public class YdbDataWriter implements DataWriter<InternalRow> {
     private final YdbWriter writer;
     private final int maxConcurrency;
     private final Semaphore semaphore;
+    private final LongAccumulator latency = new LongAccumulator();
 
     private volatile Status lastError = null;
 
@@ -70,7 +72,9 @@ public class YdbDataWriter implements DataWriter<InternalRow> {
         long records = metrics._recordsWritten().sum();
         long bytes = metrics._bytesWritten().sum();
 
-        logger.debug("written {} batches with {} rows and {} total byte size", batches, records, bytes);
+        double avg = batches > 0 ? latency.sum() / batches : 0;
+        logger.debug("written {} batches with {} rows and {} total byte size, avg latency {} ms", batches, records,
+                bytes, avg);
 
         // All rows have been written successfully
         return new YdbWriteCommit();
@@ -103,10 +107,12 @@ public class YdbDataWriter implements DataWriter<InternalRow> {
         int batchBytesSize = batch.bytesSize();
         OutputMetrics metrics = TaskContext.get().taskMetrics().outputMetrics();
 
+        long started = System.currentTimeMillis();
         retryCtx.supplyStatus(batch).whenComplete((st, th) -> {
             if (st != null && st.isSuccess()) {
                 metrics._bytesWritten().add(batchBytesSize);
                 metrics._recordsWritten().add(rows);
+                latency.add(System.currentTimeMillis() - started);
             } else {
                 lastError = st != null ? st : Status.of(StatusCode.CLIENT_INTERNAL_ERROR, th);
             }

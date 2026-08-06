@@ -2,6 +2,7 @@ package tech.ydb.spark.connector;
 
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -172,6 +173,18 @@ public class DataFramesTest {
         long count3 = readYdb().option("useReadTable", "true")
                 .load("dir/splitted").count();
         Assert.assertEquals(count2, count3);
+    }
+
+    @Test
+    public void emptyWriteTest() {
+        Dataset<Row> origin = readYdb().load("row_table");
+
+        Assert.assertEquals(10, origin.count());
+
+        spark.createDataFrame(Collections.emptyList(), origin.schema())
+                .write().format("ydb").options(ydbCreds).mode(SaveMode.Append).save("row_table");
+
+        Assert.assertEquals(10, readYdb().load("row_table").count());
     }
 
     @Test
