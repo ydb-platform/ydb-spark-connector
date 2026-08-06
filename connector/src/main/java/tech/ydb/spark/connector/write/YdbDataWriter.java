@@ -2,13 +2,14 @@ package tech.ydb.spark.connector.write;
 
 import java.io.IOException;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.LongAdder;
 
 import org.apache.spark.TaskContext;
 import org.apache.spark.executor.OutputMetrics;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.connector.write.DataWriter;
 import org.apache.spark.sql.connector.write.WriterCommitMessage;
-import org.apache.spark.util.LongAccumulator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,7 +29,7 @@ public class YdbDataWriter implements DataWriter<InternalRow> {
     private final YdbWriter writer;
     private final int maxConcurrency;
     private final Semaphore semaphore;
-    private final LongAccumulator latency = new LongAccumulator();
+    private final Metrics metrics = new Metrics();
 
     private volatile Status lastError = null;
 
@@ -67,15 +68,7 @@ public class YdbDataWriter implements DataWriter<InternalRow> {
             localError.expectSuccess("cannot commit write");
         }
 
-        OutputMetrics metrics = TaskContext.get().taskMetrics().outputMetrics();
-        long batches = metrics._recordsWritten().count();
-        long records = metrics._recordsWritten().sum();
-        long bytes = metrics._bytesWritten().sum();
-
-        double avg = batches > 0 ? latency.sum() / batches : 0;
-        logger.debug("written {} batches with {} rows and {} total byte size, avg latency {} ms", batches, records,
-                bytes, avg);
-
+        metrics.complete();
         // All rows have been written successfully
         return new YdbWriteCommit();
     }
@@ -105,19 +98,40 @@ public class YdbDataWriter implements DataWriter<InternalRow> {
 
         int rows = batch.rowsCount();
         int batchBytesSize = batch.bytesSize();
-        OutputMetrics metrics = TaskContext.get().taskMetrics().outputMetrics();
+        OutputMetrics output = TaskContext.get().taskMetrics().outputMetrics();
 
         long started = System.currentTimeMillis();
         retryCtx.supplyStatus(batch).whenComplete((st, th) -> {
             if (st != null && st.isSuccess()) {
-                metrics._bytesWritten().add(batchBytesSize);
-                metrics._recordsWritten().add(rows);
-                latency.add(System.currentTimeMillis() - started);
+                metrics.measure(output, started, rows, batchBytesSize);
             } else {
                 lastError = st != null ? st : Status.of(StatusCode.CLIENT_INTERNAL_ERROR, th);
             }
 
             semaphore.release();
         });
+    }
+
+    private static class Metrics {
+        private final AtomicLong count = new AtomicLong(0);
+        private final LongAdder latency = new LongAdder();
+        private final LongAdder rowsCount = new LongAdder();
+        private final LongAdder byteSize = new LongAdder();
+
+        public void measure(OutputMetrics output, long startedAt, long batchRows, long batchSize) {
+            count.incrementAndGet();
+            latency.add(System.currentTimeMillis() - startedAt);
+            byteSize.add(batchSize);
+            rowsCount.add(batchRows);
+
+            output.setBytesWritten(byteSize.sum());
+            output.setRecordsWritten(rowsCount.sum());
+        }
+
+        public void complete() {
+            double avg = count.get() > 0 ? latency.sum() / count.get() : 0;
+            logger.debug("written {} batches with {} rows and {} total byte size, avg latency {} ms",
+                    count.get(), rowsCount.sum(), byteSize.sum(), avg);
+        }
     }
 }
