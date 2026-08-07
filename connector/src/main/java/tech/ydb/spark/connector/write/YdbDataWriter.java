@@ -129,7 +129,7 @@ public class YdbDataWriter implements DataWriter<InternalRow> {
         }
 
         public void complete() {
-            double avg = count.get() > 0 ? latency.sum() / count.get() : 0;
+            long avg = count.get() > 0 ? latency.sum() / count.get() : 0;
             logger.debug("written {} batches with {} rows and {} total byte size, avg latency {} ms",
                     count.get(), rowsCount.sum(), byteSize.sum(), avg);
         }

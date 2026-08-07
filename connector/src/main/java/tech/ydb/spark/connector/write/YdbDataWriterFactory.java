@@ -35,7 +35,7 @@ public class YdbDataWriterFactory implements DataWriterFactory {
     private static final int MAX_ROWS_COUNT = 10000;
     private static final int MAX_BYTES_SIZE = 10 * 1024 * 1024;
     private static final int CONCURRENCY = 2;
-    private static final int WRITE_RETRY_COUNT = 10;
+    private static final int WRITE_RETRY_COUNT = 50;
 
     private final YdbTable table;
     private final YdbTypes types;
