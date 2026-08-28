@@ -158,6 +158,28 @@ public class YdbWriterArrow implements YdbWriter {
             throw new IllegalArgumentException("Arrow ingestion does not support type " + type);
         }
 
+        if (dataType instanceof org.apache.spark.sql.types.DecimalType) {
+            org.apache.spark.sql.types.DecimalType decimalType = (org.apache.spark.sql.types.DecimalType) dataType;
+            Decimal val = record.getDecimal(ordinal, decimalType.precision(), decimalType.scale());
+
+            switch ((PrimitiveType) type) {
+                case Int8:
+                    row.writeInt8(name, val.toByte());
+                    return 1;
+                case Int16:
+                    row.writeInt16(name, val.toShort());
+                    return 2;
+                case Int32:
+                    row.writeInt32(name, val.toInt());
+                    return 4;
+                case Int64:
+                    row.writeInt64(name, val.toLong());
+                    return 8;
+                default:
+                    break;
+            }
+        }
+
         switch ((PrimitiveType) type) {
             case Bool:
                 if (dataType.sameType(DataTypes.BooleanType)) {

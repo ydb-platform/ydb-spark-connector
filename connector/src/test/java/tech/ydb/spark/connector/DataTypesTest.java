@@ -23,6 +23,8 @@ import org.apache.spark.sql.SaveMode;
 import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema;
 import org.apache.spark.sql.types.DataTypes;
+import org.apache.spark.sql.types.Decimal;
+import org.apache.spark.sql.types.DecimalType;
 import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
@@ -378,6 +380,54 @@ public class DataTypesTest {
             }
             Assert.assertFalse(it.hasNext());
         } finally {
+            dropTable("datetypes/json_test");
+        }
+    }
+
+    @Test
+    public void decimalConvertTest() {
+        dropTable("datetypes/decimal_test");
+        TestData data = new TestData(true);
+        try {
+            String createTable = "CREATE TABLE `datetypes/decimal_test`(" + data.toYqlColumns() + " PRIMARY KEY(id));";
+            readYdb().option("query", createTable).load().count();
+
+            DecimalType d8 = DataTypes.createDecimalType();
+            DecimalType d16 = DataTypes.createDecimalType(11, 2);
+            DecimalType d32 = DataTypes.createDecimalType(21, 9);
+            DecimalType d64 = DataTypes.createDecimalType(38, 18);
+
+            StructType t1 = new StructType(new StructField[]{
+                new StructField("id", DataTypes.IntegerType, false, Metadata.empty()),
+                new StructField("col_int8", d8, true, Metadata.empty()),
+                new StructField("col_int16", d16, true, Metadata.empty()),
+                new StructField("col_int32", d32, true, Metadata.empty()),
+                new StructField("col_int64", d64, true, Metadata.empty()),
+            });
+
+            Decimal dv1 = Decimal.apply(1);
+            Decimal dv2 = Decimal.apply(2);
+            List<Row> rs1 = Arrays.asList(
+                new GenericRowWithSchema(new Object[] { 1, dv1, dv1, dv1, dv1 }, t1),
+                new GenericRowWithSchema(new Object[] { 2, dv2, dv2, dv2, dv2 } , t1)
+            );
+
+            spark.createDataFrame(rs1, t1).write().format("ydb").options(ydbCreds).option("useApacheArrow", "true")
+                    .mode(SaveMode.Append).save("datetypes/decimal_test");
+
+            // Validate
+            Iterator<Row> it = readYdb().load("datetypes/decimal_test").orderBy("id").toLocalIterator();
+            for (int idx = 1; idx <= 2; idx++) {
+                Assert.assertTrue(it.hasNext());
+                Row row = it.next();
+                Assert.assertEquals(Byte.valueOf((byte) idx), row.getAs("col_int8"));
+                Assert.assertEquals(Short.valueOf((short) idx), row.getAs("col_int16"));
+                Assert.assertEquals(Integer.valueOf(idx), row.getAs("col_int32"));
+                Assert.assertEquals(Long.valueOf(idx), row.getAs("col_int64"));
+            }
+            Assert.assertFalse(it.hasNext());
+        } finally {
+
             dropTable("datetypes/json_test");
         }
     }
