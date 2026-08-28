@@ -160,51 +160,103 @@ public class YdbWriterArrow implements YdbWriter {
 
         switch ((PrimitiveType) type) {
             case Bool:
-                row.writeBool(name, record.getBoolean(ordinal));
-                return 1;
+                if (dataType.sameType(DataTypes.BooleanType)) {
+                    row.writeBool(name, record.getBoolean(ordinal));
+                    return 1;
+                } else {
+                    throw new IllegalArgumentException(castMsg(dataType, type));
+                }
             case Int8:
-                row.writeInt8(name, record.getByte(ordinal));
-                return 1;
+                if (dataType.sameType(DataTypes.ByteType)) {
+                    row.writeInt8(name, record.getByte(ordinal));
+                    return 1;
+                } else {
+                    throw new IllegalArgumentException(castMsg(dataType, type));
+                }
             case Int16:
-                row.writeInt16(name, record.getShort(ordinal));
-                return 2;
+                if (dataType.sameType(DataTypes.ShortType)) {
+                    row.writeInt16(name, record.getShort(ordinal));
+                    return 2;
+                } else {
+                    throw new IllegalArgumentException(castMsg(dataType, type));
+                }
             case Int32:
-                row.writeInt32(name, record.getInt(ordinal));
-                return 4;
+                if (dataType.sameType(DataTypes.IntegerType)) {
+                    row.writeInt32(name, record.getInt(ordinal));
+                    return 4;
+                } else {
+                    throw new IllegalArgumentException(castMsg(dataType, type));
+                }
             case Int64:
-                row.writeInt64(name, record.getLong(ordinal));
-                return 8;
+                if (dataType.sameType(DataTypes.LongType)) {
+                    row.writeInt64(name, record.getLong(ordinal));
+                    return 8;
+                } else {
+                    throw new IllegalArgumentException(castMsg(dataType, type));
+                }
             case Uint8:
-                row.writeUint8(name, record.getInt(ordinal));
-                return 1;
+                if (dataType.sameType(DataTypes.ShortType)) {
+                    row.writeUint8(name, record.getShort(ordinal));
+                    return 1;
+                } else {
+                    throw new IllegalArgumentException(castMsg(dataType, type));
+                }
             case Uint16:
-                row.writeUint16(name, record.getInt(ordinal));
-                return 2;
+                if (dataType.sameType(DataTypes.IntegerType)) {
+                    row.writeUint16(name, record.getInt(ordinal));
+                    return 2;
+                } else {
+                    throw new IllegalArgumentException(castMsg(dataType, type));
+                }
             case Uint32:
-                row.writeUint32(name, record.getLong(ordinal));
-                return 4;
+                if (dataType.sameType(DataTypes.LongType)) {
+                    row.writeUint32(name, record.getLong(ordinal));
+                    return 4;
+                } else {
+                    throw new IllegalArgumentException(castMsg(dataType, type));
+                }
             case Uint64:
                 Decimal uint64 = record.getDecimal(ordinal, 22, 0);
                 row.writeUint64(name, uint64.toJavaBigInteger().longValue());
                 return 8;
             case Float:
-                row.writeFloat(name, record.getFloat(ordinal));
+                if (dataType.sameType(DataTypes.FloatType)) {
+                    row.writeFloat(name, record.getFloat(ordinal));
+                } else {
+                    throw new IllegalArgumentException(castMsg(dataType, type));
+                }
                 return 4;
             case Double:
-                row.writeDouble(name, record.getDouble(ordinal));
+                if (dataType.sameType(DataTypes.DoubleType)) {
+                    row.writeDouble(name, record.getDouble(ordinal));
+                } else {
+                    throw new IllegalArgumentException(castMsg(dataType, type));
+                }
                 return 8;
             case Text:
-                UTF8String text = record.getUTF8String(ordinal);
-                row.writeText(name, text.toString());
-                return text.numBytes();
+                if (dataType.sameType(DataTypes.StringType)) {
+                    UTF8String text = record.getUTF8String(ordinal);
+                    row.writeText(name, text.toString());
+                    return text.numBytes();
+                } else {
+                    throw new IllegalArgumentException(castMsg(dataType, type));
+                }
             case Json:
-                UTF8String json = record.getUTF8String(ordinal);
-                row.writeJson(name, json.toString());
-                return json.numBytes();
+                if (dataType.sameType(DataTypes.StringType)) {
+                    UTF8String json = record.getUTF8String(ordinal);
+                    row.writeJson(name, json.toString());
+                    return json.numBytes();
+                } else {
+                    throw new IllegalArgumentException(castMsg(dataType, type));
+                }
             case JsonDocument:
-                UTF8String jsonDocument = record.getUTF8String(ordinal);
-                row.writeJsonDocument(name, jsonDocument.toString());
-                return jsonDocument.numBytes();
+                if (dataType.sameType(DataTypes.StringType)) {
+                    UTF8String jsonDocument = record.getUTF8String(ordinal);
+                    row.writeJsonDocument(name, jsonDocument.toString());
+                    return jsonDocument.numBytes();
+                } else {
+                    throw new IllegalArgumentException(castMsg(dataType, type));
+                }
             case Bytes:
                 byte[] bytes = readBytes(record, dataType, type, ordinal);
                 row.writeBytes(name, bytes);
@@ -214,9 +266,13 @@ public class YdbWriterArrow implements YdbWriter {
                 row.writeYson(name, yson);
                 return yson.length;
             case Uuid:
-                UTF8String uuid = record.getUTF8String(ordinal);
-                row.writeUuid(name, UUID.fromString(uuid.toString()));
-                return 16;
+                if (dataType.sameType(DataTypes.StringType)) {
+                    UTF8String uuid = record.getUTF8String(ordinal);
+                    row.writeUuid(name, UUID.fromString(uuid.toString()));
+                    return 16;
+                } else {
+                    throw new IllegalArgumentException(castMsg(dataType, type));
+                }
             case Date:
                 if (dataType.sameType(DataTypes.DateType)) {
                     row.writeDate(name, LocalDate.ofEpochDay(record.getInt(ordinal)));
